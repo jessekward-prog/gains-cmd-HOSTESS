@@ -1,0 +1,12 @@
+name: gains-cmd-hostess
+port: 3001
+postgres: true
+autoUpdate: true
+description: Workout tracker that walks you through one set at a time, with supersets, drop sets, BFR and interval timers, PRs and progression calls. Your local model writes the coaching notes.
+icon: icons/icon-512x512.png
+env:
+  - APP_PIN
+  - ADMIN_EMAIL
+  - PUBLIC_URL
+  - GOOGLE_CLIENT_ID
+  - GOOGLE_CLIENT_SECRET

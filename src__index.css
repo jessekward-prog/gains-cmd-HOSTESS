@@ -1,0 +1,928 @@
+@import "tailwindcss";
+
+@theme {
+  /* Static defaults for Tailwind utility generation */
+  --color-bg-0: #050505;
+  --color-bg-1: #0e0e0e;
+  --color-bg-2: #171717;
+  --color-bg-3: #222222;
+  --color-bg-4: #222222;
+
+  --color-surface: #161616;
+  --color-surface-hover: #1e1e1e;
+  --color-surface-active: #252525;
+
+  --color-border: #2a2a2a;
+  --color-border-strong: #333333;
+
+  --color-text-primary: #f0f0f0;
+  --color-text-secondary: #999999;
+  --color-text-tertiary: #666666;
+  --color-text-muted: #444444;
+
+  --color-accent: #ff2222;
+  --color-accent-hover: #ff4444;
+  --color-accent-muted: rgba(255, 34, 34, 0.15);
+  --color-accent-glow: rgba(255, 34, 34, 0.4);
+
+  --color-success: #22c55e;
+  --color-success-muted: rgba(34, 197, 94, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-muted: rgba(245, 158, 11, 0.15);
+  --color-error: #ef4444;
+  --color-pr: #fbbf24;
+  --color-pr-glow: rgba(251, 191, 36, 0.3);
+  --color-pr-soft: color-mix(in srgb, #fbbf24 16%, transparent);
+  --color-on-accent: #ffffff;
+
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+  --font-display: 'Manrope', system-ui, sans-serif;
+
+  --tap-min: 44px;
+  --tap-lg: 56px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ============================================
+   THEME 1: CMD Terminal (dark-only)
+   ============================================ */
+html.theme-cmd {
+  --color-bg-0: #000000;
+  --color-bg-1: #060606;
+  --color-bg-2: #0a0a0a;
+  --color-bg-3: #0e0e0e;
+  --color-bg-4: #121212;
+  --color-surface: #080808;
+  --color-surface-hover: #0c0c0c;
+  --color-surface-active: #101010;
+  --color-border: #1e1e1e;
+  --color-border-strong: #282828;
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #888888;
+  --color-text-tertiary: #555555;
+  --color-text-muted: #333333;
+  --color-accent: #cc0000;
+  --color-accent-hover: #ff0000;
+  --color-accent-muted: rgba(204, 0, 0, 0.15);
+  --color-accent-glow: rgba(255, 0, 0, 0.35);
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ============================================
+   THEME 2: Blood & Iron (dark-only)
+   ============================================ */
+html.theme-blood {
+  --color-bg-0: #050000;
+  --color-bg-1: #0a0505;
+  --color-bg-2: #120808;
+  --color-bg-3: #1a0c0c;
+  --color-bg-4: #221010;
+  --color-surface: #150909;
+  --color-surface-hover: #1d0e0e;
+  --color-surface-active: #251212;
+  --color-border: #2a1515;
+  --color-border-strong: #3a1c1c;
+  --color-text-primary: #e8d8d8;
+  --color-text-secondary: #8a7070;
+  --color-text-tertiary: #5a4545;
+  --color-text-muted: #3a2828;
+  --color-accent: #8b0000;
+  --color-accent-hover: #b91c1c;
+  --color-accent-muted: rgba(139, 0, 0, 0.2);
+  --color-accent-glow: rgba(139, 0, 0, 0.4);
+}
+
+/* ============================================
+   THEME 3: Concrete (dark-only)
+   ============================================ */
+html.theme-concrete {
+  --color-bg-0: #1a1a1a;
+  --color-bg-1: #212121;
+  --color-bg-2: #2a2a2a;
+  --color-bg-3: #333333;
+  --color-bg-4: #3d3d3d;
+  --color-surface: #2e2e2e;
+  --color-surface-hover: #383838;
+  --color-surface-active: #424242;
+  --color-border: #444444;
+  --color-border-strong: #555555;
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #aaaaaa;
+  --color-text-tertiary: #777777;
+  --color-text-muted: #555555;
+  --color-accent: #ff6b35;
+  --color-accent-hover: #ff8c5a;
+  --color-accent-muted: rgba(255, 107, 53, 0.15);
+  --color-accent-glow: rgba(255, 107, 53, 0.35);
+}
+
+/* ============================================
+   THEME 4: Ember (dark-only)
+   ============================================ */
+html.theme-ember {
+  --color-bg-0: #0f0a08;
+  --color-bg-1: #1a1210;
+  --color-bg-2: #211815;
+  --color-bg-3: #2a1f1b;
+  --color-bg-4: #332621;
+  --color-surface: #241a16;
+  --color-surface-hover: #2e221d;
+  --color-surface-active: #382a24;
+  --color-border: #3a2a22;
+  --color-border-strong: #4a362c;
+  --color-text-primary: #f0e6e0;
+  --color-text-secondary: #a08878;
+  --color-text-tertiary: #6e5848;
+  --color-text-muted: #4a3828;
+  --color-accent: #ff4500;
+  --color-accent-hover: #ff6a33;
+  --color-accent-muted: rgba(255, 69, 0, 0.15);
+  --color-accent-glow: rgba(255, 69, 0, 0.35);
+}
+
+/* ============================================
+   THEME 5: Synthwave (dark-only)
+   ============================================ */
+html.theme-synthwave {
+  --color-bg-0: #0a0a1a;
+  --color-bg-1: #0e0e22;
+  --color-bg-2: #14142e;
+  --color-bg-3: #1a1a3a;
+  --color-bg-4: #222246;
+  --color-surface: #161630;
+  --color-surface-hover: #1e1e3c;
+  --color-surface-active: #262648;
+  --color-border: #2a2a50;
+  --color-border-strong: #3a3a66;
+  --color-text-primary: #eeddff;
+  --color-text-secondary: #aa88cc;
+  --color-text-tertiary: #775599;
+  --color-text-muted: #443366;
+  --color-accent: #ff2eaa;
+  --color-accent-hover: #ff55bb;
+  --color-accent-muted: rgba(255, 46, 170, 0.15);
+  --color-accent-glow: rgba(255, 46, 170, 0.4);
+}
+html.theme-synthwave body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,46,170,0.03) 0%, transparent 40%, rgba(0,255,255,0.02) 100%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ============================================
+   THEME 6: Matrix (dark-only)
+   ============================================ */
+html.theme-matrix {
+  --color-on-accent: #000000;
+  --color-bg-0: #000800;
+  --color-bg-1: #001000;
+  --color-bg-2: #001800;
+  --color-bg-3: #002200;
+  --color-bg-4: #002c00;
+  --color-surface: #001400;
+  --color-surface-hover: #001e00;
+  --color-surface-active: #002800;
+  --color-border: #003300;
+  --color-border-strong: #004400;
+  --color-text-primary: #33ff33;
+  --color-text-secondary: #22aa22;
+  --color-text-tertiary: #117711;
+  --color-text-muted: #0a440a;
+  --color-accent: #00ff00;
+  --color-accent-hover: #44ff44;
+  --color-accent-muted: rgba(0, 255, 0, 0.1);
+  --color-accent-glow: rgba(0, 255, 0, 0.35);
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ============================================
+   THEME 7: Ice Protocol (dark-only)
+   ============================================ */
+html.theme-ice {
+  --color-on-accent: #04131a;
+  --color-bg-0: #040810;
+  --color-bg-1: #081018;
+  --color-bg-2: #0c1822;
+  --color-bg-3: #12202c;
+  --color-bg-4: #182838;
+  --color-surface: #0e1820;
+  --color-surface-hover: #142028;
+  --color-surface-active: #1a2830;
+  --color-border: #1e3040;
+  --color-border-strong: #284050;
+  --color-text-primary: #d0e8f0;
+  --color-text-secondary: #7099b0;
+  --color-text-tertiary: #456678;
+  --color-text-muted: #2a3e4c;
+  --color-accent: #00bcd4;
+  --color-accent-hover: #26c6da;
+  --color-accent-muted: rgba(0, 188, 212, 0.12);
+  --color-accent-glow: rgba(0, 188, 212, 0.35);
+}
+
+/* ============================================
+   THEME 8: Amber CRT (dark-only)
+   ============================================ */
+html.theme-amber {
+  --color-on-accent: #000000;
+  --color-bg-0: #0a0800;
+  --color-bg-1: #121000;
+  --color-bg-2: #1a1600;
+  --color-bg-3: #221e00;
+  --color-bg-4: #2a2600;
+  --color-surface: #161400;
+  --color-surface-hover: #201c00;
+  --color-surface-active: #282400;
+  --color-border: #332e00;
+  --color-border-strong: #443c00;
+  --color-text-primary: #ffcc00;
+  --color-text-secondary: #bb9900;
+  --color-text-tertiary: #886600;
+  --color-text-muted: #554400;
+  --color-accent: #ffaa00;
+  --color-accent-hover: #ffbb33;
+  --color-accent-muted: rgba(255, 170, 0, 0.12);
+  --color-accent-glow: rgba(255, 170, 0, 0.35);
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+}
+html.theme-amber body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ============================================
+   THEME 9: Phosphor (dark-only) — burnt amber CRT, matches macro-cmd palette
+   ============================================ */
+html.theme-phosphor {
+  --color-on-accent: #000000;
+  --color-bg-0: #000000;
+  --color-bg-1: #0d0a06;
+  --color-bg-2: #120d08;
+  --color-bg-3: #18110a;
+  --color-bg-4: #1e160c;
+  --color-surface: #100c07;
+  --color-surface-hover: #161009;
+  --color-surface-active: #1c140b;
+  --color-border: #2e1e0a;
+  --color-border-strong: #3d2810;
+  --color-text-primary: #ff9a3c;
+  --color-text-secondary: #c4751f;
+  --color-text-tertiary: #8a5010;
+  --color-text-muted: #6b3f10;
+  --color-accent: #ff9a3c;
+  --color-accent-hover: #ffb060;
+  --color-accent-muted: rgba(255, 154, 60, 0.12);
+  --color-accent-glow: rgba(255, 154, 60, 0.35);
+  --color-success: #b6ff5a;
+  --color-success-muted: rgba(182, 255, 90, 0.12);
+  --color-error: #ff5a6a;
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+}
+html.theme-phosphor body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.55) 0px, rgba(0,0,0,0.55) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 9998;
+}
+html.theme-phosphor body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.75) 100%);
+  pointer-events: none;
+  z-index: 9997;
+}
+html.theme-phosphor::before {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100px;
+  background: linear-gradient(transparent 0%, rgba(255,154,60,0.06) 40%, rgba(255,154,60,0.10) 50%, rgba(255,154,60,0.06) 60%, transparent 100%);
+  animation: tv-scanline 7s linear infinite;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ============================================
+   THEME 10: Void Purple (dark-only)
+   ============================================ */
+html.theme-void {
+  --color-bg-0: #0a0a12;
+  --color-bg-1: #0e0e18;
+  --color-bg-2: #141420;
+  --color-bg-3: #1a1a2a;
+  --color-bg-4: #222234;
+  --color-surface: #161622;
+  --color-surface-hover: #1e1e2e;
+  --color-surface-active: #26263a;
+  --color-border: #2a2a44;
+  --color-border-strong: #3a3a5a;
+  --color-text-primary: #e0daf0;
+  --color-text-secondary: #9088aa;
+  --color-text-tertiary: #605878;
+  --color-text-muted: #3a3450;
+  --color-accent: #a855f7;
+  --color-accent-hover: #c084fc;
+  --color-accent-muted: rgba(168, 85, 247, 0.15);
+  --color-accent-glow: rgba(168, 85, 247, 0.35);
+}
+
+/* ============================================
+   THEME 10: Paper Lite (light)
+   ============================================ */
+html.theme-paper {
+  --color-bg-0: #f8f5f5;
+  --color-bg-1: #f1ece9;
+  --color-bg-2: #e5d7d1;
+  --color-bg-3: #d5baae;
+  --color-bg-4: #c49682;
+  --color-surface: #e5d7d1;
+  --color-surface-hover: #deccc4;
+  --color-surface-active: #d8c0b6;
+  --color-border: #cba290;
+  --color-border-strong: #b47255;
+  --color-text-primary: #291e19;
+  --color-text-secondary: #563e34;
+  --color-text-tertiary: #735649;
+  --color-text-muted: #8b6d60;
+  --color-accent: #c1440e;
+  --color-accent-hover: #e0530f;
+  --color-accent-muted: rgba(193, 68, 14, 0.22);
+  --color-accent-glow: rgba(193, 68, 14, 0.3);
+  --font-display: 'Georgia', 'Times New Roman', serif;
+}
+
+/* ============================================
+   THEME 11: Brutalist (light)
+   ============================================ */
+html.theme-brutalist {
+  --color-bg-0: #ffffff;
+  --color-bg-1: #f8f8f8;
+  --color-bg-2: #f0f0f0;
+  --color-bg-3: #e8e8e8;
+  --color-bg-4: #e0e0e0;
+  --color-surface: #f4f4f4;
+  --color-surface-hover: #eaeaea;
+  --color-surface-active: #e0e0e0;
+  --color-border: #000000;
+  --color-border-strong: #000000;
+  --color-text-primary: #000000;
+  --color-text-secondary: #333333;
+  --color-text-tertiary: #666666;
+  --color-text-muted: #aaaaaa;
+  --color-accent: #ff0000;
+  --color-accent-hover: #cc0000;
+  --color-accent-muted: rgba(255, 0, 0, 0.08);
+  --color-accent-glow: rgba(255, 0, 0, 0.2);
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ============================================
+   THEME 12: Clean White (light)
+   ============================================ */
+html.theme-clean {
+  --color-bg-0: #fafafa;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #f5f5f5;
+  --color-bg-3: #eeeeee;
+  --color-bg-4: #e0e0e0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f5f5f5;
+  --color-surface-active: #eeeeee;
+  --color-border: #e0e0e0;
+  --color-border-strong: #cccccc;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #999999;
+  --color-text-muted: #cccccc;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-muted: rgba(59, 130, 246, 0.08);
+  --color-accent-glow: rgba(59, 130, 246, 0.25);
+}
+
+/* ============================================
+   THEME 13: Leather Journal (light)
+   ============================================ */
+html.theme-leather {
+  --color-bg-0: #f7f6f5;
+  --color-bg-1: #f0edea;
+  --color-bg-2: #e4dcd3;
+  --color-bg-3: #d3c3b1;
+  --color-bg-4: #c0a587;
+  --color-surface: #e4dcd3;
+  --color-surface-hover: #dcd2c6;
+  --color-surface-active: #d6c8b8;
+  --color-border: #c7af94;
+  --color-border-strong: #ae875b;
+  --color-text-primary: #28221a;
+  --color-text-secondary: #544636;
+  --color-text-tertiary: #71604c;
+  --color-text-muted: #897762;
+  --color-accent: #7a1f2b;
+  --color-accent-hover: #9a2836;
+  --color-accent-muted: rgba(122, 31, 43, 0.22);
+  --color-accent-glow: rgba(122, 31, 43, 0.3);
+  --font-display: 'Georgia', 'Times New Roman', serif;
+}
+
+/* ============================================
+   THEME 14: Citrus (light) — bright cream, vivid tangerine
+   ============================================ */
+html.theme-citrus {
+  --color-bg-0: #f8f6f4;
+  --color-bg-1: #f1ede9;
+  --color-bg-2: #e7dad0;
+  --color-bg-3: #d8bfab;
+  --color-bg-4: #c99e7d;
+  --color-surface: #e7dad0;
+  --color-surface-hover: #e0cfc2;
+  --color-surface-active: #dbc4b3;
+  --color-border: #cfa88b;
+  --color-border-strong: #bb7d4e;
+  --color-text-primary: #2b2018;
+  --color-text-secondary: #594231;
+  --color-text-tertiary: #775b46;
+  --color-text-muted: #8f725c;
+  --color-accent: #ff6d00;
+  --color-accent-hover: #ff8f26;
+  --color-accent-muted: rgba(255, 109, 0, 0.22);
+  --color-accent-glow: rgba(255, 109, 0, 0.3);
+}
+
+/* ============================================
+   THEME 15: Bubblegum (light) — playful pink + hot magenta
+   ============================================ */
+html.theme-bubblegum {
+  --color-bg-0: #f8f4f6;
+  --color-bg-1: #f1e9ed;
+  --color-bg-2: #e7d0dc;
+  --color-bg-3: #d8abc2;
+  --color-bg-4: #c97da4;
+  --color-surface: #e7d0dc;
+  --color-surface-hover: #e0c2d2;
+  --color-surface-active: #dbb3c7;
+  --color-border: #cf8bae;
+  --color-border-strong: #bb4e86;
+  --color-text-primary: #2b1821;
+  --color-text-secondary: #593145;
+  --color-text-tertiary: #77465f;
+  --color-text-muted: #8f5c76;
+  --color-accent: #d6006e;
+  --color-accent-hover: #ef0f85;
+  --color-accent-muted: rgba(214, 0, 110, 0.22);
+  --color-accent-glow: rgba(214, 0, 110, 0.3);
+}
+
+/* ============================================
+   THEME 16: Mint Fresh (light) — clean white, vivid emerald
+   ============================================ */
+html.theme-mint {
+  --color-bg-0: #f4f8f6;
+  --color-bg-1: #e9f1ee;
+  --color-bg-2: #d0e7de;
+  --color-bg-3: #abd8c7;
+  --color-bg-4: #7dc9ac;
+  --color-surface: #d0e7de;
+  --color-surface-hover: #c2e0d4;
+  --color-surface-active: #b3dbcb;
+  --color-border: #8bcfb5;
+  --color-border-strong: #4ebb91;
+  --color-text-primary: #182b23;
+  --color-text-secondary: #315949;
+  --color-text-tertiary: #467764;
+  --color-text-muted: #507c6b;
+  --color-accent: #00b871;
+  --color-accent-hover: #00d182;
+  --color-accent-muted: rgba(0, 184, 113, 0.22);
+  --color-accent-glow: rgba(0, 184, 113, 0.3);
+}
+
+/* ============================================
+   THEME 17: Blush (light) — soft rose pink
+   ============================================ */
+html.theme-blush {
+  --color-bg-0: #f7f5f6;
+  --color-bg-1: #f0eaec;
+  --color-bg-2: #e4d3d9;
+  --color-bg-3: #d3b1bd;
+  --color-bg-4: #c0869b;
+  --color-surface: #e4d3d9;
+  --color-surface-hover: #dcc6ce;
+  --color-surface-active: #d6b8c2;
+  --color-border: #c794a6;
+  --color-border-strong: #ae5b78;
+  --color-text-primary: #281a1f;
+  --color-text-secondary: #543640;
+  --color-text-tertiary: #714c59;
+  --color-text-muted: #896270;
+  --color-accent: #e8578a;
+  --color-accent-hover: #f0729e;
+  --color-accent-muted: rgba(232, 87, 138, 0.22);
+  --color-accent-glow: rgba(232, 87, 138, 0.3);
+}
+
+/* ============================================
+   THEME 18: Lavender Dream (light) — pale lavender
+   ============================================ */
+html.theme-lavender {
+  --color-bg-0: #f6f5f7;
+  --color-bg-1: #edeaf0;
+  --color-bg-2: #dad4e2;
+  --color-bg-3: #c0b4d0;
+  --color-bg-4: #a08bbb;
+  --color-surface: #dad4e2;
+  --color-surface-hover: #d0c8da;
+  --color-surface-active: #c5bbd3;
+  --color-border: #ab98c3;
+  --color-border-strong: #8062a7;
+  --color-text-primary: #201b27;
+  --color-text-secondary: #433851;
+  --color-text-tertiary: #5c4f6e;
+  --color-text-muted: #736585;
+  --color-accent: #9b6dd6;
+  --color-accent-hover: #ac86df;
+  --color-accent-muted: rgba(155, 109, 214, 0.22);
+  --color-accent-glow: rgba(155, 109, 214, 0.3);
+}
+
+/* ============================================
+   THEME 19: Sage Garden (light) — muted sage green
+   ============================================ */
+html.theme-sage {
+  --color-bg-0: #f5f7f6;
+  --color-bg-1: #eaf0ee;
+  --color-bg-2: #d3e3dc;
+  --color-bg-3: #b2d1c4;
+  --color-bg-4: #89bda7;
+  --color-surface: #d3e3dc;
+  --color-surface-hover: #c7dbd2;
+  --color-surface-active: #b9d4c9;
+  --color-border: #96c5b1;
+  --color-border-strong: #5faa8a;
+  --color-text-primary: #1b2822;
+  --color-text-secondary: #375347;
+  --color-text-tertiary: #4d6f61;
+  --color-text-muted: #648778;
+  --color-accent: #6b9080;
+  --color-accent-hover: #82a696;
+  --color-accent-muted: rgba(107, 144, 128, 0.25);
+  --color-accent-glow: rgba(107, 144, 128, 0.3);
+}
+
+/* ============================================
+   THEME 20: Peach Fuzz (light) — warm peach, coral accent
+   ============================================ */
+html.theme-peach {
+  --color-bg-0: #f8f5f4;
+  --color-bg-1: #f1ebe9;
+  --color-bg-2: #e7d5d0;
+  --color-bg-3: #d8b6ab;
+  --color-bg-4: #c98f7d;
+  --color-surface: #e7d5d0;
+  --color-surface-hover: #e0c9c2;
+  --color-surface-active: #dbbdb3;
+  --color-border: #cf9c8b;
+  --color-border-strong: #bb684e;
+  --color-text-primary: #2b1c18;
+  --color-text-secondary: #593b31;
+  --color-text-tertiary: #775246;
+  --color-text-muted: #8f685c;
+  --color-accent: #ff8a65;
+  --color-accent-hover: #ffa382;
+  --color-accent-muted: rgba(255, 138, 101, 0.25);
+  --color-accent-glow: rgba(255, 138, 101, 0.32);
+}
+
+/* ============================================
+   THEME 21: Rose Gold (light) — blush + gold, serif headers
+   ============================================ */
+html.theme-rosegold {
+  --color-bg-0: #f7f6f5;
+  --color-bg-1: #f0ecea;
+  --color-bg-2: #e2d9d4;
+  --color-bg-3: #d0bdb4;
+  --color-bg-4: #bb9b8b;
+  --color-surface: #e2d9d4;
+  --color-surface-hover: #dacec8;
+  --color-surface-active: #d3c3bb;
+  --color-border: #c3a698;
+  --color-border-strong: #a77962;
+  --color-text-primary: #271f1b;
+  --color-text-secondary: #514138;
+  --color-text-tertiary: #6e594f;
+  --color-text-muted: #857065;
+  --color-accent: #c98a6b;
+  --color-accent-hover: #d9a084;
+  --color-accent-muted: rgba(201, 138, 107, 0.25);
+  --color-accent-glow: rgba(201, 138, 107, 0.3);
+  --font-display: 'Georgia', 'Times New Roman', serif;
+}
+
+/* ============================================
+   THEME 22: Lilac Mist (light) — pale lilac-grey
+   ============================================ */
+html.theme-lilac {
+  --color-bg-0: #f5f5f7;
+  --color-bg-1: #eceaf0;
+  --color-bg-2: #d7d4e2;
+  --color-bg-3: #bab4d0;
+  --color-bg-4: #958bbb;
+  --color-surface: #d7d4e2;
+  --color-surface-hover: #ccc8da;
+  --color-surface-active: #c0bbd3;
+  --color-border: #a198c3;
+  --color-border-strong: #7162a7;
+  --color-text-primary: #1e1b27;
+  --color-text-secondary: #3e3851;
+  --color-text-tertiary: #564f6e;
+  --color-text-muted: #6c6585;
+  --color-accent: #8b7fb8;
+  --color-accent-hover: #a094c8;
+  --color-accent-muted: rgba(139, 127, 184, 0.24);
+  --color-accent-glow: rgba(139, 127, 184, 0.3);
+}
+
+/* ============================================
+   THEME 23: Sky Whisper (light) — pale baby blue
+   ============================================ */
+html.theme-skywhisper {
+  --color-bg-0: #f5f6f7;
+  --color-bg-1: #eaeef0;
+  --color-bg-2: #d4dee2;
+  --color-bg-3: #b4c6d0;
+  --color-bg-4: #8babbb;
+  --color-surface: #d4dee2;
+  --color-surface-hover: #c8d4da;
+  --color-surface-active: #bbcbd3;
+  --color-border: #98b4c3;
+  --color-border-strong: #6290a7;
+  --color-text-primary: #1b2327;
+  --color-text-secondary: #384951;
+  --color-text-tertiary: #4f636e;
+  --color-text-muted: #657a85;
+  --color-accent: #5fb0d9;
+  --color-accent-hover: #79c0e3;
+  --color-accent-muted: rgba(95, 176, 217, 0.24);
+  --color-accent-glow: rgba(95, 176, 217, 0.3);
+}
+
+/* ============================================
+   THEME 24: Vanilla Cream (light) — warm cream, caramel accent
+   ============================================ */
+html.theme-vanilla {
+  --color-bg-0: #f7f6f5;
+  --color-bg-1: #f0edea;
+  --color-bg-2: #e2dbd4;
+  --color-bg-3: #d0c2b4;
+  --color-bg-4: #bba38b;
+  --color-surface: #e2dbd4;
+  --color-surface-hover: #dad1c8;
+  --color-surface-active: #d3c7bb;
+  --color-border: #c3ae98;
+  --color-border-strong: #a78562;
+  --color-text-primary: #27211b;
+  --color-text-secondary: #514538;
+  --color-text-tertiary: #6e5e4f;
+  --color-text-muted: #857565;
+  --color-accent: #d9a066;
+  --color-accent-hover: #e3b182;
+  --color-accent-muted: rgba(217, 160, 102, 0.25);
+  --color-accent-glow: rgba(217, 160, 102, 0.3);
+}
+
+/* ============================================
+   Coach markdown prose
+   ============================================ */
+.coach-prose p { margin-bottom: 0.45rem; }
+.coach-prose p:last-child { margin-bottom: 0; }
+.coach-prose h1, .coach-prose h2, .coach-prose h3 { font-weight: 700; margin-top: 0.75rem; margin-bottom: 0.2rem; line-height: 1.3; }
+.coach-prose h1 { font-size: 1.05rem; }
+.coach-prose h2 { font-size: 0.95rem; }
+.coach-prose h3 { font-size: 0.9rem; }
+.coach-prose ul { list-style-type: disc; padding-left: 1.2rem; margin-bottom: 0.45rem; }
+.coach-prose ol { list-style-type: decimal; padding-left: 1.2rem; margin-bottom: 0.45rem; }
+.coach-prose li { margin-bottom: 0.2rem; }
+.coach-prose code { background: var(--color-bg-0); padding: 0.1em 0.3em; border-radius: 4px; font-family: var(--font-mono); font-size: 0.82em; border: 1px solid var(--color-border); }
+.coach-prose pre { background: var(--color-bg-0); border: 1px solid var(--color-border); border-radius: 10px; padding: 0.75rem; overflow-x: auto; margin-bottom: 0.45rem; }
+.coach-prose pre code { background: transparent; border: none; padding: 0; font-size: 0.8rem; }
+.coach-prose blockquote { border-left: 2px solid var(--color-accent); padding-left: 0.7rem; color: var(--color-text-secondary); margin: 0.5rem 0; font-style: italic; }
+.coach-prose a { color: var(--color-accent); text-decoration: underline; }
+.coach-prose strong { font-weight: 700; }
+.coach-prose em { font-style: italic; }
+.coach-prose hr { border: none; border-top: 1px solid var(--color-border); margin: 0.75rem 0; }
+
+/* ============================================
+   Base styles
+   ============================================ */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  background-color: var(--color-bg-0);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: var(--ui-scale, 16px);
+}
+
+html.ui-compact { --ui-scale: 14px; }
+html.ui-default { --ui-scale: 16px; }
+html.ui-large   { --ui-scale: 18px; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+
+@utility tap-target {
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+}
+
+@utility tap-target-lg {
+  min-height: var(--tap-lg);
+  min-width: var(--tap-lg);
+}
+
+@utility font-mono {
+  font-family: var(--font-mono);
+}
+
+@utility font-display {
+  font-family: var(--font-display);
+}
+
+@utility glow-accent {
+  box-shadow: 0 0 20px var(--color-accent-glow), 0 0 40px rgba(255, 34, 34, 0.1);
+}
+
+@utility glow-success {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
+}
+
+@utility glow-pr {
+  box-shadow: 0 0 20px var(--color-pr-glow), 0 0 40px rgba(251, 191, 36, 0.1);
+}
+
+@keyframes pr-burst {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+@keyframes countdown-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes tv-scanline {
+  0% { transform: translateY(-100px); }
+  100% { transform: translateY(calc(100vh + 100px)); }
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@utility animate-cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@utility safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+html.text-size-small {
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+}
+
+html.text-size-medium {
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+}
+
+html.text-size-large {
+  --text-xs: 15px;
+  --text-sm: 17px;
+  --text-base: 20px;
+  --text-lg: 23px;
+  --text-xl: 26px;
+  --text-2xl: 31px;
+  --text-3xl: 38px;
+}
+
+/* ============================================
+   Focus redesign — shared tokens + motion
+   ============================================ */
+:root {
+  --g-pr-ink: #fbbf24;
+  --g-near: #facc15;
+  --g-ss: #60a5fa;
+  --g-drop: #f59e0b;
+  --g-bfr: #c084fc;
+  --g-int: #fb923c;
+  --g-ok-soft: color-mix(in srgb, var(--color-success) 15%, transparent);
+  --g-acc-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  --g-sheet-shadow: 0 20px 50px rgba(0,0,0,.35);
+}
+html.mode-light { --g-pr-ink: #8a5a00; --g-near: #a16207; }
+
+/* Text size setting scales the redesigned screens, which use fixed px type. */
+html.text-size-small .g-root { zoom: .94; }
+html.text-size-large .g-root { zoom: 1.06; }
+
+.g-label { font: 500 10px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--color-text-tertiary); }
+.g-meta { font: 400 12px var(--font-mono); color: var(--color-text-secondary); }
+.g-h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
+.g-tab { font-variant-numeric: tabular-nums; }
+.g-tag { font: 600 10px var(--font-mono); letter-spacing: .12em; padding: 4px 8px; border-radius: 8px; color: var(--tag); background: color-mix(in srgb, var(--tag) 15%, transparent); white-space: nowrap; }
+
+@keyframes fx-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fx-pop { 0% { opacity: 0; transform: scale(.5); } 60% { opacity: 1; transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes fx-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fx-up { 0% { transform: translateY(100%); } 70% { transform: translateY(-2%); } 100% { transform: none; } }
+@keyframes fx-ring { from { stroke-dashoffset: 754; } to { stroke-dashoffset: 0; } }
+@keyframes fx-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes fx-drop { 0% { opacity: 0; transform: translateY(-40px); } 60% { opacity: 1; transform: translateY(5px); } 100% { transform: none; } }
+@keyframes fx-dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+@keyframes fx-burst { 0% { opacity: .8; transform: scale(.3); } 100% { opacity: 0; transform: scale(2.4); } }
+@keyframes fx-flash { 0% { opacity: 0; transform: scale(.6); } 25% { opacity: 1; transform: scale(1.08); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+@keyframes fx-toast { 0% { opacity: 0; transform: translateY(-12px) scale(.9); } 15% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+
+.fx-in { animation: fx-in .35s cubic-bezier(.2,1.3,.4,1) both; }
+.fx-pop { animation: fx-pop .35s cubic-bezier(.2,1.6,.4,1) both; }
+.fx-up { animation: fx-up .32s cubic-bezier(.32,.72,0,1) both; }
+.fx-fade { animation: fx-fade .25s both; }
+.fx-dots > span { animation: fx-dot 1s infinite; }
+.fx-dots > span:nth-child(2) { animation-delay: .15s; }
+.fx-dots > span:nth-child(3) { animation-delay: .3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-root *, .g-root *::before { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

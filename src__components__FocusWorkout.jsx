@@ -1,0 +1,716 @@
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { useGlobalTimer } from '../context/TimerContext';
+import { useHaptics } from '../hooks/useHaptics';
+import useBackHandler from '../hooks/useBackHandler';
+import CardioCard from './CardioCard';
+import Modal from './Modal';
+import RestPickerModal from './RestPickerModal';
+import SpecialSetModal from './SpecialSetModal';
+import SubstituteModal from './SubstituteModal';
+import ExerciseNotes from './ExerciseNotes';
+import { computePhase, playBeep, vibrate, COUNT_IN_SEC } from './IntervalTimerBar';
+import {
+  TAGS, num, fmtW, restLabel, mmss, buildBlocks, blockDone, blockProgress, blockName,
+  nextOpenBlock, focusIndex, setLabel, liftStats, isPR,
+} from '../lib/focus';
+import { nextMemberForRound, roundOfSet } from '../lib/supersets';
+
+const MONO = 'var(--font-mono)';
+const letter = (k) => 'ABCD'[k] || String(k + 1);
+const lowRep = (ex) => parseInt(String(ex.targetReps || ex.repRange || '').match(/\d+/)?.[0]) || 8;
+const DROP_REPS = [9, 7, 6, 5];
+
+// What the reps panel shows before the lifter has touched it: last session's
+// reps (or the bottom of the range), "failure" for failure sets and for drops
+// left in their default failure mode.
+function defaultReps(ex, s, stats) {
+  if (s.type === 'drop') return s.dropMode === 'fixed' ? String(DROP_REPS[s.dropIndex ?? 0] ?? 5) : 'failure';
+  if (s.reps === 'failure') return 'failure';
+  return String(stats?.lr ?? lowRep(ex));
+}
+const shownReps = (ex, s, stats) => (s.reps !== '' && s.reps != null ? String(s.reps) : defaultReps(ex, s, stats));
+const roundW = (x) => String(Math.round(Math.max(0, x) * 100) / 100);
+
+function useTick(active, ms = 250) {
+  const [, set] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => set((n) => n + 1), ms);
+    return () => clearInterval(id);
+  }, [active, ms]);
+}
+
+function Tag({ kind }) {
+  const t = TAGS[kind];
+  return t ? <span className="g-tag" style={{ '--tag': t[1] }}>{t[0]}</span> : null;
+}
+
+// ── Focus steppers ──────────────────────────────────────────────────
+function Stepper({ label, value, onDec, onInc }) {
+  const small = value.length > 5;
+  return (
+    <div className="bg-bg-2 rounded-[18px] px-2.5 py-3 text-center">
+      <div className="g-label">{label}</div>
+      <div className="g-tab" style={{ fontSize: small ? 28 : 46, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: small ? '50px' : 1.1, margin: '4px 0 8px' }}>{value}</div>
+      <div className="flex gap-1.5">
+        <button onClick={onDec} className="flex-1 h-11 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>−</button>
+        <button onClick={onInc} className="flex-1 h-11 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>+</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Rest: big ring (Focus) or strip (Dense) ─────────────────────────
+function RestRing({ timer, next, onSkip }) {
+  const left = timer.total > 0 ? timer.remaining / timer.total : 0;
+  return (
+    <div className="mt-4 flex flex-col items-center" style={{ animation: 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' }}>
+      <div className="relative w-[200px] h-[200px]">
+        <svg width="200" height="200" viewBox="0 0 200 200" className="absolute inset-0 -rotate-90">
+          <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
+          <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-accent)" strokeWidth="10" strokeLinecap="round"
+            strokeDasharray="565" strokeDashoffset={565 * (1 - left)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="g-label" style={{ letterSpacing: '.16em' }}>REST</span>
+          <span className="g-tab" style={{ fontSize: 52, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05 }}>{mmss(timer.remaining)}</span>
+        </div>
+      </div>
+      <div className="mt-3 g-meta text-center">{next}</div>
+      <div className="flex gap-2 w-full mt-3.5">
+        <button onClick={() => timer.extend(15)} className="flex-1 h-[52px] rounded-[18px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
+        <button onClick={onSkip} className="flex-[2] h-[52px] rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
+      </div>
+    </div>
+  );
+}
+
+function RestStrip({ timer, onSkip }) {
+  return (
+    <div className="mt-3 relative overflow-hidden flex items-center gap-2.5 py-2.5 pr-2.5 pl-3.5 rounded-[14px] bg-bg-2 fx-in">
+      <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-acc-soft)', width: `${timer.progress * 100}%`, transition: 'width 1s linear' }} />
+      <span className="relative g-label">REST</span>
+      <span className="relative flex-1 g-tab" style={{ font: `500 20px ${MONO}` }}>{mmss(timer.remaining)}</span>
+      <button onClick={() => timer.extend(15)} className="relative h-[34px] px-2.5 rounded-[10px] bg-bg-3 text-text-primary" style={{ font: `500 11px ${MONO}` }}>+15s</button>
+      <button onClick={onSkip} className="relative h-[34px] px-3 rounded-[10px] bg-accent font-bold text-xs" style={{ color: 'var(--color-on-accent)' }}>Skip</button>
+    </div>
+  );
+}
+
+// ── BFR timed set — mirrors BFRTimerBar, stamps bfrStartMs on the set ──
+function BFRBlock({ set, onStart, onStop, onDone }) {
+  const secs = set.bfrSeconds || 45;
+  const running = !!set.bfrStartMs && !set.completed;
+  useTick(running);
+  const e = running ? (Date.now() - set.bfrStartMs) / 1000 : 0;
+  const fired = useRef(false);
+  useEffect(() => {
+    if (!running) { fired.current = false; return; }
+    if (e >= secs && !fired.current) { fired.current = true; onDone(); }
+  });
+  const pct = running ? Math.min(100, (e / secs) * 100) : set.completed ? 100 : 0;
+  return (
+    <div className="mt-3 relative overflow-hidden rounded-[18px] bg-bg-2 px-4 py-3.5">
+      <div className="absolute left-0 top-0 bottom-0" style={{ background: 'color-mix(in srgb, var(--g-bfr) 22%, transparent)', width: `${pct}%`, transition: 'width .25s linear' }} />
+      <div className="relative flex justify-between items-center gap-2.5">
+        <div>
+          <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.14em', color: 'var(--g-bfr)' }}>BFR · TIMED SET</div>
+          <div className="mt-1 g-tab" style={{ font: `500 26px ${MONO}` }}>{set.completed ? 'Done' : mmss(secs - e + (running ? 0.999 : 0))}</div>
+          <div style={{ font: `400 11px ${MONO}` }} className="text-text-secondary">
+            {running ? 'Keep repping until the bar fills' : set.completed ? 'Logged' : `Cuff on · ${fmtW(set.weight)} kg · rep to time`}
+          </div>
+        </div>
+        {!set.completed && (
+          <button onClick={running ? onStop : onStart} className="h-12 px-[18px] rounded-[15px] font-extrabold text-sm" style={{ background: 'var(--g-bfr)', color: '#1a0b24' }}>
+            {running ? 'Stop' : `Start ${secs}s`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Interval phase block — same stamps + beeps as IntervalTimerBar ───
+function IntervalBlock({ set, onStamp, onDone }) {
+  const work = set.intervalWork || 30, rest = set.intervalRest || 30, total = set.intervalTotal || 180;
+  const cycle = work + rest;
+  const rounds = Math.max(1, Math.ceil(total / cycle));
+  const active = !!(set.intervalCountInStartMs || set.intervalTimerStartMs) && !set.completed;
+  useTick(active);
+  const { phase, phaseRemaining, totalRemaining } = computePhase(set.intervalCountInStartMs, set.intervalTimerStartMs, work, rest, total);
+  const prev = useRef(phase);
+  useEffect(() => {
+    if (phase === prev.current) return;
+    const was = prev.current;
+    prev.current = phase;
+    if (phase === 'work' && was !== 'idle' && was !== 'countin') { playBeep('work'); vibrate([200]); }
+    if (phase === 'work' && was === 'countin') playBeep('countdown');
+    if (phase === 'rest') { playBeep('rest'); vibrate([100]); }
+    if (phase === 'done' && !set.completed) { playBeep('rest'); vibrate([200, 100, 200]); onDone(); }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const elapsed = total - totalRemaining;
+  const round = Math.min(rounds, Math.floor(elapsed / cycle) + 1);
+  const running = phase === 'work' || phase === 'rest';
+  const bg = phase === 'work' ? 'var(--color-success)' : phase === 'rest' ? 'var(--g-drop)' : phase === 'countin' ? 'var(--color-bg-3)' : 'var(--color-bg-2)';
+  const word = set.completed ? 'Done' : phase === 'work' ? 'WORK' : phase === 'rest' ? 'REST' : phase === 'countin' ? Math.ceil(phaseRemaining) : 'Ready';
+  const top = set.completed ? 'BLOCK COMPLETE' : running ? `ROUND ${round} OF ${rounds}` : phase === 'countin' ? 'GET READY' : `${rounds} ROUNDS · ${work}s ON / ${rest}s OFF`;
+  return (
+    <div className="mt-3.5 px-[18px] pt-[18px] pb-4 rounded-[22px] text-center"
+      style={{ background: bg, color: running ? '#0b1a10' : 'var(--color-text-primary)', transition: 'background .3s, color .3s' }}>
+      <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', opacity: 0.75 }}>{top}</div>
+      <div style={{ fontSize: 64, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, marginTop: 6 }}>{word}</div>
+      <div className="g-tab" style={{ font: `500 30px ${MONO}`, marginTop: 4 }}>
+        {mmss(running ? phaseRemaining + 0.999 : set.completed ? 0 : total)}
+      </div>
+      <div className="h-1.5 rounded-[3px] mt-3.5 overflow-hidden" style={{ background: 'rgba(0,0,0,.18)' }}>
+        <div className="h-full" style={{ background: 'currentColor', width: `${set.completed ? 100 : running ? Math.min(100, (elapsed / total) * 100) : 0}%`, transition: 'width .25s linear' }} />
+      </div>
+      <button
+        onClick={() => {
+          if (set.completed) onStamp({ completed: false, intervalCountInStartMs: null, intervalTimerStartMs: null });
+          else if (active) onStamp({ intervalCountInStartMs: null, intervalTimerStartMs: null });
+          else { const now = Date.now(); onStamp({ intervalCountInStartMs: now, intervalTimerStartMs: now + COUNT_IN_SEC * 1000 }); }
+        }}
+        className="mt-3.5 w-full h-[52px] rounded-2xl bg-bg-0 text-text-primary font-extrabold text-[15px]">
+        {set.completed ? 'Undo' : active ? 'Stop' : 'Start intervals'}
+      </button>
+    </div>
+  );
+}
+
+// ── Edit sheet: the per-exercise tools Classic shows as a button row ─
+function EditSheet({ open, onClose, ex, ei, exercises, handlers, onAddExercise }) {
+  const [modal, setModal] = useState(null);
+  const pick = (m) => { onClose(); setModal(m); };
+  const normal = (ex?.sets || []).filter((s) => s.type !== 'drop').length;
+  const rows = [
+    ['+ Add set', () => { handlers.onAddSet(ei); onClose(); }],
+    ['− Remove last set', () => {
+      if (normal <= 1) return;
+      const sets = ex.sets;
+      for (let i = sets.length - 1; i >= 0; i--) if (sets[i].type !== 'drop') { handlers.onDeleteSet(ei, i); break; }
+      onClose();
+    }, normal <= 1],
+    [`Rest time · ${restLabel(ex?.restSeconds || 0)}`, () => pick('rest')],
+    ['Special sets', () => pick('special')],
+    ['Swap exercise', () => pick('swap')],
+    ['Notes', () => pick('notes')],
+    ['+ Add exercise to workout', () => { onClose(); onAddExercise(); }],
+  ];
+  return (
+    <>
+      <Modal open={open} onClose={onClose} title={ex?.name || 'Exercise'}>
+        <div className="p-3 flex flex-col gap-1.5">
+          {rows.map(([label, fn, disabled]) => (
+            <button key={label} onClick={fn} disabled={disabled}
+              className="h-12 px-4 rounded-2xl bg-bg-2 text-left text-sm font-semibold text-text-primary disabled:opacity-40">{label}</button>
+          ))}
+        </div>
+      </Modal>
+      {ex && (
+        <>
+          <RestPickerModal open={modal === 'rest'} onClose={() => setModal(null)}
+            minutes={Math.floor(ex.restSeconds / 60)} seconds={ex.restSeconds % 60}
+            onConfirm={(t) => handlers.onUpdateRest(ei, t)} />
+          <SpecialSetModal open={modal === 'special'} onClose={() => setModal(null)} exercise={ex} allExercises={exercises} exerciseIndex={ei}
+            onAddDropSet={handlers.onAddDropSet} onRemoveDropSet={handlers.onRemoveDropSet}
+            onLinkSuperset={handlers.onLinkSuperset} onUnlinkSuperset={handlers.onUnlinkSuperset}
+            onAddBFR={handlers.onAddBFR} onRemoveBFR={handlers.onRemoveBFR}
+            onAddInterval={handlers.onAddInterval} onRemoveInterval={handlers.onRemoveInterval}
+            onAddVariable={handlers.onAddVariable} onRemoveVariable={handlers.onRemoveVariable}
+            onToggleFailure={(si) => handlers.onUpdateSet(ei, si, { ...ex.sets[si], reps: ex.sets[si].reps === 'failure' ? '' : 'failure' })} />
+          <SubstituteModal open={modal === 'swap'} onClose={() => setModal(null)} exerciseName={ex.name}
+            onSelect={(n) => handlers.onSubstitute(ei, n)} />
+          <Modal open={modal === 'notes'} onClose={() => setModal(null)} title="Notes">
+            <div className="p-3">
+              <ExerciseNotes exerciseName={ex.name} exerciseTarget={`${ex.sets.length} sets × ${ex.targetReps || ex.repRange} reps`} onClose={() => setModal(null)} />
+            </div>
+          </Modal>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── Exercise handoff sheet ──────────────────────────────────────────
+function Handoff({ exercises, blocks, from, to, stats, onGo }) {
+  // The parent re-renders every second (elapsed clock) — keep the auto-advance
+  // timer from restarting each time by reading the callback through a ref.
+  const go = useRef(onGo);
+  go.current = onGo;
+  const fire = useCallback(() => go.current(), []);
+  useEffect(() => { const t = setTimeout(fire, 2900); return () => clearTimeout(t); }, [fire]);
+  useBackHandler(true, fire);
+  const a = blocks[from], b = blocks[to];
+  const done = a.indices.flatMap((i) => exercises[i].sets.filter((s) => s.completed));
+  const vol = done.reduce((x, s) => x + num(s.weight) * num(s.reps), 0);
+  const b0 = exercises[b.indices[0]];
+  const normals = b0.sets.filter((s) => s.type !== 'drop').length;
+  const st = stats[b0.name];
+  const meta = b.kind === 'interval' ? `${b0.sets.length} × ${b0.sets[0]?.intervalWork || 30}s on / ${b0.sets[0]?.intervalRest || 30}s off`
+    : b.kind === 'superset' ? `${normals} rounds · A then B · ${restLabel(b0.restSeconds)} rest after B`
+    : b.kind === 'drop' ? `${normals} sets + ${b0.numDrops || 1} drop${(b0.numDrops || 1) > 1 ? 's' : ''} each · ${restLabel(b0.restSeconds)} rest`
+    : b.kind === 'bfr' ? `${b0.sets.length} × ${b0.sets[0]?.bfrSeconds || 45}s timed · cuffs on`
+    : b.kind === 'cardio' ? 'Cardio'
+    : `${b0.sets.length} sets × ${b0.targetReps} reps · ${restLabel(b0.restSeconds)} rest`;
+  // Portalled: App's content wrapper carries a CSS filter, which would make
+  // this fixed layer position against the wrapper instead of the viewport.
+  return createPortal(
+    <div onClick={onGo} className="fixed inset-0 z-[150] flex flex-col justify-end cursor-pointer fx-fade g-root" style={{ background: 'rgba(0,0,0,.45)' }}>
+      <div className="bg-bg-1 m-2 px-6 pt-7 pb-[34px] max-w-xl w-[calc(100%-16px)] self-center"
+        style={{ borderRadius: '32px 32px 44px 44px', animation: 'fx-up .45s cubic-bezier(.2,1.2,.3,1) both', marginBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-success text-white flex items-center justify-center font-bold" style={{ animation: 'fx-pop .45s cubic-bezier(.2,1.6,.4,1) both' }}>✓</span>
+          <div className="min-w-0">
+            <div className="text-base font-bold text-text-secondary truncate">{blockName(exercises, a)}</div>
+            <div className="mt-0.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>
+              {a.kind === 'interval' ? 'Interval block complete' : `${done.length} sets · ${Math.round(vol).toLocaleString()} kg moved`}
+            </div>
+          </div>
+        </div>
+        <div className="h-px bg-bg-3 my-6" />
+        <div className="flex justify-between items-center" style={{ animation: 'fx-in .3s .2s both' }}>
+          <span className="text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>NEXT UP · {to + 1} OF {blocks.length}</span>
+          <Tag kind={b.kind} />
+        </div>
+        <div className="mt-2.5" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 0.98, animation: 'fx-drop .5s .3s cubic-bezier(.2,1.4,.4,1) both', textWrap: 'balance' }}>
+          {blockName(exercises, b)}
+        </div>
+        <div className="mt-3 text-text-secondary" style={{ font: `400 13px ${MONO}`, animation: 'fx-in .3s .45s both' }}>{meta}</div>
+        {st?.lw != null && (
+          <div className="mt-1 text-text-secondary" style={{ font: `400 13px ${MONO}`, animation: 'fx-in .3s .5s both' }}>Last time {fmtW(st.lw)} × {st.lr}</div>
+        )}
+        <div className="mt-7 h-[3px] rounded-[2px] bg-bg-3" />
+        <div className="-mt-[3px] h-[3px] rounded-[2px] bg-accent origin-left" style={{ animation: 'fx-sweep 2.6s linear both' }} />
+        <div className="mt-2.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>Tap to start now</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── The workout screen ──────────────────────────────────────────────
+export default function FocusWorkout({
+  workout, layout, history, elapsed, handlers, onSetComplete, updateWorkout,
+  onFinish, onCancel, onAddExercise,
+}) {
+  const dense = layout === 'dense';
+  const exercises = workout.exercises;
+  const blocks = useMemo(() => buildBlocks(exercises), [exercises]);
+  const timer = useGlobalTimer();
+  const haptics = useHaptics();
+
+  const stats = useMemo(() => {
+    const m = {};
+    exercises.forEach((ex) => { if (!m[ex.name]) m[ex.name] = liftStats(history, ex.name); });
+    return m;
+  }, [exercises, history]);
+
+  const [cur, setCur] = useState(() => Math.max(0, blocks.findIndex((b) => !blockDone(exercises, b))));
+  const [mem, setMem] = useState(0);
+  const [fset, setFset] = useState(null);
+  const [handoff, setHandoff] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [goAt, setGoAt] = useState(0);
+  const [drag, setDrag] = useState({ dx: 0, dy: 0, anim: true });
+  const [editOpen, setEditOpen] = useState(false);
+  const dragRef = useRef({});
+
+  // Blocks can disappear under us (exercise removed, superset unlinked).
+  const ci = Math.min(cur, blocks.length - 1);
+  const block = blocks[ci];
+  const m = Math.min(mem, block.indices.length - 1);
+  const ei = block.indices[m];
+  const ex = exercises[ei];
+  const fi = focusIndex(ex, fset);
+  const fs = ex.sets[fi];
+  const st = stats[ex.name];
+  const kind = block.kind;
+  const isTimed = kind === 'bfr' || kind === 'interval';
+
+  // GO flash when a rest runs out on its own (TimerContext stamps endedAt).
+  useEffect(() => { if (timer.endedAt) setGoAt(timer.endedAt); }, [timer.endedAt]);
+  const [, bump] = useState(0);
+  useEffect(() => {
+    if (!goAt) return;
+    const t = setTimeout(() => bump((n) => n + 1), 820);
+    return () => clearTimeout(t);
+  }, [goAt]);
+  const goFlash = Date.now() - goAt < 800 && !timer.isRunning;
+
+  const patchSet = useCallback((xi, si, patch) => {
+    updateWorkout((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, exercises: [...prev.exercises] };
+      const sets = [...next.exercises[xi].sets];
+      sets[si] = { ...sets[si], ...patch };
+      next.exercises[xi] = { ...next.exercises[xi], sets };
+      return next;
+    });
+  }, [updateWorkout]);
+
+  const openBlock = useCallback((i) => { setCur(i); setMem(0); setFset(null); }, []);
+
+  const step = (xi, si, field, d) => {
+    const x = exercises[xi], s = x.sets[si];
+    if (field === 'weight') return patchSet(xi, si, { weight: roundW(num(s.weight) + d) });
+    const shown = shownReps(x, s, stats[x.name]);
+    const base = shown === 'failure' ? (s.type === 'drop' ? DROP_REPS[s.dropIndex ?? 0] ?? 5 : stats[x.name]?.lr ?? lowRep(x)) : num(shown);
+    patchSet(xi, si, { reps: String(Math.max(0, base + d)), ...(s.type === 'drop' ? { dropMode: 'fixed' } : {}) });
+  };
+
+  // Completing a set: log it, check for a PR, then decide what happens next —
+  // the partner (superset), the next drop, rest, or the handoff to a new block.
+  const complete = (xi, si) => {
+    const x = exercises[xi], s = x.sets[si];
+    if (s.completed) { patchSet(xi, si, { completed: false }); setFset(si); return; }
+    const shown = shownReps(x, s, stats[x.name]);
+    const reps = shown === 'failure' ? s.reps : shown;
+    patchSet(xi, si, { completed: true, reps: reps ?? '' });
+    haptics.tap();
+    setFset(null);
+
+    if (s.type !== 'drop' && reps !== 'failure' && isPR(stats[x.name], x.name, s.weight, reps)) {
+      haptics.success();
+      setToast({ text: `${x.name} ${fmtW(s.weight)} × ${reps}`, at: Date.now() });
+    }
+
+    const doneNow = (i, j) => (i === xi && j === si) || exercises[i].sets[j].completed;
+    const allDone = block.indices.every((i) => exercises[i].sets.every((_, j) => doneNow(i, j)));
+    const nextIsDrop = x.sets[si + 1]?.type === 'drop' && !x.sets[si + 1].completed;
+    if (!nextIsDrop) onSetComplete(xi, si, x.restSeconds);
+
+    if (allDone) {
+      setTimeout(() => {
+        const after = exercises.map((e, i) => (i === xi ? { ...e, sets: e.sets.map((ss, j) => (j === si ? { ...ss, completed: true } : ss)) } : e));
+        const nx = nextOpenBlock(after, blocks, ci);
+        if (nx < 0) onFinish(); else setHandoff({ from: ci, to: nx });
+      }, 600);
+      return;
+    }
+    if (block.kind === 'superset' && roundOfSet(x, si) >= 0) {
+      const partner = nextMemberForRound(exercises, block.indices, xi, si);
+      if (partner >= 0) { setMem(block.indices.indexOf(partner)); return; }
+      const firstOwing = block.indices.findIndex((i) => exercises[i].sets.some((ss, j) => !doneNow(i, j)));
+      if (firstOwing >= 0) setMem(firstOwing);
+    }
+  };
+
+  const skipRest = () => { timer.stop(); setGoAt(Date.now()); };
+
+  // ── Swipe ─────────────────────────────────────────────────────────
+  const swipe = (dir) => {
+    let apply = null;
+    if (!dense && (dir === 'left' || dir === 'right')) {
+      const ni = fi + (dir === 'left' ? 1 : -1);
+      if (ni >= 0 && ni < ex.sets.length) apply = () => setFset(ni);
+    } else {
+      const ni = ci + (dir === 'left' || dir === 'up' ? 1 : -1);
+      if (ni >= 0 && ni < blocks.length) apply = () => openBlock(ni);
+    }
+    if (!apply) { setDrag({ dx: 0, dy: 0, anim: true }); return; }
+    const ox = dir === 'left' ? -420 : dir === 'right' ? 420 : 0;
+    const oy = dir === 'up' ? -700 : dir === 'down' ? 700 : 0;
+    setDrag({ dx: ox, dy: oy, anim: true });
+    setTimeout(() => {
+      apply();
+      setDrag({ dx: -ox * 0.5, dy: -oy * 0.4, anim: false });
+      requestAnimationFrame(() => requestAnimationFrame(() => setDrag({ dx: 0, dy: 0, anim: true })));
+    }, 170);
+  };
+  const pd = (e) => { dragRef.current = { x: e.clientX, y: e.clientY, on: true, moved: false, axis: null }; };
+  const pm = (e) => {
+    const d = dragRef.current;
+    if (!d.on) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (!d.moved && Math.hypot(dx, dy) > 10) {
+      d.moved = true;
+      d.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (dense && d.axis === 'y') { d.on = false; return; }
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    }
+    if (d.moved) setDrag({ dx: d.axis === 'x' ? dx : 0, dy: d.axis === 'y' ? dy * 0.6 : 0, anim: false });
+  };
+  const pu = () => {
+    const d = dragRef.current;
+    if (!d.on) return;
+    d.on = false;
+    if (!d.moved) return;
+    d.justDragged = true;
+    setTimeout(() => { d.justDragged = false; }, 60);
+    if (d.axis === 'x' && Math.abs(drag.dx) > 70) swipe(drag.dx < 0 ? 'left' : 'right');
+    else if (d.axis === 'y' && Math.abs(drag.dy) > 50) swipe(drag.dy < 0 ? 'up' : 'down');
+    else setDrag({ dx: 0, dy: 0, anim: true });
+  };
+  const swallowClick = (e) => { if (dragRef.current.justDragged) { e.stopPropagation(); e.preventDefault(); } };
+
+  // ── Derived display ───────────────────────────────────────────────
+  const setsLeft = exercises.reduce((a, x) => a + x.sets.filter((s) => !s.completed).length, 0);
+  const nx = nextOpenBlock(exercises, blocks, ci);
+  const label = setLabel(ex.sets, fi);
+  const round = roundOfSet(ex, fi);
+  let completeLabel = `Complete set ${label}`;
+  if (fs?.type === 'drop') completeLabel = `Complete drop ${(fs.dropIndex ?? 0) + 1}${ex.sets[fi + 1]?.type === 'drop' ? ' — no rest' : ''}`;
+  if (kind === 'superset' && round >= 0) {
+    const partner = block.indices.find((i) => i !== ei && !exercises[i].sets.filter((s) => s.type !== 'drop')[round]?.completed);
+    completeLabel = `Complete ${letter(m)} · round ${round + 1}${partner !== undefined && m < block.indices.length - 1 ? ` → ${letter(m + 1)}` : ''}`;
+  }
+  if (fs?.completed) completeLabel = `${label} done · tap to undo`;
+  const restNext = fs ? `Next: ${kind === 'superset' ? `${letter(m)} · ` : ''}${ex.name} · ${fmtW(fs.weight)} × ${shownReps(ex, fs, st)}` : '';
+  const lastLine = kind === 'interval'
+    ? `${fs?.intervalWork || 30}s on / ${fs?.intervalRest || 30}s off · ${mmss(fs?.intervalTotal || 180)} total`
+    : st?.lw != null ? `Last ${fmtW(st.lw)} × ${st.lr} · best ${fmtW(st.best)}` : 'First time — this sets your baseline';
+  const tagColor = TAGS[kind]?.[1] || 'var(--color-accent)';
+  const resting = timer.isRunning;
+  const cardMoved = Math.abs(drag.dx) + Math.abs(drag.dy);
+
+  return (
+    <div className="g-root flex flex-col min-h-full">
+      {/* Header */}
+      <div className="px-5 pt-3 pb-3">
+        <div className="flex justify-between items-end gap-3">
+          <div className="min-w-0">
+            <div className="g-label truncate">{workout.programName}</div>
+            <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{workout.workoutName}</div>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <div className="g-tab" style={{ font: `500 24px ${MONO}`, lineHeight: 1 }}>{elapsed}</div>
+            <div className="mt-1 g-label" style={{ letterSpacing: '.12em', fontWeight: 400 }}>{setsLeft} SETS LEFT</div>
+          </div>
+        </div>
+        <div className="flex gap-1 mt-3">
+          {blocks.map((b, i) => {
+            const p = blockProgress(exercises, b);
+            return (
+              <button key={i} onClick={() => openBlock(i)} aria-label={`Block ${i + 1}`} className="flex-1 h-1 rounded-[2px] bg-bg-3 overflow-hidden">
+                <div className="h-full" style={{ width: `${Math.max(p * 100, i === ci ? 8 : 0)}%`, background: p === 1 ? 'var(--color-success)' : 'var(--color-accent)', transition: 'width .4s cubic-bezier(.2,1.4,.4,1)' }} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex-1 px-3.5 pb-6 flex flex-col gap-2.5">
+        {kind === 'cardio' ? (
+          <CardioCard exercise={ex} exerciseIndex={ei} onUpdateSet={handlers.onUpdateSet}
+            onUpdateExercise={handlers.onUpdateCardioExercise} onTimerActiveChange={() => {}} />
+        ) : (
+          <div
+            onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
+            className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
+            style={{
+              padding: dense ? 16 : 20,
+              touchAction: dense ? 'pan-y' : 'none',
+              transform: `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 40}deg)`,
+              transition: drag.anim ? 'transform .3s cubic-bezier(.2,1.2,.3,1)' : 'none',
+              opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
+            }}>
+            {kind === 'superset' && (
+              <div className="flex gap-1 p-1 rounded-2xl bg-bg-2 mb-3.5">
+                {block.indices.map((xi, k) => {
+                  const x = exercises[xi], on = k === m;
+                  return (
+                    <button key={xi} onClick={() => { setMem(k); setFset(null); }}
+                      className="flex-1 min-w-0 flex flex-col items-start gap-0.5 px-2.5 py-2 rounded-[12px] text-left transition-colors"
+                      style={{ background: on ? 'var(--color-bg-0)' : 'transparent', color: on ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', boxShadow: on ? 'inset 0 0 0 1.5px var(--g-ss)' : 'none' }}>
+                      <span style={{ font: `500 10px ${MONO}`, opacity: 0.7 }}>{letter(k)}</span>
+                      <span className="w-full text-[13px] font-bold truncate">{x.name}</span>
+                      <span style={{ font: `400 10px ${MONO}`, opacity: 0.7 }}>{x.sets.filter((s) => s.completed).length}/{x.sets.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex justify-between items-center gap-2">
+              <span className="g-label truncate">BLOCK {ci + 1} OF {blocks.length} · {kind === 'interval' ? 'INTERVAL' : ex.targetReps}{ex.restSeconds ? ` · ${restLabel(ex.restSeconds)}` : ''}</span>
+              <span className="flex items-center gap-2 flex-shrink-0">
+                <Tag kind={kind} />
+                <button onClick={() => setEditOpen(true)} aria-label="Edit exercise" className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2" style={{ font: `700 16px ${MONO}` }}>⋯</button>
+              </span>
+            </div>
+            <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
+              {ex.substituted && <span className="text-text-tertiary line-through mr-2" style={{ fontSize: '0.6em' }}>{ex.substituted.original}</span>}
+              {ex.name}
+            </div>
+            <div className="mt-1.5 g-meta">{lastLine}</div>
+
+            {!dense && kind !== 'interval' && (
+              <div className="flex gap-[5px] mt-4 items-center">
+                {ex.sets.map((s, i) => {
+                  const on = i === fi, small = s.type === 'drop';
+                  return (
+                    <button key={i} onClick={() => setFset(i)}
+                      style={{
+                        flex: small ? '0 0 16px' : 1, height: small ? 20 : 34, borderRadius: small ? 7 : 12, padding: 0,
+                        font: `500 12px ${MONO}`, transition: 'all .2s',
+                        border: `1.5px solid ${on ? tagColor : 'transparent'}`,
+                        background: s.completed ? 'var(--color-success)' : small ? 'color-mix(in srgb, var(--g-drop) 25%, transparent)' : 'var(--color-bg-2)',
+                        color: s.completed ? '#fff' : on ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                        animation: s.completed ? 'fx-pop .35s cubic-bezier(.2,1.6,.4,1)' : 'none',
+                      }}>
+                      {s.completed ? '✓' : small ? '' : setLabel(ex.sets, i)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Focus: rest takeover or steppers */}
+            {!dense && resting && kind !== 'interval' && <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
+            {!dense && !resting && kind !== 'interval' && fs && (
+              <div className="grid grid-cols-2 gap-2.5 mt-4">
+                <Stepper label="KG" value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
+                <Stepper label="REPS" value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
+              </div>
+            )}
+
+            {/* Dense: rest strip + every set as a row */}
+            {dense && resting && kind !== 'interval' && <RestStrip timer={timer} onSkip={skipRest} />}
+            {dense && kind !== 'interval' && (
+              <>
+                <div className="grid gap-1.5 mt-3 text-center" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr) 40px', font: `500 9px ${MONO}`, letterSpacing: '.12em', color: 'var(--color-text-tertiary)' }}>
+                  <span>SET</span><span>KG</span><span>REPS</span><span />
+                </div>
+                <div className="flex flex-col gap-1 mt-1">
+                  {ex.sets.map((s, i) => {
+                    const on = i === fi;
+                    const pill = (field, val) => (
+                      <div className="flex items-center bg-bg-2 rounded-[11px] h-10">
+                        <button onClick={() => step(ei, i, field, field === 'weight' ? -2.5 : -1)} className="w-7 h-10 text-text-tertiary" style={{ font: `500 15px ${MONO}` }}>−</button>
+                        <span className="flex-1 text-center g-tab truncate" style={{ fontSize: val.length > 5 ? 12 : 17, fontWeight: 800 }}>{val}</span>
+                        <button onClick={() => step(ei, i, field, field === 'weight' ? 2.5 : 1)} className="w-7 h-10 text-text-tertiary" style={{ font: `500 15px ${MONO}` }}>+</button>
+                      </div>
+                    );
+                    return (
+                      <div key={i} className="grid gap-1.5 items-center py-[3px] rounded-[12px] transition-opacity"
+                        style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr) 40px', opacity: s.completed && !on ? 0.55 : 1, color: s.completed ? 'var(--color-success)' : 'var(--color-text-primary)' }}>
+                        <span className="text-center" style={{ font: `500 12px ${MONO}`, color: s.type === 'drop' ? 'var(--g-drop)' : 'var(--color-text-tertiary)' }}>{setLabel(ex.sets, i)}</span>
+                        {pill('weight', fmtW(s.weight))}
+                        {pill('reps', shownReps(ex, s, st))}
+                        {s.type === 'bfr' && !s.completed ? (
+                          <button onClick={() => { setFset(i); }} className="w-10 h-10 rounded-[12px]" style={{ border: `1.5px solid ${on ? 'var(--g-bfr)' : 'var(--color-bg-3)'}`, color: 'var(--g-bfr)', font: `600 9px ${MONO}` }}>BFR</button>
+                        ) : (
+                          <button onClick={() => complete(ei, i)} className="w-10 h-10 rounded-[12px] text-white font-bold"
+                            style={{ border: s.completed ? 'none' : `1.5px solid ${on ? 'var(--color-accent)' : 'var(--color-bg-3)'}`, background: s.completed ? 'var(--color-success)' : 'transparent', animation: s.completed ? 'fx-pop .35s cubic-bezier(.2,1.6,.4,1)' : 'none' }}>
+                            {s.completed ? '✓' : ''}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {kind === 'bfr' && fs && !resting && !fs.completed && (
+              <BFRBlock set={fs}
+                onStart={() => patchSet(ei, fi, { bfrStartMs: Date.now() })}
+                onStop={() => patchSet(ei, fi, { bfrStartMs: null })}
+                onDone={() => complete(ei, fi)} />
+            )}
+            {kind === 'interval' && fs && (
+              <>
+                {ex.sets.length > 1 && (
+                  <div className="flex gap-[5px] mt-4">
+                    {ex.sets.map((s, i) => (
+                      <button key={i} onClick={() => setFset(i)} className="flex-1 h-[34px] rounded-[12px]"
+                        style={{ font: `500 12px ${MONO}`, border: `1.5px solid ${i === fi ? 'var(--g-int)' : 'transparent'}`, background: s.completed ? 'var(--color-success)' : 'var(--color-bg-2)', color: s.completed ? '#fff' : 'var(--color-text-tertiary)' }}>
+                        {s.completed ? '✓' : i + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {resting && <RestStrip timer={timer} onSkip={skipRest} />}
+                <IntervalBlock key={`${ei}-${fi}`} set={fs}
+                  onStamp={(p) => patchSet(ei, fi, p)}
+                  onDone={() => complete(ei, fi)} />
+              </>
+            )}
+
+            {!dense && !resting && fs && (!isTimed || (kind === 'bfr' && fs.completed)) && (
+              <button onClick={() => complete(ei, fi)}
+                className="mt-3.5 w-full h-[62px] rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
+                style={{ background: fs.completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: fs.completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
+                {completeLabel}
+              </button>
+            )}
+            <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
+              {dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
+            </div>
+
+            {goFlash && (
+              <div key={goAt} className="absolute inset-0 rounded-[28px] bg-accent flex items-center justify-center pointer-events-none"
+                style={{ color: 'var(--color-on-accent)', fontSize: 96, fontWeight: 800, letterSpacing: '-0.05em', animation: 'fx-flash .8s cubic-bezier(.2,1.2,.3,1) both' }}>GO</div>
+            )}
+            {toast && (
+              <ToastPR key={toast.at} text={toast.text} onDone={() => setToast(null)} />
+            )}
+          </div>
+        )}
+
+        {!dense && nx >= 0 && nx !== ci && (
+          <button onClick={() => openBlock(nx)} className="flex-shrink-0 flex items-center gap-3 px-[18px] py-4 rounded-[22px] bg-bg-1 text-left opacity-85">
+            <div className="flex-1 min-w-0">
+              <div className="g-label">UP NEXT</div>
+              <div className="mt-1 text-base font-bold truncate">{blockName(exercises, blocks[nx])}</div>
+            </div>
+            <span className="text-text-tertiary flex-shrink-0" style={{ font: `400 11px ${MONO}` }}>
+              {TAGS[blocks[nx].kind] ? TAGS[blocks[nx].kind][0].toLowerCase() : `${exercises[blocks[nx].indices[0]].sets.length} × ${exercises[blocks[nx].indices[0]].targetReps}`}
+            </span>
+          </button>
+        )}
+        {dense && blocks.length > 1 && (
+          <div className="flex-shrink-0 flex flex-col gap-0.5 bg-bg-1 rounded-[22px] p-1.5">
+            {blocks.map((b, i) => {
+              if (i === ci) return null;
+              const done = blockDone(exercises, b);
+              const all = b.indices.reduce((a, x) => a + exercises[x].sets.length, 0);
+              const d = b.indices.reduce((a, x) => a + exercises[x].sets.filter((s) => s.completed).length, 0);
+              const b0 = exercises[b.indices[0]];
+              return (
+                <button key={i} onClick={() => openBlock(i)} className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left" style={{ opacity: done ? 0.5 : 1 }}>
+                  <span className="w-5 text-text-tertiary" style={{ font: `500 11px ${MONO}` }}>{String(i + 1).padStart(2, '0')}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold truncate">{blockName(exercises, b)}</div>
+                    <div className="mt-px text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>{TAGS[b.kind] ? TAGS[b.kind][0].toLowerCase() : `${b0.sets.length} × ${b0.targetReps}`}</div>
+                  </div>
+                  <span className="min-w-9 text-center px-1.5 py-1 rounded-[9px]" style={{ font: `500 11px ${MONO}`, background: done ? 'var(--g-ok-soft)' : 'var(--color-bg-2)', color: done ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+                    {done ? '✓' : `${d}/${all}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-shrink-0">
+          <button onClick={onFinish} className="flex-1 h-[50px] rounded-[18px] bg-bg-1 text-success font-bold text-[15px]">Finish workout</button>
+          <button onClick={onCancel} aria-label="Cancel workout" className="w-[50px] h-[50px] rounded-[18px] bg-bg-1 text-text-tertiary" style={{ font: `400 15px ${MONO}` }}>✕</button>
+        </div>
+      </div>
+
+      {handoff && (
+        <Handoff exercises={exercises} blocks={blocks} from={handoff.from} to={handoff.to} stats={stats}
+          onGo={() => { openBlock(handoff.to); setHandoff(null); }} />
+      )}
+      <EditSheet open={editOpen} onClose={() => setEditOpen(false)} ex={ex} ei={ei} exercises={exercises}
+        handlers={handlers} onAddExercise={onAddExercise} />
+    </div>
+  );
+}
+
+function ToastPR({ text, onDone }) {
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => { const t = setTimeout(() => done.current(), 2400); return () => clearTimeout(t); }, []);
+  return (
+    <div className="absolute left-4 right-4 top-3.5 px-3.5 py-3 rounded-2xl flex items-center gap-2.5 pointer-events-none"
+      style={{ background: 'var(--color-pr)', color: '#1f1400', animation: 'fx-toast 2.4s both', boxShadow: '0 10px 30px rgba(0,0,0,.3)' }}>
+      <span style={{ font: `800 10px ${MONO}`, letterSpacing: '.16em' }}>NEW PR</span>
+      <span className="text-[15px] font-extrabold truncate">{text}</span>
+    </div>
+  );
+}
