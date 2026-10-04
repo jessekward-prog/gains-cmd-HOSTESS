@@ -364,7 +364,7 @@ app.post('/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
     if (!user.password_hash || user.password_hash.startsWith('google_')) {
-      return res.status(401).json({ success: false, error: 'This account has no password yet — ask Jesse to set one.' });
+      return res.status(401).json({ success: false, error: 'This account has no password yet — ask whoever runs this app to set one with set-password.js.' });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
