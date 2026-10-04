@@ -671,8 +671,14 @@ export default function WorkoutPage({ onNavigate }) {
        handleRemoveInterval, handleLinkSuperset, handleUnlinkSuperset,
        handleAddVariable, handleRemoveVariable]);
 
+  // Every return keeps the same motion.div root. App's AnimatePresence
+  // (mode="wait") only re-checks for exit completion when a motion child
+  // finishes; if this page swapped its motion root for a plain element while
+  // exiting, the check never runs and the old page stays on screen forever
+  // while the nav moves on.
   if (finishing) {
     return (
+      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <FinishFlow
         summary={finishing.summary}
         result={completeResult}
@@ -683,6 +689,7 @@ export default function WorkoutPage({ onNavigate }) {
         }}
         onProgress={() => { setFinishing(null); setCompleteResult(null); setCompleting(false); setCardioStats(null); onNavigate('recommendations'); }}
       />
+      </motion.div>
     );
   }
 
@@ -690,22 +697,24 @@ export default function WorkoutPage({ onNavigate }) {
   // completion screen has to be checked first.
   if (completeResult) {
     return (
+      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <WorkoutComplete
         result={completeResult}
         duration={completeResult.duration}
         onClose={() => { setCompleteResult(null); setCompleting(false); setCardioStats(null); onNavigate('history'); }}
       />
+      </motion.div>
     );
   }
 
   if (!activeWorkout) {
     return (
-      <div className="g-root flex flex-col items-center justify-center gap-3 min-h-[60vh] text-center px-10 fx-in">
+      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="g-root flex flex-col items-center justify-center gap-3 min-h-[60vh] text-center px-10">
         <div className="opacity-30 text-text-tertiary"><NavIcon id="workout" size={44} /></div>
         <div className="text-[22px] font-extrabold">No active workout</div>
         <div className="text-sm text-text-secondary">Pick a session from Programs to start training.</div>
         <button onClick={() => onNavigate('programs')} className="mt-2 h-[50px] px-[22px] rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Browse programs</button>
-      </div>
+      </motion.div>
     );
   }
 

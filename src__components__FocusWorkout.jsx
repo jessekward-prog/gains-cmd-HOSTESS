@@ -77,7 +77,13 @@ function RestRing({ timer, next, onSkip }) {
           <span className="g-tab" style={{ fontSize: 52, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05 }}>{mmss(timer.remaining)}</span>
         </div>
       </div>
-      <div className="mt-3 g-meta text-center">{next}</div>
+      {next && (
+        <div className="mt-4 text-center">
+          <div className="g-label">NEXT{next.tag ? ` · ${next.tag}` : ''}</div>
+          <div className="mt-1.5" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
+          <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
+        </div>
+      )}
       <div className="flex gap-2 w-full mt-3.5">
         <button onClick={() => timer.extend(15)} className="flex-1 h-[52px] rounded-[18px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
         <button onClick={onSkip} className="flex-[2] h-[52px] rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
@@ -458,7 +464,11 @@ export default function FocusWorkout({
     completeLabel = `Complete ${letter(m)} · round ${round + 1}${partner !== undefined && m < block.indices.length - 1 ? ` → ${letter(m + 1)}` : ''}`;
   }
   if (fs?.completed) completeLabel = `${label} done · tap to undo`;
-  const restNext = fs ? `Next: ${kind === 'superset' ? `${letter(m)} · ` : ''}${ex.name} · ${fmtW(fs.weight)} × ${shownReps(ex, fs, st)}` : '';
+  const restNext = fs && {
+    tag: kind === 'superset' ? letter(m) : fs.type === 'drop' ? setLabel(ex.sets, fi) : `SET ${label}`,
+    name: ex.name,
+    load: `${fmtW(fs.weight) === 'BW' ? 'BW' : `${fmtW(fs.weight)} kg`} × ${shownReps(ex, fs, st)}`,
+  };
   const lastLine = kind === 'interval'
     ? `${fs?.intervalWork || 30}s on / ${fs?.intervalRest || 30}s off · ${mmss(fs?.intervalTotal || 180)} total`
     : st?.lw != null ? `Last ${fmtW(st.lw)} × ${st.lr} · best ${fmtW(st.best)}` : 'First time — this sets your baseline';
@@ -642,8 +652,12 @@ export default function FocusWorkout({
             </div>
 
             {goFlash && (
-              <div key={goAt} className="absolute inset-0 rounded-[28px] bg-accent flex items-center justify-center pointer-events-none"
-                style={{ color: 'var(--color-on-accent)', fontSize: 96, fontWeight: 800, letterSpacing: '-0.05em', animation: 'fx-flash .8s cubic-bezier(.2,1.2,.3,1) both' }}>GO</div>
+              // The panel only fades, clipped to the card; just the word pops, so
+              // nothing grows past the card edge or slips under its contents.
+              <div key={goAt} className="absolute inset-0 z-20 rounded-[28px] overflow-hidden bg-accent flex items-center justify-center pointer-events-none"
+                style={{ animation: 'fx-flash-bg .8s ease both' }}>
+                <span style={{ color: 'var(--color-on-accent)', fontSize: 96, fontWeight: 800, letterSpacing: '-0.05em', animation: 'fx-flash .8s cubic-bezier(.2,1.2,.3,1) both' }}>GO</span>
+              </div>
             )}
             {toast && (
               <ToastPR key={toast.at} text={toast.text} onDone={() => setToast(null)} />
@@ -707,7 +721,7 @@ function ToastPR({ text, onDone }) {
   done.current = onDone;
   useEffect(() => { const t = setTimeout(() => done.current(), 2400); return () => clearTimeout(t); }, []);
   return (
-    <div className="absolute left-4 right-4 top-3.5 px-3.5 py-3 rounded-2xl flex items-center gap-2.5 pointer-events-none"
+    <div className="absolute z-30 left-4 right-4 top-3.5 px-3.5 py-3 rounded-2xl flex items-center gap-2.5 pointer-events-none"
       style={{ background: 'var(--color-pr)', color: '#1f1400', animation: 'fx-toast 2.4s both', boxShadow: '0 10px 30px rgba(0,0,0,.3)' }}>
       <span style={{ font: `800 10px ${MONO}`, letterSpacing: '.16em' }}>NEW PR</span>
       <span className="text-[15px] font-extrabold truncate">{text}</span>
