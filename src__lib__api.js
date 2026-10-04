@@ -24,10 +24,6 @@ const api = {
 
 // Auth
 export const checkAuth = () => api.get('/api/auth/check');
-export const login = (email, password) => api.post('/auth/login', { email, password });
-export const register = (email, password, username) => api.post('/auth/register', { email, password, username });
-export const resetPassword = (email, recoveryPhrase, newPassword) =>
-  api.post('/auth/reset-password', { email, recoveryPhrase, newPassword });
 
 // Programs
 export const getPrograms = () => api.get('/api/programs');

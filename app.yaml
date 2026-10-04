@@ -6,7 +6,3 @@ description: Workout tracker that walks you through one set at a time, with supe
 icon: icons/icon-512x512.png
 env:
   - APP_PIN
-  - ADMIN_EMAIL
-  - PUBLIC_URL
-  - GOOGLE_CLIENT_ID
-  - GOOGLE_CLIENT_SECRET

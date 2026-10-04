@@ -17,7 +17,7 @@ const LAYOUTS = [
 
 
 export default function SettingsPage() {
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
   const { themeId, setTheme, currentTheme, accentColorId, setAccent, accentColors, accentIntensity, setIntensity, uiScale, setScale, fontId, setFont, textSizeId, setTextSize, bannerEnabled, setBannerEnabled, bannerText, setBannerText } = useTheme();
   const { showToast } = useToast();
   const { showHeaderMessage } = useHeaderMessage();
@@ -50,7 +50,6 @@ export default function SettingsPage() {
   return (
     <div className="g-root px-4 pt-2.5 pb-7 fx-in">
       <h1 className="mx-1 mt-3 mb-0.5 g-h1">Settings</h1>
-      {user && <p className="mx-1 text-text-tertiary" style={{ font: `400 12px ${MONO}` }}>{user.email || user.username}</p>}
 
       <div className="mt-4 flex flex-col gap-2">
         <Section title="Workout layout">
@@ -152,7 +151,7 @@ export default function SettingsPage() {
         </Section>
       </div>
 
-      <button onClick={logout} className="mt-4 w-full h-12 rounded-[15px] text-error font-bold text-sm">Log out</button>
+      <button onClick={logout} className="mt-4 w-full h-12 rounded-[15px] text-error font-bold text-sm">Lock app</button>
       <p className="mt-1.5 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>v2.3.0</p>
 
       <ImportModal

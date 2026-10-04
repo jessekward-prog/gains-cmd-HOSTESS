@@ -3,33 +3,9 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const db = require('./db');
-
-// Military/tactical word list for recovery phrases
-const MILITARY_WORDS = [
-  'ALPHA','BRAVO','CHARLIE','DELTA','ECHO','FOXTROT','GOLF','HOTEL',
-  'INDIA','JULIET','KILO','LIMA','MIKE','NOVEMBER','OSCAR','PAPA',
-  'QUEBEC','ROMEO','SIERRA','TANGO','UNIFORM','VICTOR','WHISKEY',
-  'XRAY','YANKEE','ZULU','IRON','STEEL','FORGE','ANVIL','TITAN',
-  'FALCON','EAGLE','RAPTOR','COBRA','VIPER','RANGER','RECON','STRIKE',
-  'GHOST','SHADOW','CIPHER','VECTOR','OMEGA','SIGMA','APEX','ZERO',
-  'NOVA','EMBER','FLINT','BLADE','SHELL','LANCE','ARROW','SHIELD',
-  'BUNKER','TOWER','RIDGE','STORM','THUNDER','FLASH','SURGE','PULSE',
-  'CIPHER','SIGNAL','RELAY','GRID','AXIS','SECTOR','UNIT','CONVOY'
-];
-
-function generateRecoveryPhrase() {
-  const words = [];
-  const pool = [...MILITARY_WORDS];
-  for (let i = 0; i < 4; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    words.push(pool.splice(idx, 1)[0]);
-  }
-  return words.join('-');
-}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -61,13 +37,10 @@ async function loadLmSettings() {
   LM_KEY = (await getSetting('lm_api_key')) || ENV_LM_KEY;
   LM_MODEL = (await getSetting('lm_model')) || ENV_LM_MODEL;
 }
-// The AI link is app-wide, so only Hostess (sync secret) or the admin may read
-// or change it — a changed URL would receive the API key on the next call.
-// No ADMIN_EMAIL = no admin account; the sync secret still works.
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase();
+// The AI link: Hostess (sync secret) or the unlocked owner may read or change it.
 function adminOrSync(req, res, next) {
   if (SYNC_SECRET && req.headers['x-sync-secret'] === SYNC_SECRET) return next();
-  if (ADMIN_EMAIL && req.isAuthenticated() && req.user.email?.toLowerCase() === ADMIN_EMAIL) return next();
+  if (req.isAuthenticated()) return next();
   res.status(403).json({ success: false, error: 'Admin only' });
 }
 
@@ -102,11 +75,6 @@ async function sessionSecret() {
   return secret;
 }
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-// Only used for the Google sign-in callback — set PUBLIC_URL if you enable it.
-const BASE_URL = (process.env.PUBLIC_URL || 'http://localhost:' + PORT).replace(/\/+$/, '');
 
 // LM Studio (OpenAI-compatible) — replaces Anthropic. `messages` items may use
 // text content OR OpenAI parts (array of {type:'text'|'image_url'}) — see cardio-stats.
@@ -220,62 +188,48 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // ── PIN gate ──────────────────────────────────────────────────────────
-// Every /api and /auth route sits behind a PIN, set on first launch or
-// preseeded with APP_PIN. Accounts still live inside it — the PIN is what stops
-// anyone who has the link from reaching sign-up at all. A logged-in session
-// counts as unlocked, because passport regenerates the session on login.
+// Single-user: the PIN is the only lock, set on first launch or preseeded
+// with APP_PIN. Unlocking signs the session in as the one owner account — the
+// oldest user, so an install that predates this keeps its data — created on
+// first unlock if the database is empty. Every /api and /auth route needs it.
 const pinDigest = (pin) => require('crypto').createHash('sha256').update(String(pin)).digest();
 async function pinMatches(pin) {
   if (process.env.APP_PIN) return require('crypto').timingSafeEqual(pinDigest(pin), pinDigest(process.env.APP_PIN));
   const hash = await getSetting('pin_hash');
   return !!hash && bcrypt.compare(String(pin), hash);
 }
+async function ownerUser() {
+  const { rows } = await db.pool.query('SELECT id, email, username FROM users ORDER BY id LIMIT 1');
+  if (rows[0]) return rows[0];
+  // No password login exists, so the stored hash is a placeholder nothing can match.
+  return db.createUser('owner@gains.local', '!pin-only', '');
+}
+function unlock(req, res) {
+  ownerUser()
+    .then((owner) => req.login(owner, (err) => (err ? res.status(500).json({ success: false, error: 'Could not unlock' }) : res.json({ success: true }))))
+    .catch((err) => res.status(500).json({ success: false, error: err.message }));
+}
 app.get('/api/pin', async (req, res) => {
   const set = !!process.env.APP_PIN || !!(await getSetting('pin_hash'));
-  res.json({ success: true, set, unlocked: !!req.session?.pinOk || req.isAuthenticated() });
+  res.json({ success: true, set, unlocked: req.isAuthenticated() });
 });
 app.post('/api/pin/setup', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
   const pin = String(req.body?.pin || '');
   if (!/^\d{4,8}$/.test(pin)) return badRequest(res, 'PIN must be 4–8 digits');
   if (process.env.APP_PIN || await getSetting('pin_hash')) return res.status(409).json({ success: false, error: 'A PIN is already set' });
   await setSetting('pin_hash', await bcrypt.hash(pin, 10));
-  req.session.pinOk = true;
-  res.json({ success: true });
+  unlock(req, res);
 });
 app.post('/api/pin/unlock', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
   if (!(await pinMatches(req.body?.pin || ''))) return res.status(401).json({ success: false, error: 'Wrong PIN' });
-  req.session.pinOk = true;
-  res.json({ success: true });
+  unlock(req, res);
 });
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/') && !req.path.startsWith('/auth/')) return next();
-  if (req.session?.pinOk || req.isAuthenticated()) return next();
+  if (req.isAuthenticated()) return next();
   if (SYNC_SECRET && req.headers['x-sync-secret'] === SYNC_SECRET) return next();
   res.status(401).json({ success: false, error: 'PIN required', pinRequired: true });
 });
-
-// Google OAuth — only enable if credentials are provided
-if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-  passport.use(new GoogleStrategy({
-      clientID: GOOGLE_CLIENT_ID,
-      clientSecret: GOOGLE_CLIENT_SECRET,
-      callbackURL: BASE_URL + '/auth/google/callback'
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        let user = await db.getUserByEmail(profile.emails[0].value);
-        if (!user) {
-          user = await db.createUserFromGoogle(profile.emails[0].value, profile.displayName || profile.emails[0].value.split('@')[0], profile.id);
-        }
-        return done(null, user);
-      } catch (error) {
-        return done(error, null);
-      }
-    }
-  ));
-} else {
-  console.log('⚠️ Google OAuth not configured (GOOGLE_CLIENT_ID/SECRET missing) — email/password login only');
-}
 
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
@@ -292,11 +246,6 @@ function requireAuth(req, res, next) {
   res.status(401).json({ success: false, error: 'Not authenticated' });
 }
 
-app.get('/auth/google', passport.authenticate('google', { 
-  scope: ['profile', 'email'],
-  prompt: 'select_account'
-}));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
 app.get('/auth/logout', (req, res) => { 
   req.logout((err) => {
     if (err) console.error('Logout error:', err);
@@ -309,116 +258,6 @@ app.get('/auth/logout', (req, res) => {
 });
 app.get('/api/auth/check', (req, res) => {
   res.json(req.isAuthenticated() ? { authenticated: true, user: req.user } : { authenticated: false });
-});
-
-// Email/password registration
-app.post('/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
-  try {
-    const { email, password, username } = req.body;
-    if (!email || !password || !username) {
-      return res.status(400).json({ success: false, error: 'All fields required' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
-    }
-
-    // Never "link" onto an existing account here — registering with someone
-    // else's Google-only email used to set a password and log in as them.
-    // Those accounts get a password via set-password.js instead.
-    const existing = await db.getUserByEmail(email.toLowerCase());
-    if (existing) {
-      return res.status(400).json({ success: false, error: 'Email already registered' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const phrase = generateRecoveryPhrase();
-    const phraseHash = await bcrypt.hash(phrase, 10);
-
-    const user = await db.createUser(email.toLowerCase(), passwordHash, username);
-    await db.setRecoveryPhrase(user.id, phraseHash);
-    await db.updateLastLogin(user.id);
-
-    req.login(user, (err) => {
-      if (err) return res.status(500).json({ success: false, error: 'Login failed after registration' });
-      req.session.save((saveErr) => {
-        if (saveErr) console.error('Session save error:', saveErr);
-        res.json({ success: true, recoveryPhrase: phrase });
-      });
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ success: false, error: 'Registration failed' });
-  }
-});
-
-// Email/password login
-app.post('/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, error: 'Email and password required' });
-    }
-
-    const user = await db.getUserByEmailForAuth(email.toLowerCase());
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'Invalid email or password' });
-    }
-    if (!user.password_hash || user.password_hash.startsWith('google_')) {
-      return res.status(401).json({ success: false, error: 'This account has no password yet — ask whoever runs this app to set one with set-password.js.' });
-    }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ success: false, error: 'Invalid email or password' });
-    }
-
-    await db.updateLastLogin(user.id);
-    req.login(user, (err) => {
-      if (err) return res.status(500).json({ success: false, error: 'Login failed' });
-      req.session.save((saveErr) => {
-        if (saveErr) console.error('Session save error:', saveErr);
-        res.json({ success: true });
-      });
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ success: false, error: 'Login failed' });
-  }
-});
-
-// Password reset via recovery phrase
-app.post('/auth/reset-password', rateLimit(5, 15 * 60 * 1000), async (req, res) => {
-  try {
-    const { email, recoveryPhrase, newPassword } = req.body;
-    if (!email || !recoveryPhrase || !newPassword) {
-      return res.status(400).json({ success: false, error: 'All fields required' });
-    }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, error: 'New password must be at least 8 characters' });
-    }
-
-    const user = await db.getUserByEmailForAuth(email.toLowerCase());
-    if (!user || !user.recovery_phrase_hash) {
-      return res.status(401).json({ success: false, error: 'Invalid email or recovery phrase' });
-    }
-
-    const phraseValid = await bcrypt.compare(recoveryPhrase.toUpperCase().trim(), user.recovery_phrase_hash);
-    if (!phraseValid) {
-      return res.status(401).json({ success: false, error: 'Invalid email or recovery phrase' });
-    }
-
-    const newHash = await bcrypt.hash(newPassword, 12);
-    // Generate a new recovery phrase after reset so old one can't be reused
-    const newPhrase = generateRecoveryPhrase();
-    const newPhraseHash = await bcrypt.hash(newPhrase, 10);
-    await db.setPasswordHash(user.id, newHash);
-    await db.setRecoveryPhrase(user.id, newPhraseHash);
-
-    res.json({ success: true, newRecoveryPhrase: newPhrase });
-  } catch (error) {
-    console.error('Reset error:', error);
-    res.status(500).json({ success: false, error: 'Password reset failed' });
-  }
 });
 
 // Protected API Routes

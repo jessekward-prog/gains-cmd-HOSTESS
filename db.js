@@ -296,20 +296,7 @@ async function createUser(email, passwordHash, username) {
   }
 }
 
-async function getUserByEmail(email) {
-  const result = await pool.query(
-    'SELECT id, email, password_hash, username, created_at, last_login FROM users WHERE email = $1',
-    [email]
-  );
-  return result.rows[0];
-}
 
-async function updateLastLogin(userId) {
-  await pool.query(
-    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
-    [userId]
-  );
-}
 
 // Get user by ID (for session deserialization)
 async function getUserById(id) {
@@ -326,26 +313,6 @@ async function getUserById(id) {
 }
 
 // Create user from Google OAuth
-async function createUserFromGoogle(email, username, googleId) {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(
-      'INSERT INTO users (email, password_hash, username) VALUES ($1, $2, $3) RETURNING id, email, username',
-      [email, `google_${googleId}`, username]
-    );
-    
-    const user = result.rows[0];
-    
-    await client.query(
-      'INSERT INTO user_settings (user_id) VALUES ($1)',
-      [user.id]
-    );
-    
-    return user;
-  } finally {
-    client.release();
-  }
-}
 
 // Program functions
 async function getPrograms(userId) {
@@ -553,27 +520,8 @@ async function setRecoveryStatus(userId, exerciseName, status, note = '') {
   );
 }
 
-async function setRecoveryPhrase(userId, phraseHash) {
-  await pool.query(
-    'UPDATE users SET recovery_phrase_hash = $1 WHERE id = $2',
-    [phraseHash, userId]
-  );
-}
 
-async function getUserByEmailForAuth(email) {
-  const result = await pool.query(
-    'SELECT id, email, password_hash, username, recovery_phrase_hash FROM users WHERE email = $1',
-    [email]
-  );
-  return result.rows[0];
-}
 
-async function setPasswordHash(userId, passwordHash) {
-  await pool.query(
-    'UPDATE users SET password_hash = $1 WHERE id = $2',
-    [passwordHash, userId]
-  );
-}
 
 // Workout share functions
 function generateShareCode() {
@@ -618,13 +566,7 @@ module.exports = {
   ready,
   PgSessionStore,
   createUser,
-  getUserByEmail,
   getUserById,
-  createUserFromGoogle,
-  updateLastLogin,
-  setRecoveryPhrase,
-  getUserByEmailForAuth,
-  setPasswordHash,
   getPrograms,
   createProgram,
   deleteProgram,

@@ -13,7 +13,6 @@ import GlobalRestTimer from './components/GlobalRestTimer';
 import NavIcon from './components/NavIcon';
 import ExerciseNameOptions from './components/ExerciseNameOptions';
 import AppearanceSync from './components/AppearanceSync';
-import AuthPage from './pages/AuthPage';
 import PinGate from './components/PinGate';
 import { workoutLayout } from './lib/focus';
 import ProgramsPage from './pages/ProgramsPage';
@@ -107,8 +106,18 @@ function AppContent() {
     );
   }
 
+  // PinGate only lets us mount once the session is signed in, so no user here
+  // means the session went away underneath us — locking again re-shows the PIN.
   if (!user) {
-    return <AuthPage />;
+    return (
+      <div className="g-root min-h-dvh bg-bg-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+        <div className="text-[22px] font-extrabold">Session ended</div>
+        <button onClick={() => { window.location.href = '/auth/logout'; }}
+          className="h-[50px] px-6 rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>
+          Enter PIN
+        </button>
+      </div>
+    );
   }
 
   return (

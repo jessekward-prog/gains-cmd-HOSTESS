@@ -9,7 +9,8 @@ async function post(url, pin) {
   if (!r.ok) throw new Error(d.error || 'Something went wrong');
 }
 
-// Hostess requires every app behind a PIN. Children (and their auth/data
+// Hostess requires every app behind a PIN, and it is this app's only lock (unlocking
+// signs the session in as the single owner). Children (and their auth/data
 // requests) only mount once the server confirms we're unlocked, so nothing
 // races the unlock and gets bounced with a 401.
 export default function PinGate({ children }) {

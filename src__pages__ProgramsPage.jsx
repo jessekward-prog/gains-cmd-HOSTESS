@@ -1001,7 +1001,7 @@ export default function ProgramsPage({ onNavigate }) {
           <span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{today}</span>
         </div>
         <h1 className="mt-[22px] mb-1" style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>
-          Hello, {user?.username || user?.email?.split('@')[0] || 'there'}
+          {user?.username ? `Hello, ${user.username}` : 'Hello'}
         </h1>
         <p className="text-sm text-text-secondary">{upNext.line}</p>
 
