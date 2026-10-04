@@ -50,12 +50,12 @@ function Tag({ kind }) {
 function Stepper({ label, value, onDec, onInc }) {
   const small = value.length > 5;
   return (
-    <div className="bg-bg-2 rounded-[18px] px-2.5 py-3 text-center">
+    <div className="bg-bg-2 rounded-[18px] px-2.5 py-3 text-center flex flex-col">
       <div className="g-label">{label}</div>
-      <div className="g-tab" style={{ fontSize: small ? 28 : 46, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: small ? '50px' : 1.1, margin: '4px 0 8px' }}>{value}</div>
+      <div className="flex-1 flex items-center justify-center g-tab" style={{ fontSize: small ? 30 : 64, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1, margin: '6px 0 10px' }}>{value}</div>
       <div className="flex gap-1.5">
-        <button onClick={onDec} className="flex-1 h-11 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>−</button>
-        <button onClick={onInc} className="flex-1 h-11 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>+</button>
+        <button onClick={onDec} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>−</button>
+        <button onClick={onInc} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>+</button>
       </div>
     </div>
   );
@@ -65,7 +65,8 @@ function Stepper({ label, value, onDec, onInc }) {
 function RestRing({ timer, next, onSkip }) {
   const left = timer.total > 0 ? timer.remaining / timer.total : 0;
   return (
-    <div className="mt-4 flex flex-col items-center" style={{ animation: 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' }}>
+    <div className="h-full flex flex-col items-center">
+      <div className="flex-1 flex flex-col items-center justify-center">
       <div className="relative w-[200px] h-[200px]">
         <svg width="200" height="200" viewBox="0 0 200 200" className="absolute inset-0 -rotate-90">
           <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
@@ -84,9 +85,10 @@ function RestRing({ timer, next, onSkip }) {
           <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
         </div>
       )}
+      </div>
       <div className="flex gap-2 w-full mt-3.5">
-        <button onClick={() => timer.extend(15)} className="flex-1 h-[52px] rounded-[18px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
-        <button onClick={onSkip} className="flex-[2] h-[52px] rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
+        <button onClick={() => timer.extend(15)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
+        <button onClick={onSkip} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
       </div>
     </div>
   );
@@ -128,7 +130,7 @@ function BFRBlock({ set, onStart, onStop, onDone }) {
           </div>
         </div>
         {!set.completed && (
-          <button onClick={running ? onStop : onStart} className="h-12 px-[18px] rounded-[15px] font-extrabold text-sm" style={{ background: 'var(--g-bfr)', color: '#1a0b24' }}>
+          <button onClick={running ? onStop : onStart} className="h-12 px-[18px] rounded-[15px] font-extrabold text-sm whitespace-nowrap flex-shrink-0" style={{ background: 'var(--g-bfr)', color: '#1a0b24' }}>
             {running ? 'Stop' : `Start ${secs}s`}
           </button>
         )}
@@ -568,12 +570,33 @@ export default function FocusWorkout({
               </div>
             )}
 
-            {/* Focus: rest takeover or steppers */}
-            {!dense && resting && kind !== 'interval' && <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
-            {!dense && !resting && kind !== 'interval' && fs && (
-              <div className="grid grid-cols-2 gap-2.5 mt-4">
-                <Stepper label="KG" value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
-                <Stepper label="REPS" value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
+            {/* Focus: rest and the steppers share one grid cell, both always
+                laid out, so the card is the same size in either state and the
+                bottom button lands in the same place. Only one is visible. */}
+            {!dense && kind !== 'interval' && fs && (
+              <div className="grid mt-4">
+                <div key={`rest-${resting}`} aria-hidden={!resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'visible' : 'hidden', animation: resting ? 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' : 'none' }}>
+                  <RestRing timer={timer} next={restNext} onSkip={skipRest} />
+                </div>
+                <div key={`set-${resting}`} aria-hidden={resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
+                  <div className="grid grid-cols-2 gap-2.5 flex-1">
+                    <Stepper label="KG" value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
+                    <Stepper label="REPS" value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
+                  </div>
+                  {kind === 'bfr' && !fs.completed && (
+                    <BFRBlock set={fs}
+                      onStart={() => patchSet(ei, fi, { bfrStartMs: Date.now() })}
+                      onStop={() => patchSet(ei, fi, { bfrStartMs: null })}
+                      onDone={() => complete(ei, fi)} />
+                  )}
+                  {(!isTimed || (kind === 'bfr' && fs.completed)) && (
+                    <button onClick={() => complete(ei, fi)}
+                      className="mt-3.5 w-full h-[62px] rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
+                      style={{ background: fs.completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: fs.completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
+                      {completeLabel}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -615,7 +638,7 @@ export default function FocusWorkout({
               </>
             )}
 
-            {kind === 'bfr' && fs && !resting && !fs.completed && (
+            {dense && kind === 'bfr' && fs && !resting && !fs.completed && (
               <BFRBlock set={fs}
                 onStart={() => patchSet(ei, fi, { bfrStartMs: Date.now() })}
                 onStop={() => patchSet(ei, fi, { bfrStartMs: null })}
@@ -640,13 +663,6 @@ export default function FocusWorkout({
               </>
             )}
 
-            {!dense && !resting && fs && (!isTimed || (kind === 'bfr' && fs.completed)) && (
-              <button onClick={() => complete(ei, fi)}
-                className="mt-3.5 w-full h-[62px] rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
-                style={{ background: fs.completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: fs.completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
-                {completeLabel}
-              </button>
-            )}
             <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
               {dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
             </div>
