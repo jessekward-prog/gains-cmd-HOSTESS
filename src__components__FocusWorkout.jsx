@@ -442,7 +442,12 @@ export default function FocusWorkout({
       requestAnimationFrame(() => requestAnimationFrame(() => setDrag({ dx: 0, dy: 0, anim: true })));
     }, 170);
   };
-  const pd = (e) => { dragRef.current = { x: e.clientX, y: e.clientY, on: true, moved: false, axis: null }; };
+  const pd = (e) => {
+    // Controls with their own gesture (the cardio card's inputs and duration
+    // wheel) keep it; a swipe only starts on the card itself.
+    if (e.target.closest('input, textarea, select, .overflow-y-scroll')) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, on: true, moved: false, axis: null };
+  };
   const pm = (e) => {
     const d = dragRef.current;
     if (!d.on) return;
@@ -520,8 +525,19 @@ export default function FocusWorkout({
 
       <div className="flex-1 px-3.5 pb-6 flex flex-col gap-2.5">
         {kind === 'cardio' ? (
-          <CardioCard exercise={ex} exerciseIndex={ei} onUpdateSet={handlers.onUpdateSet}
-            onUpdateExercise={handlers.onUpdateCardioExercise} onTimerActiveChange={() => {}} />
+          // Same swipe handling as the other cards, so cardio blocks cycle too.
+          <div
+            onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
+            className="relative flex-shrink-0 select-none"
+            style={{
+              touchAction: dense ? 'pan-y' : 'none',
+              transform: `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 40}deg)`,
+              transition: drag.anim ? 'transform .3s cubic-bezier(.2,1.2,.3,1)' : 'none',
+              opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
+            }}>
+            <CardioCard exercise={ex} exerciseIndex={ei} onUpdateSet={handlers.onUpdateSet}
+              onUpdateExercise={handlers.onUpdateCardioExercise} onTimerActiveChange={() => {}} />
+          </div>
         ) : (
           <div
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}

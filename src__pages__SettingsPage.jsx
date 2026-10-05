@@ -8,6 +8,7 @@ import { usePWAInstall } from '../hooks/usePWAInstall';
 import { workoutLayout as readLayout } from '../lib/focus';
 import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
 import { moodState } from '../lib/mood';
+import { GREETING_KEY, readGreeting, defaultGreeting } from '../lib/greeting';
 
 const MONO = 'var(--font-mono)';
 // Settings preview chips: each shows that mood for 2.8s.
@@ -24,8 +25,8 @@ const LAYOUTS = [
 
 
 export default function SettingsPage() {
-  const { logout } = useAuth();
-  const { themeId, setTheme, currentTheme, accentColorId, setAccent, accentColors, accentIntensity, setIntensity, uiScale, setScale, fontId, setFont, textSizeId, setTextSize, bannerEnabled, setBannerEnabled, bannerText, setBannerText } = useTheme();
+  const { logout, user } = useAuth();
+  const { themeId, setTheme, currentTheme, accentColorId, setAccent, accentColors, accentIntensity, setIntensity, uiScale, setScale, fontId, setFont, textSizeId, setTextSize, bannerEnabled, setBannerEnabled } = useTheme();
   const { showToast } = useToast();
   const { showHeaderMessage } = useHeaderMessage();
 
@@ -49,6 +50,12 @@ export default function SettingsPage() {
     try { localStorage.setItem('gains-cmd-expand-mode', val); } catch {}
     showToast(`Expand mode: ${val}`, 'success');
   }, [showToast]);
+
+  const [greeting, setGreeting] = useState(readGreeting);
+  const saveGreeting = (v) => {
+    setGreeting(v);
+    try { if (v.trim()) localStorage.setItem(GREETING_KEY, v); else localStorage.removeItem(GREETING_KEY); } catch {}
+  };
 
   const [waves, setWaves] = useState(readWaveStyle);
   const pickWaves = (v) => {
@@ -165,12 +172,14 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        <Section title="Boot splash">
-          <Segmented value={bannerEnabled} onChange={setBannerEnabled} options={[[true, 'Image Banner'], [false, 'Text Only']]} />
-          {!bannerEnabled && (
-            <input type="text" value={bannerText} onChange={(e) => setBannerText(e.target.value)} placeholder="Gains_CMD" maxLength={40}
-              className="mt-2 w-full h-12 px-4 rounded-[15px] bg-bg-2 text-text-primary text-sm outline-none focus:ring-1 focus:ring-accent/40" />
-          )}
+        <Section title="Home screen">
+          <div className="g-label mb-2" style={{ fontSize: 9 }}>GREETING</div>
+          <input type="text" value={greeting} onChange={(e) => saveGreeting(e.target.value)} maxLength={40}
+            placeholder={defaultGreeting(user)} aria-label="Greeting on the Programs screen"
+            className="w-full h-12 px-4 rounded-[15px] bg-bg-2 text-text-primary text-sm outline-none focus:ring-1 focus:ring-accent/40" />
+          <p className="mt-1.5 text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>Leave empty for “{defaultGreeting(user)}”.</p>
+          <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>SPLASH ON OPEN</div>
+          <Segmented value={bannerEnabled} onChange={setBannerEnabled} options={[[true, 'On'], [false, 'Off']]} />
         </Section>
 
         {!isInstalled && canInstall && (

@@ -170,9 +170,7 @@ export default function WorkoutPage({ onNavigate }) {
     });
   }, [updateActiveWorkout]);
 
-  const { start: startGlobalTimer, stop: stopGlobalTimer } = useGlobalTimer();
-  // A rest countdown shouldn't outlive the workout (finish or cancel).
-  useEffect(() => { if (!activeWorkout) stopGlobalTimer(); }, [activeWorkout, stopGlobalTimer]);
+  const { start: startGlobalTimer } = useGlobalTimer();
 
   const handleSetComplete = useCallback((exerciseIndex, setIndex, restSeconds) => {
     moodState.pulse = Date.now();

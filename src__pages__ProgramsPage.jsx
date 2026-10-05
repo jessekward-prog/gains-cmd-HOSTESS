@@ -17,6 +17,7 @@ import { EXERCISE_LIST_ID } from '../components/ExerciseNameOptions';
 import { isMarker } from '../lib/history';
 import { supersetRows } from '../lib/supersets';
 import { estimateMinutes, daysAgo } from '../lib/focus';
+import { readGreeting, defaultGreeting } from '../lib/greeting';
 
 const MONO = 'var(--font-mono)';
 const parseWorkouts = (p) => (typeof p?.workouts === 'string' ? JSON.parse(p.workouts) : p?.workouts || []);
@@ -1001,7 +1002,7 @@ export default function ProgramsPage({ onNavigate }) {
           <span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{today}</span>
         </div>
         <h1 className="mt-[22px] mb-1" style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>
-          {user?.username ? `Hello, ${user.username}` : 'Hello'}
+          {readGreeting() || defaultGreeting(user)}
         </h1>
         <p className="text-sm text-text-secondary">{upNext.line}</p>
 

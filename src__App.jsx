@@ -4,7 +4,7 @@ import { WorkoutProvider, useWorkout } from './context/WorkoutContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { HeaderMessageProvider } from './context/HeaderMessageContext';
-import { TimerProvider } from './context/TimerContext';
+import { TimerProvider, useGlobalTimer } from './context/TimerContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import AppHeader from './components/AppHeader';
 import BottomNav from './components/BottomNav';
@@ -27,6 +27,12 @@ function AppShell() {
   const { activeWorkout } = useWorkout();
   const { tab, navigate } = useNavigation();
   const [navExpanded, setNavExpanded] = useState(false);
+
+  // A rest countdown shouldn't outlive the workout (finish or cancel). This
+  // lives here, not in WorkoutPage: cancelling also navigates away, and the
+  // page unmounts in the same render the workout clears, so its effect never ran.
+  const { stop: stopRestTimer } = useGlobalTimer();
+  useEffect(() => { if (!activeWorkout) stopRestTimer(); }, [activeWorkout, stopRestTimer]);
 
   // The live background brightens as the workout fills up.
   useEffect(() => {
