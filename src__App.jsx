@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkoutProvider, useWorkout } from './context/WorkoutContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -28,11 +27,14 @@ function AppShell() {
   const { tab, navigate } = useNavigation();
   const [navExpanded, setNavExpanded] = useState(false);
 
-  // Auto-switch to workout tab when a workout becomes active while on programs.
+  // Jump to the workout tab when a workout *becomes* active (started, or
+  // found on load) — not every time Programs is opened mid-workout, which made
+  // Programs unreachable until the workout ended.
+  const hadWorkout = useRef(false);
   useEffect(() => {
-    if (activeWorkout && tab === 'programs') {
-      navigate('workout');
-    }
+    const has = !!activeWorkout;
+    if (has && !hadWorkout.current && tab === 'programs') navigate('workout');
+    hadWorkout.current = has;
   }, [activeWorkout, tab, navigate]);
 
   const handleNavExpanded = useCallback((v) => setNavExpanded(v), []);
@@ -43,7 +45,7 @@ function AppShell() {
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
 
   return (
-    <div className="min-h-dvh bg-bg-0">
+    <div className="min-h-dvh">
       <div
         className="flex flex-col h-dvh"
         style={{
@@ -55,7 +57,11 @@ function AppShell() {
 
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-2xl mx-auto h-full">
-          <AnimatePresence mode="wait">
+          {/* No AnimatePresence: mode="wait" holds the next tab until the old
+              page reports its exit finished, and rapid tab changes (or a page
+              swapping its root mid-exit) could leave that report missing — the
+              old page then stayed on screen for good while the nav moved on.
+              Pages still play their own entrance animation on mount. */}
             {tab === 'programs' && <ProgramsPage key="programs" onNavigate={navigate} />}
             {tab === 'workout' && <WorkoutPage key="workout" onNavigate={navigate} />}
             {tab === 'history' && <HistoryPage key="history" />}
@@ -63,7 +69,6 @@ function AppShell() {
             {tab === 'recommendations' && <RecommendationsPage key="recommendations" />}
             {tab === 'aggression' && <AggressionPage key="aggression" />}
             {tab === 'settings' && <SettingsPage key="settings" />}
-          </AnimatePresence>
           </div>
         </div>
         {/* Spacer matching BottomNav height so flex-1 stops at the nav top on all devices */}

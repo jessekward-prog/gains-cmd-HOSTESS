@@ -6,6 +6,7 @@ import { useHeaderMessage } from '../context/HeaderMessageContext';
 import ImportModal from '../components/ImportModal';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { workoutLayout as readLayout } from '../lib/focus';
+import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
 
 const MONO = 'var(--font-mono)';
 const LAYOUTS = [
@@ -42,6 +43,13 @@ export default function SettingsPage() {
     try { localStorage.setItem('gains-cmd-expand-mode', val); } catch {}
     showToast(`Expand mode: ${val}`, 'success');
   }, [showToast]);
+
+  const [waves, setWaves] = useState(readWaveStyle);
+  const pickWaves = (v) => {
+    setWaves(v);
+    try { localStorage.setItem(WAVE_KEY, v); } catch {}
+    window.dispatchEvent(new Event('gains-waves'));
+  };
 
   const darkThemes = THEMES.filter(t => t.mode === 'dark');
   const lightThemes = THEMES.filter(t => t.mode === 'light');
@@ -90,6 +98,10 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-2">
             {lightThemes.map(t => <ThemeTile key={t.id} theme={t} active={themeId === t.id} onSelect={() => pickTheme(t)} />)}
           </div>
+        </Section>
+
+        <Section title="Background">
+          <Segmented value={waves} onChange={pickWaves} options={[['bands', 'Waves'], ['outline', 'Outline'], ['off', 'Off']]} />
         </Section>
 
         <Section title="Text size">

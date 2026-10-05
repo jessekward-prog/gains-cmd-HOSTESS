@@ -754,6 +754,10 @@ body {
   margin: 0;
   min-height: 100dvh;
   overscroll-behavior: none;
+  /* html carries the theme background; body stays clear so the wave layer
+     (fixed, z-index -1) shows through. index.html's inline body colour only
+     covers the moment before this stylesheet loads. */
+  background: transparent;
 }
 
 input, select, textarea {

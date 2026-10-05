@@ -1012,7 +1012,7 @@ export default function ProgramsPage({ onNavigate }) {
               <div className="mt-2" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{upNext.workout.name}</div>
               <div className="mt-1.5 g-meta">{workoutMeta(upNext.workout, true)}</div>
             </div>
-            <button onClick={() => handleStartWorkout(upNext.index, upNext.program)}
+            <button onClick={() => (activeWorkout ? onNavigate('workout') : handleStartWorkout(upNext.index, upNext.program))}
               className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
               style={{ color: 'var(--color-on-accent)' }}>
               {activeWorkout ? 'Workout in progress' : 'Start workout'} <span style={{ fontFamily: MONO }}>→</span>
