@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-const CHAR_DELAY = 25;
+const CHAR_DELAY = 75;
 const RETYPE_MIN = 20000;
 const RETYPE_MAX = 30000;
 
