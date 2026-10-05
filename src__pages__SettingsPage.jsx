@@ -7,8 +7,14 @@ import ImportModal from '../components/ImportModal';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { workoutLayout as readLayout } from '../lib/focus';
 import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
+import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
+// Settings preview chips: each shows that mood for 2.8s.
+const MOOD_CHIPS = [
+  ['work', 'Lifting', 'var(--color-accent)'], ['rest', 'Rest', 'var(--color-error)'], ['done', 'Set done', 'var(--color-success)'],
+  ['intW', 'Interval on', 'var(--color-success)'], ['pr', 'PR', '#fbbf24'], ['intR', 'Interval off', '#f59e0b'],
+];
 const LAYOUTS = [
   { id: 'focus', name: 'Focus', desc: 'Default · one set at a time' },
   { id: 'dense', name: 'Dense', desc: 'Classic-style · all sets listed' },
@@ -100,8 +106,29 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        <Section title="Background">
-          <Segmented value={waves} onChange={pickWaves} options={[['bands', 'Waves'], ['outline', 'Outline'], ['off', 'Off']]} />
+        <Section title="Live background">
+          <div className="grid grid-cols-2 gap-2">
+            {[['xmb', 'Waves', 'Flowing ribbons, colour follows the set'], ['off', 'Off', 'Static']].map(([id, name, desc]) => (
+              <Tile key={id} active={waves === id} onClick={() => pickWaves(id)}>
+                <span className="text-sm font-extrabold">{name}</span>
+                <span className="text-text-tertiary" style={{ font: `400 10px ${MONO}`, lineHeight: 1.35 }}>{desc}</span>
+              </Tile>
+            ))}
+          </div>
+          {waves !== 'off' && (
+            <>
+              <div className="g-label mt-3.5">PREVIEW MOOD</div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {MOOD_CHIPS.map(([m, label, dot]) => (
+                  <button key={m} onClick={() => { moodState.preview = { m, t: Date.now() }; }}
+                    className="flex items-center gap-1.5 h-[34px] px-3 rounded-[12px] bg-bg-2 text-text-primary active:bg-bg-3"
+                    style={{ font: `500 11px ${MONO}` }}>
+                    <span className="w-2 h-2 rounded-full" style={{ background: dot }} />{label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </Section>
 
         <Section title="Text size">

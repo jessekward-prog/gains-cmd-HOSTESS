@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import { moodState, deriveMood, MOODS } from '../lib/mood';
 
-// Ported from chat-cmd's WaveBackground (itself apps-cmd's XMB wave): sine
-// bands + drifting particles, here as one full-viewport layer behind every
-// page. Colours come from the live theme tokens, so all themes and the accent
-// override work without a list of their own.
-const reduceMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+// The live "Waves" background from the Claude Design handoff (LIVE_BACKGROUND.md):
+// XMB-style ribbons behind every screen that react to the app — calm grey
+// lines when nothing is happening, colour and fill only during an event (rest,
+// set done, PR, BFR, intervals), every change crossfaded over ~1s. It reads
+// moodState each frame and eases toward the targets it derives from it.
 export const WAVE_KEY = 'gains-cmd-waves';
-export const readWaveStyle = () => { try { return localStorage.getItem(WAVE_KEY) || 'bands'; } catch { return 'bands'; } };
+export const readWaveStyle = () => {
+  try { return localStorage.getItem(WAVE_KEY) === 'off' ? 'off' : 'xmb'; } catch { return 'xmb'; }
+};
 
-// Any CSS colour → [r,g,b] via the canvas parser (handles #hex and rgba()).
+const reduceMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Any CSS colour → [r,g,b] through the canvas parser (handles #hex and rgba()).
 function rgb(ctx, css, fallback) {
   ctx.fillStyle = fallback;
   ctx.fillStyle = css || fallback;
@@ -21,7 +26,6 @@ export default function WaveBackground() {
   const canvasRef = useRef(null);
   const [style, setStyle] = useState(readWaveStyle);
 
-  // Settings writes the key and fires this event so the change is live.
   useEffect(() => {
     const onChange = () => setStyle(readWaveStyle());
     window.addEventListener('gains-waves', onChange);
@@ -32,74 +36,104 @@ export default function WaveBackground() {
   useEffect(() => {
     if (style === 'off') return;
     const cv = canvasRef.current;
-    const ctx = cv.getContext('2d');
-    let raf, t = 0, frame = 0, last = 0, A = [255, 34, 34], S = [120, 90, 180];
-    const resolve = () => {
+    const g = cv.getContext('2d');
+
+    // Theme tokens, re-read twice a second (accent override changes don't reload).
+    let tok = {}, light = false, lastTok = -1;
+    const readTokens = () => {
       const cs = getComputedStyle(document.documentElement);
-      A = rgb(ctx, cs.getPropertyValue('--color-accent').trim(), '#ff2222');
-      S = rgb(ctx, cs.getPropertyValue('--color-text-tertiary').trim(), '#786ab4');
+      const v = (n, f) => rgb(g, cs.getPropertyValue(n).trim(), f);
+      tok = { accent: v('--color-accent', '#ff2222'), success: v('--color-success', '#22c55e'), error: v('--color-error', '#ef4444'), t3: v('--color-text-tertiary', '#6b6b6b') };
+      light = document.documentElement.classList.contains('mode-light');
     };
-    const parts = Array.from({ length: 24 }, () => ({
-      x: Math.random(), y: Math.random(), r: 0.5 + Math.random() * 1.4, s: 0.02 + Math.random() * 0.05,
+    readTokens();
+    const colour = (c) => tok[c] || rgb(g, c, '#ffffff');
+
+    // Eased state, chased toward the derived targets each frame.
+    const first = deriveMood(moodState, Date.now());
+    let c = [...tok.t3], k = 0.35, f = 0, sp = 1 / MOODS[first.mood][2], y = first.base;
+    let swell = 0, t = Math.random() * 100, lastPulse = moodState.pulse;
+    const dots = Array.from({ length: 12 }, () => ({
+      x: Math.random(), y: 0.25 + Math.random() * 0.6, r: 0.6 + Math.random() * 1.6, v: 0.004 + Math.random() * 0.012, ph: Math.random() * 6.28,
     }));
-    const bands = [
-      { amp: 40, len: 0.9, sp: 0.18, y: 0.55, a: 0.14, tint: true },
-      { amp: 65, len: 0.6, sp: 0.12, y: 0.65, a: 0.11, tint: true },
-      { amp: 85, len: 0.4, sp: 0.08, y: 0.75, a: 0.08, tint: false },
-    ];
+
+    let W = 0, H = 0;
     const size = () => {
-      const d = 1; // soft gradients look the same at 1x, at a fraction of the fill cost
-      cv.width = innerWidth * d;
-      cv.height = innerHeight * d;
-      ctx.setTransform(d, 0, 0, d, 0, 0);
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     size();
-    resolve();
     addEventListener('resize', size);
 
-    const draw = (now = 0) => {
+    let raf, prev = performance.now();
+    const draw = (now) => {
       raf = requestAnimationFrame(draw);
-      // ~30fps is plenty for a slow background and halves the battery cost;
-      // time-based so the drift speed is the same at any frame rate.
-      const dt = now - last;
-      if (dt < 32) return;
-      last = now;
-      if (++frame % 30 === 0) resolve(); // picks up accent changes that don't reload the page
-      const k = Math.min(dt, 100) / 16.7;
-      t += (reduceMotion ? 0.0004 : 0.002) * k;
-      const W = innerWidth, H = innerHeight;
-      ctx.clearRect(0, 0, W, H);
-      for (const b of bands) {
-        ctx.beginPath();
-        for (let x = 0; x <= W; x += 8) {
-          const p = x / W;
-          const y = H * b.y + Math.sin(p * 6.28 * b.len + t / b.sp) * b.amp + Math.sin(p * 15.7 * b.len - (t / b.sp) * 1.7) * b.amp * 0.3;
-          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        }
-        const c = (b.tint ? A : S).join(',');
-        if (style === 'outline') {
-          ctx.strokeStyle = `rgba(${c},${b.a * 5})`;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        } else {
-          ctx.lineTo(W, H);
-          ctx.lineTo(0, H);
-          ctx.closePath();
-          const g = ctx.createLinearGradient(0, H * b.y - b.amp, 0, H);
-          g.addColorStop(0, `rgba(${c},${b.a})`);
-          g.addColorStop(1, `rgba(${c},0)`);
-          ctx.fillStyle = g;
-          ctx.fill();
-        }
+      // Every mood drifts slowly enough that ~30fps reads the same and halves
+      // the cost; only the quick swell after a completed set gets every frame.
+      if (swell < 0.05 && now - prev < 32) return;
+      const dt = Math.min(0.05, (now - prev) / 1000); // clamp: no jump after a backgrounded tab
+      prev = now;
+      if (now - lastTok > 500) { readTokens(); lastTok = now; }
+
+      const { mood, base } = deriveMood(moodState, Date.now());
+      const [mc, mp0, spd] = MOODS[mood];
+      const mp = Math.round(mp0 * (light ? 0.7 : 1));
+      const calm = mood === 'idle' || mood === 'work';
+      const tc = calm ? tok.t3 : colour(mc), tk = calm ? 0.35 : Math.min(1, mp / 45), tf = calm ? 0 : 1;
+
+      const e = 1 - Math.pow(0.04, dt); // ~1s to settle, framerate-independent
+      c = c.map((v, i) => v + (tc[i] - v) * e);
+      k += (tk - k) * e; f += (tf - f) * e; sp += (1 / spd - sp) * e; y += (base - y) * e * 0.6;
+      if (moodState.pulse !== lastPulse) { lastPulse = moodState.pulse; swell = 1; }
+      swell *= Math.pow(0.25, dt);
+      if (!reduceMotion) t += dt * (0.35 + sp * 0.9) * (1 + swell * 1.5); // reduced motion: colour still fades, waves hold still
+
+      const [r, gg, b] = c.map(Math.round), col = (a) => `rgba(${r},${gg},${b},${a})`;
+      g.clearRect(0, 0, W, H);
+      if (k * f > 0.002) { // the full-screen tint is the costliest fill — skip it while invisible
+        const bg = g.createLinearGradient(0, 0, W, H);
+        bg.addColorStop(0, col(0.03 * k * f)); bg.addColorStop(0.55, col(0.18 * k * f)); bg.addColorStop(1, col(0.07 * k * f));
+        g.fillStyle = bg; g.fillRect(0, 0, W, H);
       }
-      for (const p of parts) {
-        p.y -= p.s * (reduceMotion ? 0.0008 : 0.004) * k;
-        if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
-        ctx.beginPath();
-        ctx.arc(p.x * W, p.y * H, p.r, 0, 6.28);
-        ctx.fillStyle = `rgba(${A.join(',')},0.32)`;
-        ctx.fill();
+
+      g.globalCompositeOperation = light ? 'source-over' : 'lighter';
+      const amp = 38 + swell * 40, cy = H * y;
+      const curve = (o, a, fr, ph) => (x) => cy + o + Math.sin(x * fr + t * ph) * a + Math.sin(x * fr * 2.3 - t * ph * 0.7 + o * 0.02) * a * 0.35;
+      const tint = light ? [r * 0.6, gg * 0.6, b * 0.6].map(Math.round) : [Math.min(255, r + 90), Math.min(255, gg + 90), Math.min(255, b + 90)];
+      const tcol = (a) => `rgba(${tint[0]},${tint[1]},${tint[2]},${a})`;
+      // Curve frequencies were tuned on a 390px-wide phone; keep the same number
+      // of crests on wider screens rather than squeezing in more.
+      const sx = 390 / Math.max(W, 1);
+
+      const top = curve(0, amp, 0.0075 * sx, 0.9), bot = curve(40, amp * 0.9, 0.009 * sx, 0.72);
+      g.beginPath();
+      for (let x = 0; x <= W; x += 6) g.lineTo(x, top(x));
+      for (let x = W; x >= 0; x -= 6) g.lineTo(x, bot(x));
+      g.closePath();
+      if (f > 0.01) {
+        const lg = g.createLinearGradient(0, cy - amp, 0, cy + amp + 120);
+        lg.addColorStop(0, tcol(0)); lg.addColorStop(0.4, tcol((0.08 * k + 0.02) * f)); lg.addColorStop(1, tcol(0));
+        g.fillStyle = lg; g.fill();
       }
+
+      g.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const fn = curve(i * 7 - 18, amp * (0.6 + i / 14), (0.0068 + i * 0.0002) * sx, 0.8 + i * 0.03);
+        g.beginPath();
+        for (let x = -4; x <= W + 4; x += 5) g.lineTo(x, fn(x));
+        g.strokeStyle = tcol((0.06 + 0.14 * k) * (1 - Math.abs(i - 2.5) / 4.5));
+        g.stroke();
+      }
+
+      for (const d of dots) {
+        if (!reduceMotion) d.x = (d.x + d.v * dt * (1 + sp)) % 1;
+        const x = d.x * W, yy = cy + (d.y - 0.5) * 260 + Math.sin(t + d.ph) * 18;
+        const a = (0.15 + 0.3 * k) * (0.5 + 0.5 * Math.sin(t * 2 + d.ph));
+        g.beginPath(); g.arc(x, yy, d.r + swell * 1.5, 0, 6.29); g.fillStyle = tcol(a); g.fill();
+      }
+      g.globalCompositeOperation = 'source-over';
     };
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); removeEventListener('resize', size); };

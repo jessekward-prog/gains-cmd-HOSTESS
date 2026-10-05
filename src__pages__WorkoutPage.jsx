@@ -13,6 +13,7 @@ import CardioCard from '../components/CardioCard';
 import FocusWorkout from '../components/FocusWorkout';
 import { Countdown, FinishFlow } from '../components/FocusTransitions';
 import { summarize, workoutLayout as readLayout } from '../lib/focus';
+import { moodState } from '../lib/mood';
 
 import Button from '../components/Button';
 import Modal from '../components/Modal';
@@ -174,6 +175,7 @@ export default function WorkoutPage({ onNavigate }) {
   useEffect(() => { if (!activeWorkout) stopGlobalTimer(); }, [activeWorkout, stopGlobalTimer]);
 
   const handleSetComplete = useCallback((exerciseIndex, setIndex, restSeconds) => {
+    moodState.pulse = Date.now();
     const exercises = activeWorkout?.exercises || [];
     const members = supersetMembersOf(exercises, exerciseIndex);
 

@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 
 const dir = join(mkdtempSync(join(tmpdir(), 'focus-')), 'lib');
 mkdirSync(dir);
-for (const f of ['focus', 'supersets', 'history']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
+for (const f of ['focus', 'supersets', 'history', 'mood']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
 const F = await import(join(dir, 'focus.js'));
 
 const session = (date, name, sets) => ({
@@ -78,3 +78,27 @@ console.log('focus checks passed');
   assert.equal(s.ex[1].sets, '1/2 sets');
 }
 console.log('summary checks passed');
+
+// Live background mood: priority order from LIVE_BACKGROUND.md, first match wins.
+{
+  const M = await import(join(dir, 'mood.js'));
+  const now = 100000;
+  const s = (o) => ({ preview: null, prUntil: 0, finish: null, pulse: 0, countdown: false, rest: null, timer: null, inWorkout: false, progress: 0, ...o });
+  const mood = (o) => M.deriveMood(s(o), now).mood;
+  assert.equal(mood({}), 'idle');
+  assert.equal(mood({ inWorkout: true }), 'work');
+  assert.equal(mood({ inWorkout: true, rest: { end: now + 30000, total: 60000 } }), 'rest');
+  assert.equal(mood({ inWorkout: true, rest: { end: now - 1, total: 60000 } }), 'work'); // expired rest
+  assert.equal(mood({ inWorkout: true, rest: { end: now + 30000, total: 60000 }, pulse: now - 500 }), 'done'); // set just done beats rest
+  assert.equal(mood({ inWorkout: true, pulse: now - 1400 }), 'work'); // pulse window is 1.3s
+  assert.equal(mood({ finish: 'done', prUntil: now + 100 }), 'pr'); // PR beats done
+  assert.equal(mood({ countdown: true, inWorkout: true }), 'go');
+  assert.equal(mood({ inWorkout: true, timer: { kind: 'bfr' } }), 'bfr');
+  assert.equal(mood({ inWorkout: true, timer: { kind: 'interval', phase: 'rest' } }), 'intR');
+  assert.equal(mood({ finish: 'pr', preview: { m: 'rest', t: now - 1000 } }), 'rest'); // preview wins for 2.8s
+  assert.equal(mood({ preview: { m: 'rest', t: now - 3000 } }), 'idle');
+  // The band sinks as rest drains: base 0.42 at the start → 0.72 at the end.
+  const b = (left) => M.deriveMood(s({ rest: { end: now + left, total: 60000 } }), now).base;
+  assert.ok(Math.abs(b(60000) - 0.42) < 1e-9 && Math.abs(b(1) - 0.72) < 0.001);
+  console.log('mood checks passed');
+}

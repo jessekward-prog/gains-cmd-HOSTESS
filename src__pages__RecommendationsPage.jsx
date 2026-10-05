@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import ThinkingDots from '../components/ThinkingDots';
 import * as api from '../lib/api';
 import { isMarker, localDate as toLocalDate } from '../lib/history';
+import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
 import { useHaptics } from '../hooks/useHaptics';
@@ -238,6 +239,7 @@ export default function RecommendationsPage() {
           : `${rec.exercise} → ${newWeight}kg · ${updatedCount} programs updated`;
       haptics.success();
       setLevelUp({ text: weightBody, at: Date.now() });
+      moodState.prUntil = Date.now() + 1800;
     } catch (e) {
       showToast('Error: ' + e.message, 'error');
     }

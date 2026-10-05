@@ -16,6 +16,7 @@ import {
   nextOpenBlock, focusIndex, setLabel, liftStats, isPR,
 } from '../lib/focus';
 import { nextMemberForRound, roundOfSet } from '../lib/supersets';
+import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
@@ -115,6 +116,11 @@ function BFRBlock({ set, onStart, onStop, onDone }) {
   const e = running ? (Date.now() - set.bfrStartMs) / 1000 : 0;
   const fired = useRef(false);
   useEffect(() => {
+    if (!running) return;
+    moodState.timer = { kind: 'bfr' };
+    return () => { moodState.timer = null; };
+  }, [running]);
+  useEffect(() => {
     if (!running) { fired.current = false; return; }
     if (e >= secs && !fired.current) { fired.current = true; onDone(); }
   });
@@ -158,6 +164,11 @@ function IntervalBlock({ set, onStamp, onDone }) {
     if (phase === 'rest') { playBeep('rest'); vibrate([100]); }
     if (phase === 'done' && !set.completed) { playBeep('rest'); vibrate([200, 100, 200]); onDone(); }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (phase !== 'work' && phase !== 'rest') return;
+    moodState.timer = { kind: 'interval', phase };
+    return () => { moodState.timer = null; };
+  }, [phase]);
 
   const elapsed = total - totalRemaining;
   const round = Math.min(rounds, Math.floor(elapsed / cycle) + 1);
@@ -378,12 +389,14 @@ export default function FocusWorkout({
     const shown = shownReps(x, s, stats[x.name]);
     const reps = shown === 'failure' ? s.reps : shown;
     patchSet(xi, si, { completed: true, reps: reps ?? '' });
+    moodState.pulse = Date.now();
     haptics.tap();
     setFset(null);
 
     if (s.type !== 'drop' && reps !== 'failure' && isPR(stats[x.name], x.name, s.weight, reps)) {
       haptics.success();
       setToast({ text: `${x.name} ${fmtW(s.weight)} × ${reps}`, at: Date.now() });
+      moodState.prUntil = Date.now() + 2400;
     }
 
     const doneNow = (i, j) => (i === xi && j === si) || exercises[i].sets[j].completed;

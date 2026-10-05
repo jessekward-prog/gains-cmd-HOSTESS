@@ -14,6 +14,7 @@ import ExerciseNameOptions from './components/ExerciseNameOptions';
 import AppearanceSync from './components/AppearanceSync';
 import PinGate from './components/PinGate';
 import { workoutLayout } from './lib/focus';
+import { moodState } from './lib/mood';
 import ProgramsPage from './pages/ProgramsPage';
 import WorkoutPage from './pages/WorkoutPage';
 import HistoryPage from './pages/HistoryPage';
@@ -26,6 +27,13 @@ function AppShell() {
   const { activeWorkout } = useWorkout();
   const { tab, navigate } = useNavigation();
   const [navExpanded, setNavExpanded] = useState(false);
+
+  // The live background brightens as the workout fills up.
+  useEffect(() => {
+    const sets = (activeWorkout?.exercises || []).flatMap((e) => e.sets || []);
+    moodState.inWorkout = !!activeWorkout;
+    moodState.progress = sets.length ? sets.filter((s) => s.completed).length / sets.length : 0;
+  }, [activeWorkout]);
 
   // Jump to the workout tab when a workout *becomes* active (started, or
   // found on load) — not every time Programs is opened mid-workout, which made

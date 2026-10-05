@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import { moodState } from '../lib/mood';
 
 const TimerContext = createContext(null);
 
@@ -24,6 +25,7 @@ export function TimerProvider({ children }) {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
     endsAtRef.current = 0;
+    moodState.rest = null;
     localStorage.removeItem(STORAGE_KEY);
     setRemaining(0);
     setIsRunning(false);
@@ -40,6 +42,7 @@ export function TimerProvider({ children }) {
     if (intervalRef.current) clearInterval(intervalRef.current);
     onCompleteRef.current = onComplete || null;
     endsAtRef.current = Date.now() + seconds * 1000;
+    moodState.rest = { end: endsAtRef.current, total: seconds * 1000 };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: seconds }));
     setTotal(seconds);
     setRemaining(seconds);
@@ -53,6 +56,7 @@ export function TimerProvider({ children }) {
       intervalRef.current = null;
     }
     endsAtRef.current = 0;
+    moodState.rest = null;
     localStorage.removeItem(STORAGE_KEY);
     setIsRunning(false);
     setRemaining(0);
@@ -64,6 +68,7 @@ export function TimerProvider({ children }) {
     endsAtRef.current += seconds * 1000;
     setTotal((t) => {
       const next = t + seconds;
+      moodState.rest = { end: endsAtRef.current, total: next * 1000 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: next }));
       return next;
     });
@@ -81,6 +86,7 @@ export function TimerProvider({ children }) {
       return;
     }
     endsAtRef.current = saved.endsAt;
+    moodState.rest = { end: saved.endsAt, total: saved.total * 1000 };
     setTotal(saved.total);
     setRemaining(Math.ceil((saved.endsAt - Date.now()) / 1000));
     setIsRunning(true);

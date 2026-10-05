@@ -4,6 +4,7 @@ import useBackHandler from '../hooks/useBackHandler';
 import { useHaptics } from '../hooks/useHaptics';
 import * as api from '../lib/api';
 import { TAGS, blockName, buildBlocks, fmtW } from '../lib/focus';
+import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -26,6 +27,7 @@ export function Countdown({ workout, onDone }) {
   }, []);
   const skip = useCallback(() => done.current(), []);
   useBackHandler(true, skip);
+  useEffect(() => { moodState.countdown = true; return () => { moodState.countdown = false; }; }, []);
   const blocks = buildBlocks(workout.exercises);
   return portal(
     <div onClick={skip} className={`${LAYER} flex flex-col cursor-pointer fx-fade`}>
@@ -127,6 +129,11 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress }) {
     const auto = setTimeout(() => setPhase('summary'), 3200);
     return () => { cancelAnimationFrame(raf); clearTimeout(auto); };
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    moodState.finish = failed ? null : phase === 'pr' ? 'pr' : 'done';
+  }, [phase, failed]);
+  useEffect(() => () => { moodState.finish = null; }, []);
 
   const finish = useCallback(() => onDone(), [onDone]);
   useBackHandler(phase === 'summary', finish);
