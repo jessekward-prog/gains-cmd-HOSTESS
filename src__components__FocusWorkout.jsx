@@ -9,6 +9,7 @@ import RestPickerModal from './RestPickerModal';
 import SpecialSetModal from './SpecialSetModal';
 import SubstituteModal from './SubstituteModal';
 import ExerciseNotes from './ExerciseNotes';
+import TypewriterName from './TypewriterName';
 import { computePhase, playBeep, vibrate, COUNT_IN_SEC } from './IntervalTimerBar';
 import {
   TAGS, num, fmtW, restLabel, mmss, buildBlocks, blockDone, blockProgress, blockName,
@@ -545,7 +546,7 @@ export default function FocusWorkout({
             </div>
             <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
               {ex.substituted && <span className="text-text-tertiary line-through mr-2" style={{ fontSize: '0.6em' }}>{ex.substituted.original}</span>}
-              {ex.name}
+              <TypewriterName text={ex.name} />
             </div>
             <div className="mt-1.5 g-meta">{lastLine}</div>
 
@@ -718,7 +719,7 @@ export default function FocusWorkout({
 
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={onFinish} className="flex-1 h-[50px] rounded-[18px] bg-bg-1 text-success font-bold text-[15px]">Finish workout</button>
-          <button onClick={onCancel} aria-label="Cancel workout" className="w-[50px] h-[50px] rounded-[18px] bg-bg-1 text-text-tertiary" style={{ font: `400 15px ${MONO}` }}>✕</button>
+          <button onClick={onCancel} aria-label="Cancel workout" className="w-[50px] h-[50px] rounded-[18px] text-error" style={{ font: `600 15px ${MONO}`, background: 'color-mix(in srgb, var(--color-error) 14%, var(--color-bg-1))' }}>✕</button>
         </div>
       </div>
 

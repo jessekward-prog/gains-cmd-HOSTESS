@@ -9,11 +9,7 @@ export default function TypewriterName({ text, active = true, className = '' }) 
   const timeoutRef = useRef(null);
 
   useEffect(() => {
-    setDisplayText(text);
-  }, [text]);
-
-  useEffect(() => {
-    if (!active) return;
+    if (!active) { setDisplayText(text); return; }
     let cancelled = false;
 
     function scheduleRetype() {
@@ -36,7 +32,15 @@ export default function TypewriterName({ text, active = true, className = '' }) 
       }, delay);
     }
 
-    scheduleRetype();
+    // Type the name in whenever it changes, then retype it every so often.
+    let i = 0;
+    setDisplayText('');
+    (function typeIn() {
+      if (cancelled) return;
+      setDisplayText(text.slice(0, ++i));
+      if (i < text.length) timeoutRef.current = setTimeout(typeIn, CHAR_DELAY);
+      else scheduleRetype();
+    })();
     return () => {
       cancelled = true;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);

@@ -917,6 +917,10 @@ html.text-size-large .g-root { zoom: 1.06; }
 @keyframes fx-toast { 0% { opacity: 0; transform: translateY(-12px) scale(.9); } 15% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
 
 .fx-in { animation: fx-in .35s cubic-bezier(.2,1.3,.4,1) both; }
+/* Page entrances move but never fade: if a browser stalls the animation, a
+   page left at opacity 0 would read as a black screen. */
+@keyframes fx-rise { from { transform: translateY(14px); } to { transform: none; } }
+.fx-rise { animation: fx-rise .35s cubic-bezier(.2,1.3,.4,1) both; }
 .fx-pop { animation: fx-pop .35s cubic-bezier(.2,1.6,.4,1) both; }
 .fx-up { animation: fx-up .32s cubic-bezier(.32,.72,0,1) both; }
 .fx-fade { animation: fx-fade .25s both; }

@@ -995,7 +995,7 @@ export default function ProgramsPage({ onNavigate }) {
       exit="exit"
       className="pb-4"
     >
-      <div className="g-root px-5 pt-2.5 pb-7 fx-in">
+      <div className="g-root px-5 pt-2.5 pb-7 fx-rise">
         <div className="flex justify-between items-center">
           <span className="text-accent" style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em' }}>GAINS_CMD</span>
           <span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{today}</span>

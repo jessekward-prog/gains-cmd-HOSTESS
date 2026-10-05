@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkoutProvider, useWorkout } from './context/WorkoutContext';
@@ -37,6 +37,11 @@ function AppShell() {
 
   const handleNavExpanded = useCallback((v) => setNavExpanded(v), []);
 
+  // Every tab shares this one scroll area — start each tab at the top instead
+  // of wherever the last page was scrolled to.
+  const scrollRef = useRef(null);
+  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
+
   return (
     <div className="min-h-dvh bg-bg-0">
       <div
@@ -48,7 +53,7 @@ function AppShell() {
       >
         <AppHeader />
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-2xl mx-auto h-full">
           <AnimatePresence mode="wait">
             {tab === 'programs' && <ProgramsPage key="programs" onNavigate={navigate} />}

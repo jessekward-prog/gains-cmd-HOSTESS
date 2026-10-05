@@ -21,7 +21,10 @@
 
   <script>
     try {
-      if (localStorage.getItem('gains-cmd-banner-enabled') !== 'false') {
+      // Once per app session: the app reloads itself (theme change, appearance
+      // sync after unlocking) and those reloads shouldn't replay the splash.
+      if (localStorage.getItem('gains-cmd-banner-enabled') !== 'false' && !sessionStorage.getItem('gains-splash-shown')) {
+        sessionStorage.setItem('gains-splash-shown', '1');
         var splash = document.createElement('iframe');
         splash.id = 'boot-splash';
         splash.title = 'Boot splash';

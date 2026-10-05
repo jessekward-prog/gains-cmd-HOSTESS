@@ -284,7 +284,7 @@ export default function RecommendationsPage() {
   const counts = { ready: (data?.recommendations || []).length, near: (data?.nearProgression || []).length, early: (data?.earlyProgress || []).length };
 
   return (
-    <div className="g-root px-4 pt-2.5 pb-7 fx-in">
+    <div className="g-root px-4 pt-2.5 pb-7 fx-rise">
       <h1 className="mx-1 mt-3 mb-0.5 g-h1">Progress</h1>
       <p className="mx-1 text-[13px] text-text-secondary" style={{ textWrap: 'pretty' }}>Counts your sessions in rep range at each weight and tells you when to go up.</p>
 

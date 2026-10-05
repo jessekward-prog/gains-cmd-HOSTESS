@@ -48,7 +48,7 @@ export default function SettingsPage() {
   const pickTheme = (t) => { setTheme(t.id); showHeaderMessage(t.name + ' applied'); };
 
   return (
-    <div className="g-root px-4 pt-2.5 pb-7 fx-in">
+    <div className="g-root px-4 pt-2.5 pb-7 fx-rise">
       <h1 className="mx-1 mt-3 mb-0.5 g-h1">Settings</h1>
 
       <div className="mt-4 flex flex-col gap-2">

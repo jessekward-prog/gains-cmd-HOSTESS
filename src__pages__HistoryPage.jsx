@@ -83,7 +83,7 @@ export default function HistoryPage() {
   const sessionCount = selectedWorkouts.filter((w) => !isMarker(w)).length;
 
   return (
-    <div className="g-root px-4 pt-2.5 pb-7 fx-in">
+    <div className="g-root px-4 pt-2.5 pb-7 fx-rise">
       <h1 className="mx-1 mt-3 mb-0.5 g-h1">History</h1>
       <p className="mx-1 text-text-tertiary" style={{ font: `400 12px ${MONO}` }}>{totalWorkouts} workout{totalWorkouts !== 1 ? 's' : ''} logged</p>
 

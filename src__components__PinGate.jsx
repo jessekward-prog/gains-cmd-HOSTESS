@@ -66,7 +66,7 @@ export default function PinGate({ children }) {
   const title = state === 'setup' ? 'Set a PIN' : state === 'confirm' ? 'Confirm your PIN' : 'Enter PIN';
   const sub = state === 'unlock' ? 'This Gains_CMD is locked.' : state === 'setup' ? 'Anyone opening this app will need it. 4–8 digits.' : 'Type it once more.';
   return (
-    <div className="g-root min-h-dvh bg-bg-0 flex flex-col items-center justify-center px-8 fx-in">
+    <div className="g-root min-h-dvh bg-bg-0 flex flex-col items-center justify-center px-8 fx-rise">
       <div className="text-accent" style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em' }}>GAINS_CMD</div>
       <h1 className="mt-3 text-center" style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{title}</h1>
       <p className="mt-2 text-sm text-text-secondary text-center">{sub}</p>
