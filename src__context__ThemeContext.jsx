@@ -21,6 +21,8 @@ export const THEMES = [
     preview: { bg: '#0a0800', surface: '#1a1600', accent: '#ffaa00', text: '#ffcc00' } },
   { id: 'phosphor', name: 'Phosphor', desc: 'Burnt orange CRT — macro-cmd style', mode: 'dark',
     preview: { bg: '#0d0a06', surface: '#1a130a', accent: '#ff9a3c', text: '#ff9a3c' } },
+  { id: 'bit32', name: '32-Bit Night', desc: 'PS1-era menus: bevelled windows, pixel type, dithered dusk', mode: 'dark',
+    preview: { bg: '#05040c', surface: '#1a1740', accent: '#e8338f', text: '#eceaff' } },
   { id: 'void', name: 'Void Purple', desc: 'Deep space purple with cyan accents', mode: 'dark',
     preview: { bg: '#0a0a12', surface: '#141420', accent: '#a855f7', text: '#e0daf0' } },
   { id: 'paper', name: 'Paper Lite', desc: 'Warm parchment, serif headers, burnt-orange accent', mode: 'light',
@@ -189,7 +191,9 @@ export function ThemeProvider({ children }) {
         document.head.appendChild(link);
       }
     }
-    document.documentElement.style.setProperty('--font-display', font.display);
+    // Default leaves the theme's own font in charge (Manrope unless the theme sets one).
+    if (font.id === 'default') document.documentElement.style.removeProperty('--font-display');
+    else document.documentElement.style.setProperty('--font-display', font.display);
     try { localStorage.setItem('gains-cmd-font', fontId); } catch {}
   }, [fontId]);
 
