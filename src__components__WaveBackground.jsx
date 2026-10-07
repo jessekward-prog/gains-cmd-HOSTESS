@@ -59,10 +59,7 @@ export default function WaveBackground() {
 
     let W = 0, H = 0;
     const size = () => {
-      // 64-Bit renders the waves at half resolution, scaled up pixelated.
-      // Read from storage: this effect runs before ThemeContext puts the class on <html>.
-      let pixel = false; try { pixel = localStorage.getItem('gains-cmd-theme') === 'bit64'; } catch {}
-      const dpr = pixel ? 1 / 2 : Math.min(2, window.devicePixelRatio || 1);
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
       W = innerWidth; H = innerHeight;
       cv.width = W * dpr; cv.height = H * dpr;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
