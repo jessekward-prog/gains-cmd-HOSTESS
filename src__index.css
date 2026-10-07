@@ -710,126 +710,104 @@ html.theme-vanilla {
 }
 
 /* ============================================
-   THEME 25: 32-Bit Night (dark) — mood-cmd's 16-bit look pushed to the PS1
-   era: bevelled gradient menu windows, pixel type, pressed-key buttons, a
-   blinking selection cursor, stepped motion and a dithered dusk floor.
+   THEME 25: 64-Bit (dark) — Default's black + red, dressed as a PS2/Dreamcast
+   era menu: angular game-UI type, glossy bevelled windows, gel buttons with a
+   specular band, a glowing selection cursor, fine interlace lines and the
+   live waves at half resolution.
    Most of the app styles itself with inline styles, so the structural rules
    below match the shared patterns (window surfaces, accent buttons, selected
    tiles) rather than editing every component.
    ============================================ */
-html.theme-bit32 {
-  --color-bg-0: #05040c;
-  --color-bg-1: #110f2a;
-  --color-bg-2: #1a1740;
-  --color-bg-3: #241f52;
-  --color-bg-4: #2c275f;
-  --color-surface: #141130;
-  --color-surface-hover: #1c1840;
-  --color-surface-active: #241f52;
-  --color-border: #34306a;
-  --color-border-strong: #4c4794;
-  --color-text-primary: #eceaff;
-  --color-text-secondary: #aba8d8;
-  --color-text-tertiary: #7a76a8;
-  --color-text-muted: #524e80;
-  --color-accent: #e8338f;
-  --color-accent-hover: #ff5aa8;
-  --color-accent-muted: rgba(232, 51, 143, 0.16);
-  --color-accent-glow: rgba(232, 51, 143, 0.4);
-  --color-on-accent: #ffffff;
-  --color-success: #38d058;
-  --color-success-muted: rgba(56, 208, 88, 0.15);
-  --color-warning: #f8d030;
-  --color-error: #f04848;
-  --color-pr: #f8d030;
-  --color-pr-glow: rgba(248, 208, 48, 0.3);
-  --g-pr-ink: #f8d030;
-  --g-near: #f8d030;
-  --g-ss: #3878f8;
-  --g-bfr: #b070f8;
-  --g-int: #f89038;
-  --font-display: 'Pixelify Sans', ui-monospace, monospace;
-  --font-mono: 'Silkscreen', ui-monospace, monospace;
-  --b32-shade: #6e0c40;      /* the CTA's pressed-down edge, also the heading drop */
-  --b32-hi: rgba(206, 200, 255, 0.22);
-  --b32-lo: rgba(0, 0, 0, 0.65);
-  --b32-window: linear-gradient(180deg, #1d1a4a 0%, #100e28 100%);
-  --g-sheet-shadow: 0 0 0 2px #000, 6px 6px 0 rgba(0,0,0,.6);
-  font-variant-ligatures: none; /* Pixelify's fi/fl ligatures render as one garbled glyph */
+html.theme-bit64 {
+  --color-bg-0: #050505;
+  --color-bg-1: #0e0e0e;
+  --color-bg-2: #171717;
+  --color-bg-3: #222222;
+  --color-bg-4: #2a2a2a;
+  --color-surface: #141414;
+  --color-surface-hover: #1c1c1c;
+  --color-surface-active: #242424;
+  --color-border: #2a2a2a;
+  --color-border-strong: #3a3a3a;
+  --color-accent: #ff2222;
+  --color-accent-hover: #ff4444;
+  --color-accent-muted: rgba(255, 34, 34, 0.15);
+  --color-accent-glow: rgba(255, 34, 34, 0.4);
+  --font-display: 'Chakra Petch', system-ui, sans-serif;
+  --font-mono: 'Share Tech Mono', ui-monospace, monospace;
+  --b64-hi: rgba(255, 255, 255, 0.09);
+  --b64-lo: rgba(0, 0, 0, 0.7);
+  --b64-window: linear-gradient(180deg, #1c1c1c 0%, #0d0d0d 100%);
+  --g-sheet-shadow: 0 0 0 1px #2a2a2a, 0 20px 50px rgba(0,0,0,.6);
 }
 
-/* Square-ish corners everywhere except true circles (dots, avatars). */
-html.theme-bit32 [class*="rounded"]:not(.rounded-full),
-html.theme-bit32 [style*="border-radius"]:not(.rounded-full) { border-radius: 2px !important; }
+/* Tight bevelled corners rather than soft pills; circles stay circles. */
+html.theme-bit64 [class*="rounded"]:not(.rounded-full),
+html.theme-bit64 [style*="border-radius"]:not(.rounded-full) { border-radius: 5px !important; }
 
-/* Pixel faces can't take the tight negative tracking the sans headings use. */
-html.theme-bit32 [style*="letter-spacing: -"], html.theme-bit32 .g-h1 { letter-spacing: 0 !important; }
-html.theme-bit32 h1, html.theme-bit32 .g-h1 { text-shadow: 3px 3px 0 var(--b32-shade); }
-html.theme-bit32 .g-label { color: var(--color-text-secondary); letter-spacing: .08em; }
+html.theme-bit64 [style*="letter-spacing: -"], html.theme-bit64 .g-h1 { letter-spacing: -0.01em !important; }
+html.theme-bit64 h1, html.theme-bit64 .g-h1 { text-shadow: 0 2px 0 #000, 0 0 18px rgba(255, 34, 34, 0.22); }
+html.theme-bit64 .g-label { letter-spacing: .16em; }
 
-/* Menu windows: gradient fill, light bevel top-left, dark bevel bottom-right. */
-html.theme-bit32 .bg-bg-1, html.theme-bit32 .bg-bg-2, html.theme-bit32 .bg-surface,
-html.theme-bit32 [style*="background: var(--color-bg-1)"],
-html.theme-bit32 [style*="background: var(--color-bg-2)"],
-html.theme-bit32 [style*="background: var(--color-surface)"] {
-  background: var(--b32-window) !important;
-  box-shadow: inset 2px 2px 0 var(--b32-hi), inset -2px -2px 0 var(--b32-lo);
+/* Menu windows: brushed gradient, 1px highlight on top, shadowed lower edge. */
+html.theme-bit64 .bg-bg-1, html.theme-bit64 .bg-bg-2, html.theme-bit64 .bg-surface,
+html.theme-bit64 [style*="background: var(--color-bg-1)"],
+html.theme-bit64 [style*="background: var(--color-bg-2)"],
+html.theme-bit64 [style*="background: var(--color-surface)"] {
+  background: var(--b64-window) !important;
+  box-shadow: inset 0 1px 0 var(--b64-hi), inset 0 0 0 1px rgba(255,255,255,.04), inset 0 -2px 0 var(--b64-lo), 0 2px 6px rgba(0,0,0,.5);
 }
 /* A window inside a window reads as a recessed slot instead. */
-html.theme-bit32 :is(.bg-bg-1, .bg-bg-2) :is(.bg-bg-2, [style*="background: var(--color-bg-2)"]) {
-  background: #0b0a1e !important;
-  box-shadow: inset 2px 2px 0 var(--b32-lo), inset -2px -2px 0 var(--b32-hi);
+html.theme-bit64 :is(.bg-bg-1, .bg-bg-2) :is(.bg-bg-2, [style*="background: var(--color-bg-2)"]) {
+  background: linear-gradient(180deg, #070707 0%, #111111 100%) !important;
+  box-shadow: inset 0 2px 4px var(--b64-lo), inset 0 -1px 0 var(--b64-hi);
 }
 
-/* Primary buttons: a raised key with a hard drop that presses flat. */
-html.theme-bit32 button.bg-accent, html.theme-bit32 button[style*="background: var(--color-accent)"] {
-  background: linear-gradient(180deg, #f2479d 0%, #c81d74 100%) !important;
-  box-shadow: inset 0 3px 0 rgba(255,255,255,.3), inset 0 -3px 0 rgba(0,0,0,.25), 0 5px 0 var(--b32-shade);
-  margin-bottom: 5px;
-  text-shadow: 2px 2px 0 var(--b32-shade);
+/* Primary buttons: a glossy gel key — specular band on the top half, pressed edge below. */
+html.theme-bit64 button.bg-accent, html.theme-bit64 button[style*="background: var(--color-accent)"] {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.28) 0%, rgba(255,255,255,.08) 48%, transparent 52%),
+    linear-gradient(180deg, #ff3b3b 0%, #c20f0f 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 0 rgba(0,0,0,.25), 0 3px 0 #6e0606, 0 6px 16px rgba(255,34,34,.25);
+  margin-bottom: 3px;
+  text-shadow: 0 1px 1px rgba(0,0,0,.45);
 }
-html.theme-bit32 button.bg-accent:active, html.theme-bit32 button[style*="background: var(--color-accent)"]:active {
-  transform: translateY(5px);
-  box-shadow: inset 0 3px 0 rgba(255,255,255,.3), inset 0 -3px 0 rgba(0,0,0,.25), 0 0 0 var(--b32-shade);
+html.theme-bit64 button.bg-accent:active, html.theme-bit64 button[style*="background: var(--color-accent)"]:active {
+  transform: translateY(3px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 0 rgba(0,0,0,.25), 0 0 0 #6e0606, 0 2px 8px rgba(255,34,34,.2);
 }
 
-/* Selected tile: magenta frame plus a blinking menu cursor. */
-html.theme-bit32 [style*="inset 0 0 0 1.5px var(--color-accent)"] {
+/* Selected tile: red frame with a soft glow and a pulsing menu cursor. */
+html.theme-bit64 [style*="inset 0 0 0 1.5px var(--color-accent)"] {
   position: relative;
-  box-shadow: inset 0 0 0 2px var(--color-accent), inset 4px 4px 0 var(--b32-hi) !important;
+  box-shadow: inset 0 0 0 1.5px var(--color-accent), inset 0 0 18px rgba(255,34,34,.18), 0 0 14px rgba(255,34,34,.18) !important;
 }
-html.theme-bit32 [style*="inset 0 0 0 1.5px var(--color-accent)"]::after {
+html.theme-bit64 [style*="inset 0 0 0 1.5px var(--color-accent)"]::after {
   content: ''; position: absolute; top: 10px; right: 10px; width: 8px; height: 10px;
   background: var(--color-accent); clip-path: polygon(0 0, 100% 50%, 0 100%);
-  animation: cursor-blink 1s steps(1) infinite !important;
+  filter: drop-shadow(0 0 4px var(--color-accent));
+  animation: b64-pulse 1.2s ease-in-out infinite;
+}
+@keyframes b64-pulse { 0%, 100% { opacity: 1; transform: translateX(0); } 50% { opacity: .45; transform: translateX(-3px); } }
+
+html.theme-bit64 .fixed.bottom-0.bg-bg-0 { box-shadow: inset 0 1px 0 var(--color-border-strong); background: linear-gradient(180deg, #111 0%, #050505 100%); }
+
+html.theme-bit64 input, html.theme-bit64 textarea, html.theme-bit64 select {
+  box-shadow: inset 0 2px 4px var(--b64-lo), inset 0 -1px 0 var(--b64-hi);
 }
 
-/* Bottom bar sits on a bevelled ledge. */
-html.theme-bit32 nav, html.theme-bit32 .fixed.bottom-0.bg-bg-0 { box-shadow: inset 0 2px 0 var(--color-border), inset 0 4px 0 #000; }
-
-html.theme-bit32 input, html.theme-bit32 textarea, html.theme-bit32 select {
-  box-shadow: inset 2px 2px 0 var(--b32-lo), inset -2px -2px 0 var(--b32-hi);
-}
-
-/* Stepped motion: 32-bit hardware didn't tween smoothly. */
-html.theme-bit32 *, html.theme-bit32 *::before {
-  animation-timing-function: steps(5) !important;
-  transition-timing-function: steps(4) !important;
-}
-
-/* Dusk floor: violet glow rising from the bottom, broken up by a 2px dither. */
-html.theme-bit32 body::before {
+/* Floor glow: Default's red bleeding up faintly from the bottom edge. */
+html.theme-bit64 body::before {
   content: ''; position: fixed; inset: 0; z-index: -2; pointer-events: none;
-  background:
-    repeating-conic-gradient(rgba(5,4,12,.55) 0 25%, transparent 0 50%) 0 0 / 4px 4px,
-    linear-gradient(to top, #2a1650 0%, #140c30 28%, transparent 60%);
+  background: radial-gradient(120% 45% at 50% 100%, rgba(255,34,34,.10) 0%, rgba(255,34,34,.03) 45%, transparent 75%);
 }
-html.theme-bit32 body::after {
+/* Fine interlace lines, much lighter than the 16/32-bit scanlines. */
+html.theme-bit64 body::after {
   content: ''; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
-  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+  background: repeating-linear-gradient(to bottom, transparent 0 1px, rgba(0,0,0,.10) 1px 2px);
 }
-/* WaveBackground draws at 1/3 resolution in this theme; keep the pixels hard. */
-html.theme-bit32 canvas[aria-hidden] { image-rendering: pixelated; }
+/* WaveBackground draws at half resolution in this theme; keep the pixels hard. */
+html.theme-bit64 canvas[aria-hidden] { image-rendering: pixelated; }
 
 /* ============================================
    Coach markdown prose
