@@ -42,8 +42,10 @@ export function Countdown({ workout, onDone }) {
             <circle cx="130" cy="130" r="120" fill="none" stroke="var(--color-accent)" strokeWidth="8" strokeLinecap="round" strokeDasharray="754"
               style={{ animation: 'fx-ring .85s linear both' }} />
           </svg>
-          <div key={`n${n}`} className="relative g-tab"
-            style={{ fontWeight: 800, fontSize: n > 0 ? 170 : 110, lineHeight: 1, letterSpacing: '-0.05em', color: n === 0 ? 'var(--color-accent)' : 'var(--color-text-primary)', animation: 'fx-pop .45s cubic-bezier(.2,1.6,.4,1) both' }}>
+          {/* paddingRight hands back the trailing negative letter-spacing, which
+              would otherwise shift the glyphs right of the ring's centre. */}
+          <div key={`n${n}`} className="relative"
+            style={{ fontWeight: 800, fontSize: n > 0 ? 170 : 110, lineHeight: 1, letterSpacing: '-0.05em', paddingRight: '0.05em', color: n === 0 ? 'var(--color-accent)' : 'var(--color-text-primary)', animation: 'fx-pop .45s cubic-bezier(.2,1.6,.4,1) both' }}>
             {n > 0 ? n : 'GO'}
           </div>
         </div>
