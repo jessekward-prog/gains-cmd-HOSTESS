@@ -100,5 +100,12 @@ console.log('summary checks passed');
   // The band sinks as rest drains: base 0.42 at the start → 0.72 at the end.
   const b = (left) => M.deriveMood(s({ rest: { end: now + left, total: 60000 } }), now).base;
   assert.ok(Math.abs(b(60000) - 0.42) < 1e-9 && Math.abs(b(1) - 0.72) < 0.001);
+  // Cardio replaces the rest background and fills from the bottom: half the
+  // target elapsed → half full, capped at full once the target is passed.
+  const cardio = (sec, base = 0) => ({ inWorkout: true, rest: { end: now + 30000, total: 60000 }, cardio: { startMs: now - sec * 1000, baseSec: base, targetSec: 300 } });
+  assert.equal(mood(cardio(10)), 'cardio');
+  assert.equal(mood({ ...cardio(10), pulse: now - 500 }), 'done');
+  assert.ok(Math.abs(M.deriveMood(s(cardio(120, 30)), now).fill - 0.5) < 1e-9);
+  assert.equal(M.deriveMood(s(cardio(400)), now).fill, 1);
   console.log('mood checks passed');
 }

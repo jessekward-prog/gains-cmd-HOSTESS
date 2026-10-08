@@ -51,7 +51,7 @@ export default function WaveBackground() {
 
     // Eased state, chased toward the derived targets each frame.
     const first = deriveMood(moodState, Date.now());
-    let c = [...tok.t3], k = 0.35, f = 0, sp = 1 / MOODS[first.mood][2], y = first.base;
+    let c = [...tok.t3], k = 0.35, f = 0, fc = 0, sp = 1 / MOODS[first.mood][2], y = first.base;
     let swell = 0, t = Math.random() * 100, lastPulse = moodState.pulse;
     const dots = Array.from({ length: 12 }, () => ({
       x: Math.random(), y: 0.25 + Math.random() * 0.6, r: 0.6 + Math.random() * 1.6, v: 0.004 + Math.random() * 0.012, ph: Math.random() * 6.28,
@@ -85,7 +85,7 @@ export default function WaveBackground() {
 
       const e = 1 - Math.pow(0.04, dt); // ~1s to settle, framerate-independent
       c = c.map((v, i) => v + (tc[i] - v) * e);
-      k += (tk - k) * e; f += (tf - f) * e; sp += (1 / spd - sp) * e; y += (base - y) * e * 0.6;
+      k += (tk - k) * e; f += (tf - f) * e; fc += ((mood === 'cardio' ? 1 : 0) - fc) * e; sp += (1 / spd - sp) * e; y += (base - y) * e * 0.6;
       if (moodState.pulse !== lastPulse) { lastPulse = moodState.pulse; swell = 1; }
       swell *= Math.pow(0.25, dt);
       if (!reduceMotion) t += dt * (0.35 + sp * 0.9) * (1 + swell * 1.5); // reduced motion: colour still fades, waves hold still
@@ -108,6 +108,16 @@ export default function WaveBackground() {
       const sx = 390 / Math.max(W, 1);
 
       const top = curve(0, amp, 0.0075 * sx, 0.9), bot = curve(40, amp * 0.9, 0.009 * sx, 0.72);
+      if (fc > 0.01) { // cardio: everything below the wave is filled
+        g.globalCompositeOperation = 'source-over';
+        g.beginPath();
+        for (let x = 0; x <= W; x += 6) g.lineTo(x, top(x));
+        g.lineTo(W, H); g.lineTo(0, H); g.closePath();
+        const fg = g.createLinearGradient(0, cy - amp, 0, H);
+        fg.addColorStop(0, col((light ? 0.22 : 0.34) * fc)); fg.addColorStop(1, col((light ? 0.1 : 0.16) * fc));
+        g.fillStyle = fg; g.fill();
+        g.globalCompositeOperation = light ? 'source-over' : 'lighter';
+      }
       g.beginPath();
       for (let x = 0; x <= W; x += 6) g.lineTo(x, top(x));
       for (let x = W; x >= 0; x -= 6) g.lineTo(x, bot(x));

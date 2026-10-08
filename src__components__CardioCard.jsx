@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { PickerWheel } from './RestPickerModal';
 import Modal from './Modal';
 import TypewriterName from './TypewriterName';
+import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
 
@@ -146,6 +147,13 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); intervalRef.current = null; };
   }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live background: fill the screen from the bottom while the timer counts up.
+  useEffect(() => {
+    if (!running || !hasTarget) return;
+    moodState.cardio = { startMs: startTimestampRef.current, baseSec: baseElapsedRef.current, targetSec };
+    return () => { moodState.cardio = null; };
+  }, [running, hasTarget, targetSec]);
 
   // Interval phase transition — vibrate on push/ease transitions
   useEffect(() => {
