@@ -4,6 +4,10 @@ import { staggerItem } from '../lib/variants';
 import * as api from '../lib/api';
 import { useToast } from '../context/ToastContext';
 import { PickerWheel } from './RestPickerModal';
+import Modal from './Modal';
+import TypewriterName from './TypewriterName';
+
+const MONO = 'var(--font-mono)';
 
 function compressImage(file, maxWidth = 1200) {
   return new Promise((resolve) => {
@@ -40,7 +44,9 @@ function formatMMSS(totalSec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
-export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpdateExercise, onTimerActiveChange }) {
+// `focus` (Focus layout only): { label } — renders the Focus-style card; Classic
+// keeps the original look. All timer/photo logic below is shared.
+export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpdateExercise, onTimerActiveChange, focus }) {
   const { showToast } = useToast();
   const [expanded, setExpanded] = useState(true);
   const [running, setRunning] = useState(false);
@@ -262,7 +268,234 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
 
   const clearStats = useCallback(() => { onUpdateSet(exerciseIndex, 0, { ...set, cardioStats: null }); }, [set, exerciseIndex, onUpdateSet]);
 
+  const chipOn = focus ? 'bg-accent text-white' : 'bg-orange-400 text-white';
+  const settingsBody = (
+                  <div className="p-3 flex flex-col gap-3">
+                    {/* Name edit */}
+                    <div>
+                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Exercise Name</div>
+                      {editingName ? (
+                        <div className="flex gap-2">
+                          <input autoFocus type="text" value={nameValue} onChange={e => setNameValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setNameValue(exercise.name); setEditingName(false); } }}
+                            className="flex-1 bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm font-display font-semibold text-text-primary outline-none focus:border-orange-400/50" />
+                          <motion.button whileTap={{ scale: 0.9 }} onClick={handleSaveName} className={`px-3 py-2 ${chipOn} text-xs font-mono rounded-lg`}>Save</motion.button>
+                          <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setNameValue(exercise.name); setEditingName(false); }} className="px-2 py-2 text-text-muted text-xs font-mono">✕</motion.button>
+                        </div>
+                      ) : (
+                        <motion.button whileTap={{ scale: 0.98 }} onClick={() => setEditingName(true)}
+                          className="w-full text-left bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm font-display font-semibold text-text-primary hover:border-orange-400/30 transition-colors">
+                          {exercise.name} <span className="text-[10px] text-text-muted ml-2">tap to edit</span>
+                        </motion.button>
+                      )}
+                    </div>
+
+                    {/* Timer duration */}
+                    <div>
+                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Timer Duration</div>
+                      <PickerWheel
+                        items={Array.from({ length: 120 }, (_, i) => i + 1)}
+                        value={Math.max(1, Math.round((exercise.targetDurationSec || 60) / 60))}
+                        onChange={(m) => handleSetDuration(m)}
+                      />
+                      <div className="text-center text-xs font-mono text-text-tertiary mt-1.5">
+                        {Math.round(targetSec / 60)} min target
+                      </div>
+                    </div>
+
+                    {/* Count-in */}
+                    <div>
+                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Count-In</div>
+                      <div className="flex gap-1.5">
+                        {[0, 5, 10].map(sec => (
+                          <motion.button key={sec} whileTap={{ scale: 0.9 }} onClick={() => handleSetCountIn(sec)}
+                            className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${countInSec === sec ? chipOn : 'bg-bg-3 border border-border text-text-secondary'}`}>
+                            {sec === 0 ? 'Off' : `${sec}s`}
+                          </motion.button>
+                        ))}
+                      </div>
+                      <div className="text-[9px] text-text-muted mt-1.5 font-mono leading-relaxed">Countdown before timer starts — gives the treadmill time to reach speed</div>
+                    </div>
+
+                    {/* Intervals */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider">Intervals</div>
+                        <motion.button whileTap={{ scale: 0.9 }}
+                          onClick={() => handleSetIntervals(intervals ? null : { restSec: 45, workSec: 15, finalPushSec: 60 })}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
+                          {intervals ? 'On' : 'Off'}
+                        </motion.button>
+                      </div>
+                      {intervals && (
+                        <div className="flex flex-col gap-2.5 mt-2">
+                          <div>
+                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Easy phase</div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[15, 20, 30, 45, 60, 90].map(s => (
+                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, restSec: s })}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.restSec === s ? chipOn : 'bg-bg-3 border border-border text-text-secondary'}`}>
+                                  {s}s
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Push phase</div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[5, 10, 15, 20, 30].map(s => (
+                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, workSec: s })}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.workSec === s ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
+                                  {s}s
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Final sprint</div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[0, 30, 45, 60, 90, 120].map(s => (
+                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, finalPushSec: s })}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.finalPushSec === s ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
+                                  {s === 0 ? 'Off' : `${s}s`}
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-[9px] text-text-muted font-mono leading-relaxed">
+                            Push {intervals.workSec}s / ease {intervals.restSec}s{intervals.finalPushSec > 0 ? ` · final ${intervals.finalPushSec}s sprint` : ''}
+                          </div>
+                        </div>
+                      )}
+                      {!intervals && (
+                        <div className="text-[9px] text-text-muted font-mono leading-relaxed">Alternate easy and push phases — the timer changes colour when it's time to work harder</div>
+                      )}
+                    </div>
+                  </div>
+  );
+
   const borderClass = completed ? 'border-success/40 bg-success-muted' : isPushPhase ? 'border-red-500/70 bg-red-500/5' : isActive ? 'border-orange-400/50 bg-orange-400/5' : 'border-orange-400/20 bg-bg-2';
+
+  const fileInputs = (
+    <>
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageCapture} />
+      <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageCapture} />
+    </>
+  );
+
+  if (focus) {
+    // Same ring as the rest timer (60 ticks cut by a mask). Orange in a push phase.
+    const ringColor = completed ? 'var(--color-success)' : isPushPhase ? 'var(--g-int)' : 'var(--color-accent)';
+    const shown = countingIn ? 1 - countInRemaining / Math.max(1, countInSec) : completed ? 1 : progress;
+    const status = countingIn ? 'GET READY' : isPushPhase ? 'PUSH' : running ? 'RUNNING' : completed ? 'DONE' : hasTarget ? 'PAUSED' : 'NO TIMER';
+    const partial = hasStats && set.cardioStats.totalCalories == null && set.cardioStats.duration == null;
+    const tile = 'flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px] flex items-center justify-center gap-2 active:scale-[.98] transition-transform';
+    return (
+      <div className="bg-bg-1 rounded-[28px] p-5">
+        <div className="flex justify-between items-center gap-2">
+          <span className="g-label truncate">{focus.label} · {hasTarget ? `${Math.round(targetSec / 60)} MIN` : 'NO TIMER'}{intervals ? ' · INTERVALS' : ''}</span>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <span className="g-tag" style={{ '--tag': 'var(--g-int)' }}>CARDIO</span>
+            <button onClick={() => setShowSettings(true)} aria-label="Cardio settings" className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2" style={{ font: `700 16px ${MONO}` }}>⋯</button>
+          </span>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
+          <TypewriterName text={exercise.name} />
+        </div>
+        <div className="mt-1.5 g-meta">
+          {hasTarget ? (completed ? `Target ${formatMMSS(targetSec)} reached` : `${formatMMSS(remainingSec)} to go`) : 'Mark it done when you finish'}
+          {countInSec > 0 && !completed ? ` · ${countInSec}s count-in` : ''}
+        </div>
+
+        <div className="flex justify-center mt-5">
+          <div className="relative w-[200px] h-[200px]">
+            <svg width="200" height="200" viewBox="0 0 200 200" className="absolute inset-0 -rotate-90">
+              <mask id="cardio-ticks">
+                <circle cx="100" cy="100" r="90" fill="none" stroke="#fff" strokeWidth="12" strokeDasharray="6.42 3" />
+              </mask>
+              <g mask="url(#cardio-ticks)">
+                <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
+                <circle cx="100" cy="100" r="90" fill="none" stroke={ringColor} strokeWidth="10"
+                  strokeDasharray="565.5" strokeDashoffset={565.5 * (1 - shown)} style={{ transition: 'stroke-dashoffset 1s linear, stroke .3s' }} />
+              </g>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className={`g-label ${isPushPhase ? 'animate-pulse' : ''}`} style={{ letterSpacing: '.16em', color: isPushPhase ? 'var(--g-int)' : undefined }}>{status}</span>
+              <span key={countingIn ? `c${countInRemaining}` : 't'} className="g-tab"
+                style={{ fontSize: countingIn ? 80 : 52, fontWeight: 800, letterSpacing: '-0.04em', paddingRight: '0.04em', lineHeight: 1.05,
+                  color: completed ? 'var(--color-success)' : isPushPhase ? 'var(--g-int)' : 'var(--color-text-primary)',
+                  animation: countingIn ? 'fx-pop .45s cubic-bezier(.2,1.6,.4,1) both' : 'none' }}>
+                {countingIn ? countInRemaining : hasTarget ? formatMMSS(elapsedSec) : completed ? '✓' : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 w-full mt-5">
+          {hasTarget && (
+            <button onClick={resetTimer} aria-label="Reset timer" className="w-[62px] h-[62px] rounded-[20px] bg-bg-2 text-text-secondary text-xl active:scale-95 transition-transform">↻</button>
+          )}
+          {hasTarget && !completed ? (
+            <button onClick={handleStartButton} className="flex-1 h-[62px] rounded-[20px] font-extrabold text-[17px] active:scale-[.98] transition-transform"
+              style={running || countingIn ? { background: 'var(--color-bg-2)', color: 'var(--color-text-primary)' } : { background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}>
+              {countingIn ? 'Cancel' : running ? 'Pause' : elapsedSec > 0 ? 'Resume' : 'Start'}
+            </button>
+          ) : (
+            <button onClick={toggleComplete} className="flex-1 h-[62px] rounded-[20px] font-extrabold text-[17px] active:scale-[.98] transition-transform"
+              style={completed ? { background: 'var(--g-ok-soft)', color: 'var(--color-success)' } : { background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}>
+              {completed ? '✓ Done' : 'Mark done'}
+            </button>
+          )}
+          {hasTarget && !completed && (
+            <button onClick={toggleComplete} aria-label="Mark done" className="w-[62px] h-[62px] rounded-[20px] bg-bg-2 text-text-secondary text-xl active:scale-95 transition-transform">✓</button>
+          )}
+        </div>
+
+        <div className="mt-5 g-label">MACHINE / WATCH STATS</div>
+        {fileInputs}
+        {extracting ? (
+          <div className="mt-2.5 h-[62px] rounded-[20px] bg-bg-2 flex items-center justify-center gap-2.5 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
+            <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />Reading the display…
+          </div>
+        ) : hasStats ? (
+          <div className="mt-2.5 rounded-[20px] bg-bg-2 p-4">
+            <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.14em', color: partial ? 'var(--color-warning)' : 'var(--color-success)' }}>
+              {partial ? 'PARTIAL — RETAKE WITH THE WHOLE DISPLAY' : 'STATS SAVED'}
+            </div>
+            <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2">
+              {STAT_FIELDS.map((f) => {
+                const val = set.cardioStats[f.key];
+                if (val == null || val === '') return null;
+                return (
+                  <div key={f.key} className="min-w-0">
+                    <div className="g-label" style={{ fontSize: 9 }}>{f.label}</div>
+                    <div className="mt-0.5 text-[15px] font-bold truncate">{val}{f.suffix || ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => cameraInputRef.current?.click()} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold">Retake</button>
+              <button onClick={() => galleryInputRef.current?.click()} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold">Upload</button>
+              <button onClick={clearStats} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold text-error">Clear</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-2.5 flex gap-2">
+              <button onClick={() => cameraInputRef.current?.click()} className={tile}>Take photo</button>
+              <button onClick={() => galleryInputRef.current?.click()} className={tile}>Upload</button>
+            </div>
+            <p className="mt-2 text-text-tertiary" style={{ font: `400 10px ${MONO}`, lineHeight: 1.5 }}>The AI reads the display. Only the numbers are kept.</p>
+          </>
+        )}
+
+        <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>↑ ↓ exercises</div>
+
+        <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Cardio settings">{settingsBody}</Modal>
+      </div>
+    );
+  }
 
   return (
     <motion.div layout variants={staggerItem} className={`rounded-xl overflow-hidden border transition-colors w-full max-w-full ${borderClass}`}>
@@ -308,108 +541,7 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
               {showSettings && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }} className="overflow-hidden border-b border-border bg-bg-1">
-                  <div className="p-3 flex flex-col gap-3">
-                    {/* Name edit */}
-                    <div>
-                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Exercise Name</div>
-                      {editingName ? (
-                        <div className="flex gap-2">
-                          <input autoFocus type="text" value={nameValue} onChange={e => setNameValue(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setNameValue(exercise.name); setEditingName(false); } }}
-                            className="flex-1 bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm font-display font-semibold text-text-primary outline-none focus:border-orange-400/50" />
-                          <motion.button whileTap={{ scale: 0.9 }} onClick={handleSaveName} className="px-3 py-2 bg-orange-400 text-white text-xs font-mono rounded-lg">Save</motion.button>
-                          <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setNameValue(exercise.name); setEditingName(false); }} className="px-2 py-2 text-text-muted text-xs font-mono">✕</motion.button>
-                        </div>
-                      ) : (
-                        <motion.button whileTap={{ scale: 0.98 }} onClick={() => setEditingName(true)}
-                          className="w-full text-left bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm font-display font-semibold text-text-primary hover:border-orange-400/30 transition-colors">
-                          {exercise.name} <span className="text-[10px] text-text-muted ml-2">tap to edit</span>
-                        </motion.button>
-                      )}
-                    </div>
-
-                    {/* Timer duration */}
-                    <div>
-                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Timer Duration</div>
-                      <PickerWheel
-                        items={Array.from({ length: 120 }, (_, i) => i + 1)}
-                        value={Math.max(1, Math.round((exercise.targetDurationSec || 60) / 60))}
-                        onChange={(m) => handleSetDuration(m)}
-                      />
-                      <div className="text-center text-xs font-mono text-text-tertiary mt-1.5">
-                        {Math.round(targetSec / 60)} min target
-                      </div>
-                    </div>
-
-                    {/* Count-in */}
-                    <div>
-                      <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-1.5">Count-In</div>
-                      <div className="flex gap-1.5">
-                        {[0, 5, 10].map(sec => (
-                          <motion.button key={sec} whileTap={{ scale: 0.9 }} onClick={() => handleSetCountIn(sec)}
-                            className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${countInSec === sec ? 'bg-orange-400 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
-                            {sec === 0 ? 'Off' : `${sec}s`}
-                          </motion.button>
-                        ))}
-                      </div>
-                      <div className="text-[9px] text-text-muted mt-1.5 font-mono leading-relaxed">Countdown before timer starts — gives the treadmill time to reach speed</div>
-                    </div>
-
-                    {/* Intervals */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider">Intervals</div>
-                        <motion.button whileTap={{ scale: 0.9 }}
-                          onClick={() => handleSetIntervals(intervals ? null : { restSec: 45, workSec: 15, finalPushSec: 60 })}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
-                          {intervals ? 'On' : 'Off'}
-                        </motion.button>
-                      </div>
-                      {intervals && (
-                        <div className="flex flex-col gap-2.5 mt-2">
-                          <div>
-                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Easy phase</div>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {[15, 20, 30, 45, 60, 90].map(s => (
-                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, restSec: s })}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.restSec === s ? 'bg-orange-400 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
-                                  {s}s
-                                </motion.button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Push phase</div>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {[5, 10, 15, 20, 30].map(s => (
-                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, workSec: s })}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.workSec === s ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
-                                  {s}s
-                                </motion.button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">Final sprint</div>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {[0, 30, 45, 60, 90, 120].map(s => (
-                                <motion.button key={s} whileTap={{ scale: 0.9 }} onClick={() => handleSetIntervals({ ...intervals, finalPushSec: s })}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${intervals.finalPushSec === s ? 'bg-red-500 text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}>
-                                  {s === 0 ? 'Off' : `${s}s`}
-                                </motion.button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="text-[9px] text-text-muted font-mono leading-relaxed">
-                            Push {intervals.workSec}s / ease {intervals.restSec}s{intervals.finalPushSec > 0 ? ` · final ${intervals.finalPushSec}s sprint` : ''}
-                          </div>
-                        </div>
-                      )}
-                      {!intervals && (
-                        <div className="text-[9px] text-text-muted font-mono leading-relaxed">Alternate easy and push phases — card turns red when it's time to work harder</div>
-                      )}
-                    </div>
-                  </div>
+                  {settingsBody}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -476,8 +608,7 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
             {/* Photo / Stats */}
             <div className="p-3 border-t border-border">
               <div className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider mb-2">Machine / Watch Stats</div>
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageCapture} />
-              <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageCapture} />
+              {fileInputs}
 
               {!hasStats && !extracting && (
                 <div className="flex flex-col gap-2">

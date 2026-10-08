@@ -545,7 +545,8 @@ export default function FocusWorkout({
               opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
             }}>
             <CardioCard exercise={ex} exerciseIndex={ei} onUpdateSet={handlers.onUpdateSet}
-              onUpdateExercise={handlers.onUpdateCardioExercise} onTimerActiveChange={() => {}} />
+              onUpdateExercise={handlers.onUpdateCardioExercise} onTimerActiveChange={() => {}}
+              focus={{ label: `BLOCK ${ci + 1} OF ${blocks.length}` }} />
           </div>
         ) : (
           <div
