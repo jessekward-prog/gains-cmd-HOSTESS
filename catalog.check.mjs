@@ -1,7 +1,7 @@
 // Self-check for exercise-library matching + muscle heat — `node catalog.check.mjs`.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { norm, indexCatalog, resolve, candidates, regionsOf, muscleSets } from './src__lib__catalog.js';
+import { norm, indexCatalog, resolve, candidates, regionsOf, muscleSets, sessionMuscles } from './src__lib__catalog.js';
 
 const cat = indexCatalog(JSON.parse(readFileSync('src__lib__catalog.json', 'utf8')));
 assert.equal(cat.list.length, 1324);
@@ -38,5 +38,15 @@ const heat = muscleSets([
 ], {}, cat, 7, now);
 assert.equal(heat.chest, 3);
 for (const [k, v] of Object.entries(r)) if (v === 0.5) assert.equal(heat[k], 1.5);
+
+// One session: same counting; unlinked names are reported, "not in library" ones aren't.
+const one = sessionMuscles([
+  { name: 'Barbell Bench Press', sets: sets(2, 3) },
+  { name: 'Mystery Move', sets: sets(1, 1) },
+  { name: 'Treadmill', sets: sets(1, 1) },
+  { name: 'Skipped', sets: sets(0, 3) },
+], { Treadmill: '' }, cat);
+assert.equal(one.sets.chest, 2);
+assert.deepEqual(one.unmatched, ['Mystery Move']);
 
 console.log('catalog.check: ok');

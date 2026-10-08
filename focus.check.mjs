@@ -77,6 +77,20 @@ console.log('focus checks passed');
   assert.equal(s.ex[0].best, '70 × 8');
   assert.equal(s.ex[1].sets, '1/2 sets');
 }
+// Estimated 1RM: Epley from the best 1–12 rep working set; none for BW/assisted.
+{
+  const S = (w, r, extra = {}) => ({ weight: String(w), reps: String(r), completed: true, ...extra });
+  assert.equal(F.e1rm('Bench', [S(100, 1)]), 100);
+  assert.equal(F.e1rm('Bench', [S(60, 10), S(80, 5)]), 93.5); // 80×(1+5/30)=93.33 → 93.5 beats 60×(1+10/30)=80
+  assert.equal(F.e1rm('Bench', [S(60, 15)]), null);             // past 12 reps: not trusted
+  assert.equal(F.e1rm('Bench', [S(60, 8, { completed: false }), S(60, 8, { type: 'drop' })]), null);
+  assert.equal(F.e1rm('Push-ups', [S(0, 20)]), null);
+  assert.equal(F.e1rm('Assisted pull-up', [S(30, 8)]), null);
+  const hist = [session('2026-10-08', 'Bench', [[70, 'failure']]), session('2026-10-05', 'Bench', [[80, 5]])];
+  assert.equal(F.lastE1rm(hist, 'Bench'), 93.5); // skips a session with no usable set
+  const sum = F.summarize({ workoutName: 'W', programName: 'P', exercises: [{ name: 'Bench', sets: [S(85, 5)] }] }, hist);
+  assert.deepEqual(sum.strength, [{ name: 'Bench', now: 99, prev: 93.5 }]);
+}
 console.log('summary checks passed');
 
 // Live background mood: priority order from LIVE_BACKGROUND.md, first match wins.

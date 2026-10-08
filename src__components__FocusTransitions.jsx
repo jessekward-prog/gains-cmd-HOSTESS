@@ -5,6 +5,10 @@ import { useHaptics } from '../hooks/useHaptics';
 import * as api from '../lib/api';
 import { TAGS, blockName, buildBlocks, fmtW } from '../lib/focus';
 import { moodState } from '../lib/mood';
+import { useWorkout } from '../context/WorkoutContext';
+import useCatalog from '../hooks/useCatalog';
+import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
+import BodyMap from './BodyMap';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -234,6 +238,9 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress }) {
           </div>
         )}
 
+        <SessionMuscles exercises={summary.exercises} />
+        <Strength rows={summary.strength} />
+
         <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .65s both' }}>
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full flex items-center justify-center text-accent" style={{ background: 'var(--g-acc-soft)', font: `700 9px ${MONO}` }}>AI</span>
@@ -260,6 +267,65 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress }) {
         ))}
         <button onClick={finish} className="mt-6 w-full h-[58px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)', animation: 'fx-in .4s 1s both' }}>Done</button>
       </div>
+    </div>
+  );
+}
+
+// What this session hit, on the body map (library-matched exercises only).
+// 6 sets in one session reads as full colour.
+function SessionMuscles({ exercises }) {
+  const { settings } = useWorkout();
+  const cat = useCatalog();
+  if (!cat || !exercises) return null;
+  const { sets, unmatched } = sessionMuscles(exercises, settings?.exerciseLinks, cat);
+  const top = Object.entries(sets).sort((a, b) => b[1] - a[1]);
+  if (!top.length && !unmatched.length) return null;
+  return (
+    <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .55s both' }}>
+      <div className="g-label">MUSCLES WORKED</div>
+      {top.length > 0 && (
+        <>
+          <div className="mt-3"><BodyMap heat={sets} full={6} height={220} /></div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {top.map(([r, v]) => (
+              <span key={r} className="px-2.5 h-7 inline-flex items-center gap-1.5 rounded-[10px] bg-bg-2 text-[12px] font-semibold">
+                {REGION_LABEL[r]}<span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{+v.toFixed(1)}</span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {unmatched.length > 0 && (
+        <p className="mt-3 text-text-tertiary" style={{ font: `400 11px ${MONO}`, lineHeight: 1.5 }}>
+          Not on the map: {unmatched.join(', ')}. Match {unmatched.length > 1 ? 'them' : 'it'} in Settings → Exercise library.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Estimated 1RM per lift, against the last session that had one.
+function Strength({ rows }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .6s both' }}>
+      <div className="g-label">ESTIMATED 1RM</div>
+      {rows.map((x) => {
+        const d = x.prev === null ? null : Math.round((x.now - x.prev) * 2) / 2;
+        return (
+          <div key={x.name} className="flex items-baseline justify-between gap-3 mt-2.5">
+            <span className="text-[15px] font-bold min-w-0 truncate">{x.name}</span>
+            <span className="flex items-baseline gap-2 flex-shrink-0" style={{ font: `500 13px ${MONO}` }}>
+              {x.prev !== null && <span className="text-text-tertiary">{fmtW(x.prev)} →</span>}
+              <span>{fmtW(x.now)} kg</span>
+              <span className="w-[52px] text-right" style={{ color: d > 0 ? 'var(--color-success)' : d < 0 ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
+                {d === null ? 'new' : d > 0 ? `+${fmtW(d)}` : d < 0 ? `−${fmtW(-d)}` : '='}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+      <p className="mt-3 text-text-tertiary" style={{ font: `400 10px ${MONO}`, lineHeight: 1.5 }}>From your best set of 1–12 reps. Not shown for bodyweight or assisted lifts.</p>
     </div>
   );
 }

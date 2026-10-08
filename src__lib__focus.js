@@ -142,10 +142,41 @@ export function daysAgo(dateStr, now = new Date()) {
   return `${Math.round(n / 30)} months ago`;
 }
 
+/**
+ * Estimated one-rep max from a session's best completed working set (Epley,
+ * w × (1 + reps/30)), trusted only for 1–12 reps. None for bodyweight (0 kg) or
+ * assisted lifts, where the number on the stack isn't the load lifted.
+ * Rounded to the nearest 0.5 kg.
+ */
+export function e1rm(name, sets) {
+  if (isAssisted(name)) return null;
+  let best = null;
+  for (const s of sets || []) {
+    if (!s.completed || s.type === 'drop' || s.reps === 'failure') continue;
+    const w = num(s.weight), r = num(s.reps);
+    if (w <= 0 || r < 1 || r > 12) continue;
+    const v = r === 1 ? w : w * (1 + r / 30);
+    if (best === null || v > best) best = v;
+  }
+  return best === null ? null : Math.round(best * 2) / 2;
+}
+
+/** e1RM from the most recent past session of this exact exercise that has one. */
+export function lastE1rm(history = [], name) {
+  for (const w of history) {
+    if (isMarker(w)) continue;
+    let exs = w.exercises;
+    if (typeof exs === 'string') { try { exs = JSON.parse(exs); } catch { exs = []; } }
+    const v = e1rm(name, (exs || []).find((e) => e?.name === name)?.sets);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
 /** Everything the finish flow shows, computed before finishWorkout clears the workout. */
 export function summarize(workout, history = []) {
   let vol = 0, sets = 0;
-  const prs = [], ex = [];
+  const prs = [], ex = [], strength = [];
   for (const block of buildBlocks(workout.exercises)) {
     for (const i of block.indices) {
       const e = workout.exercises[i];
@@ -164,6 +195,8 @@ export function summarize(workout, history = []) {
         prs.push({ name: e.name, w: num(top.weight), r: num(top.reps), best: stats.best, assisted });
       }
       const tag = TAGS[block.kind]?.[0].toLowerCase();
+      const est = e1rm(e.name, e.sets);
+      if (est !== null) strength.push({ name: e.name, now: est, prev: lastE1rm(history, e.name) });
       ex.push({
         name: e.name,
         sets: block.kind === 'cardio' ? 'cardio' : `${done.length}/${e.sets.length} sets${tag ? ` · ${tag}` : ''}`,
@@ -173,7 +206,7 @@ export function summarize(workout, history = []) {
   }
   // Biggest jump first — that's the one the PR screen reveals.
   prs.sort((a, b) => Math.abs(b.w - b.best) - Math.abs(a.w - a.best));
-  return { name: workout.workoutName, prog: workout.programName, vol: Math.round(vol), sets, prs, ex };
+  return { name: workout.workoutName, prog: workout.programName, vol: Math.round(vol), sets, prs, ex, strength, exercises: workout.exercises };
 }
 
 /** Saved workout layout: focus (beta default), dense, classic or block-grid. */

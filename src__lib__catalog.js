@@ -87,8 +87,22 @@ export function regionsOf(x) {
   return out;
 }
 
-// Sets per region over the last `days`: each completed set counts 1 for the
-// target and ½ for each secondary. Unmatched exercises (cardio, unlinked) add nothing.
+// Sets per region for one session's exercises: each completed set counts 1 for
+// the target and ½ for each secondary. `unmatched` lists names with sets that
+// have no library match (and weren't marked "not in library").
+export function sessionMuscles(exercises, links, cat) {
+  const sets = {}, unmatched = [];
+  (exercises || []).forEach((e) => {
+    const done = (e?.sets || []).filter((s) => s.completed).length;
+    if (!done) return;
+    const x = resolve(e.name, links, cat);
+    if (!x) { if (!(e.name in (links || {}))) unmatched.push(e.name); return; }
+    Object.entries(regionsOf(x)).forEach(([r, k]) => { sets[r] = (sets[r] || 0) + done * k; });
+  });
+  return { sets, unmatched };
+}
+
+// The same over every session in the last `days`.
 export function muscleSets(history, links, cat, days = 7, now = Date.now()) {
   const since = now - days * 86400000;
   const out = {};
@@ -96,11 +110,7 @@ export function muscleSets(history, links, cat, days = 7, now = Date.now()) {
     const t = Date.parse(String(w.date).split('T')[0] + 'T12:00:00');
     if (!(t >= since) || t > now) return;
     const exs = typeof w.exercises === 'string' ? JSON.parse(w.exercises) : w.exercises;
-    (exs || []).forEach((e) => {
-      const done = (e?.sets || []).filter((s) => s.completed).length;
-      if (!done) return;
-      Object.entries(regionsOf(resolve(e.name, links, cat))).forEach(([r, k]) => { out[r] = (out[r] || 0) + done * k; });
-    });
+    Object.entries(sessionMuscles(exs, links, cat).sets).forEach(([r, v]) => { out[r] = (out[r] || 0) + v; });
   });
   return out;
 }
