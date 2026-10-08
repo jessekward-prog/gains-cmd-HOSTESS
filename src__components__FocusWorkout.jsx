@@ -72,9 +72,15 @@ function RestRing({ timer, next, onSkip }) {
       <div className="flex-1 flex flex-col items-center justify-center">
       <div className="relative w-[200px] h-[200px]">
         <svg width="200" height="200" viewBox="0 0 200 200" className="absolute inset-0 -rotate-90">
-          <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
-          <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-accent)" strokeWidth="10" strokeLinecap="round"
-            strokeDasharray="565" strokeDashoffset={565 * (1 - left)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+          {/* 60 ticks cut out of the ring by a dashed mask, so the arc still drains smoothly. */}
+          <mask id="rest-ticks">
+            <circle cx="100" cy="100" r="90" fill="none" stroke="#fff" strokeWidth="12" strokeDasharray="6.42 3" />
+          </mask>
+          <g mask="url(#rest-ticks)">
+            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
+            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-accent)" strokeWidth="10"
+              strokeDasharray="565.5" strokeDashoffset={565.5 * (1 - left)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+          </g>
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="g-label" style={{ letterSpacing: '.16em' }}>REST</span>
