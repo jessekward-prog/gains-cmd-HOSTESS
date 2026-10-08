@@ -45,6 +45,8 @@ export const clearActiveWorkout = () => api.del('/api/active-workout');
 // Settings
 export const getSettings = () => api.get('/api/settings');
 export const saveAppearance = (appearance) => api.post('/api/appearance', { appearance });
+export const saveExerciseLinks = (links) => api.post('/api/exercise-links', { links });
+export const suggestExerciseLinks = (items) => api.post('/api/exercise-links/suggest', { items });
 export const updateAggression = (data) => api.post('/api/aggression', data);
 
 // Chat

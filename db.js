@@ -228,6 +228,7 @@ async function initializeTables() {
 
     // After creation so it also lands on a brand-new database.
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS appearance JSONB');
+    await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exercise_links JSONB');
   } catch (error) {
     console.error('❌ Error initializing tables:', error);
     throw error;
@@ -395,7 +396,7 @@ async function deleteWorkoutById(userId, workoutId) {
 // Settings functions
 async function getSettings(userId) {
   const result = await pool.query(
-    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance FROM user_settings WHERE user_id = $1',
+    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance, exercise_links FROM user_settings WHERE user_id = $1',
     [userId]
   );
   
@@ -426,6 +427,13 @@ async function updateAppearance(userId, appearance) {
   await pool.query(
     'UPDATE user_settings SET appearance = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
     [JSON.stringify(appearance), userId]
+  );
+}
+
+async function updateExerciseLinks(userId, links) {
+  await pool.query(
+    'UPDATE user_settings SET exercise_links = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+    [JSON.stringify(links), userId]
   );
 }
 
@@ -579,6 +587,7 @@ module.exports = {
   getSettings,
   updateAggressionSettings,
   updateAppearance,
+  updateExerciseLinks,
   getChatHistory,
   saveChatMessage,
   clearChatHistory,

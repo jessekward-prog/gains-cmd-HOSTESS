@@ -17,6 +17,7 @@ import {
 } from '../lib/focus';
 import { nextMemberForRound, roundOfSet } from '../lib/supersets';
 import { moodState } from '../lib/mood';
+import ExerciseInfo from './ExerciseInfo';
 
 const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
@@ -206,6 +207,7 @@ function EditSheet({ open, onClose, ex, ei, exercises, handlers, onAddExercise }
   const pick = (m) => { onClose(); setModal(m); };
   const normal = (ex?.sets || []).filter((s) => s.type !== 'drop').length;
   const rows = [
+    ['How to · muscles worked', () => pick('info')],
     ['+ Add set', () => { handlers.onAddSet(ei); onClose(); }],
     ['− Remove last set', () => {
       if (normal <= 1) return;
@@ -243,6 +245,7 @@ function EditSheet({ open, onClose, ex, ei, exercises, handlers, onAddExercise }
             onToggleFailure={(si) => handlers.onUpdateSet(ei, si, { ...ex.sets[si], reps: ex.sets[si].reps === 'failure' ? '' : 'failure' })} />
           <SubstituteModal open={modal === 'swap'} onClose={() => setModal(null)} exerciseName={ex.name}
             onSelect={(n) => handlers.onSubstitute(ei, n)} />
+          <ExerciseInfo open={modal === 'info'} onClose={() => setModal(null)} name={ex.name} />
           <Modal open={modal === 'notes'} onClose={() => setModal(null)} title="Notes">
             <div className="p-3">
               <ExerciseNotes exerciseName={ex.name} exerciseTarget={`${ex.sets.length} sets × ${ex.targetReps || ex.repRange} reps`} onClose={() => setModal(null)} />

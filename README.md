@@ -12,6 +12,12 @@ a hand-off screen between exercises, and a summary with your PRs when you finish
 - **Progression:** counts your sessions in rep range at each weight and tells you
   when to go up. This part is plain code, not AI. Assisted machines are handled
   the right way round: less counterweight is progress.
+- **Exercise library:** 1,324 exercises with animations, steps and the muscles
+  they work. Tap ⋯ → How to on any exercise in a workout. History shows a body map
+  of the sets each muscle got this week. Your own exercise names stay as they are:
+  Settings → Exercise library matches them to the library (exact spellings match
+  themselves, the local model suggests the rest, and you can change any match).
+  Data, animation and body-map credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
 - **AI (optional):** a local model writes post-workout notes, answers in the Coach
   tab, builds programs in the AI Wizard and remixes workouts. Everything else
   works without it.

@@ -4,6 +4,12 @@ import { useTheme, THEMES, ACCENT_COLORS, FONTS } from '../context/ThemeContext'
 import { useToast } from '../context/ToastContext';
 import { useHeaderMessage } from '../context/HeaderMessageContext';
 import ImportModal from '../components/ImportModal';
+import ExerciseInfo from '../components/ExerciseInfo';
+import { exerciseNames } from '../components/ExerciseNameOptions';
+import { useWorkout } from '../context/WorkoutContext';
+import useCatalog from '../hooks/useCatalog';
+import { resolve, candidates, titleCase } from '../lib/catalog';
+import * as api from '../lib/api';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { workoutLayout as readLayout } from '../lib/focus';
 import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
@@ -191,6 +197,8 @@ export default function SettingsPage() {
           </Section>
         )}
 
+        <LibrarySection />
+
         <Section title="Data">
           <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
             Import history from another app, or scan a screenshot to create a workout entry.
@@ -211,6 +219,76 @@ export default function SettingsPage() {
         }}
       />
     </div>
+  );
+}
+
+// Match the user's exercise names to the library (animations + muscle map).
+// Names that are already a library spelling match themselves; the rest go to
+// the local model ten at a time, sequentially (LM Studio serves one at a time),
+// choosing only from a shortlist. Every match stays reviewable and changeable.
+function LibrarySection() {
+  const { workoutHistory, programs, settings, saveExerciseLinks } = useWorkout();
+  const { showToast } = useToast();
+  const cat = useCatalog();
+  const [busy, setBusy] = useState(null);
+  const [review, setReview] = useState(false);
+  const [info, setInfo] = useState(null);
+  const links = settings?.exerciseLinks || {};
+  const names = exerciseNames(workoutHistory, programs);
+  if (!cat) return null;
+  const matched = names.filter((n) => resolve(n, links, cat));
+  const open = names.filter((n) => !(n in links) && !resolve(n, links, cat));
+
+  const matchWithAI = async () => {
+    try {
+      for (let i = 0; i < open.length; i += 10) {
+        setBusy(`Matching ${i}/${open.length}…`);
+        const items = open.slice(i, i + 10).map((name) => ({
+          name, candidates: candidates(name, cat, 8).map(({ id, n, eq }) => ({ id, n, eq })),
+        }));
+        const r = await api.suggestExerciseLinks(items);
+        await saveExerciseLinks(r.links);
+      }
+      setReview(true);
+      showToast('Matched — check the list below', 'success');
+    } catch (e) {
+      showToast('AI matching stopped: ' + e.message, 'error');
+    }
+    setBusy(null);
+  };
+
+  return (
+    <Section title="Exercise library">
+      <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
+        {matched.length} of {names.length} of your exercises are matched to the library, which gives them an animation, steps and a place on the muscle map. Your exercise names never change.
+      </p>
+      {open.length > 0 && (
+        <button onClick={matchWithAI} disabled={!!busy} className="w-full h-12 rounded-[15px] bg-accent font-bold text-sm disabled:opacity-60" style={{ color: 'var(--color-on-accent)' }}>
+          {busy || `Match ${open.length} with AI`}
+        </button>
+      )}
+      {names.length > 0 && (
+        <button onClick={() => setReview((v) => !v)} className="mt-2 w-full h-12 rounded-[15px] bg-bg-2 text-text-primary font-bold text-sm">
+          {review ? 'Hide matches' : 'Review matches'}
+        </button>
+      )}
+      {review && (
+        <div className="mt-2 flex flex-col">
+          {names.map((n) => {
+            const x = resolve(n, links, cat);
+            return (
+              <button key={n} onClick={() => setInfo(n)} className="flex justify-between gap-3 py-2.5 border-b border-border text-left last:border-0">
+                <span className="text-[13px] font-semibold min-w-0 truncate">{n}</span>
+                <span className="text-right min-w-0 truncate" style={{ font: `400 11px ${MONO}`, color: x ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)' }}>
+                  {x ? titleCase(x.n) : n in links ? 'not in library' : '—'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <ExerciseInfo open={!!info} onClose={() => setInfo(null)} name={info} />
+    </Section>
   );
 }
 

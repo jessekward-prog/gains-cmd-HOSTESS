@@ -302,7 +302,7 @@ app.put('/api/lm', adminOrSync, async (req, res) => {
 app.get('/api/settings', requireAuth, async (req, res) => {
   try {
     const settings = await db.getSettings(req.user.id);
-    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null });
+    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null, exerciseLinks: settings.exercise_links || {} });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -315,6 +315,51 @@ app.post('/api/appearance', requireAuth, async (req, res) => {
     if (!appearance || typeof appearance.values !== 'object' || !Number.isFinite(appearance.at)) return badRequest(res, 'appearance {at, values} required');
     await db.updateAppearance(req.user.id, appearance);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Which exercise-library entry each of the user's exercise names means:
+// { "Lat Pulldowns": "0150", "Treadmill": "" } ("" = deliberately unmatched).
+// Names themselves are never rewritten — progression credits exact names.
+app.post('/api/exercise-links', requireAuth, async (req, res) => {
+  try {
+    const { links } = req.body || {};
+    if (!links || typeof links !== 'object' || Array.isArray(links)
+      || !Object.entries(links).every(([k, v]) => k && typeof v === 'string' && /^\d{0,4}$/.test(v))) {
+      return badRequest(res, 'links {name: id} required');
+    }
+    await db.updateExerciseLinks(req.user.id, links);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// The client shortlists library candidates per name; the model only picks
+// among them, so it can't invent an exercise. Callers batch ~10 names a call.
+app.post('/api/exercise-links/suggest', requireAuth, async (req, res) => {
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || !items.length || items.length > 20) return badRequest(res, 'items[1..20] required');
+    const list = items.map((it, i) => `${i + 1}. "${String(it.name).trim()}"\n` + (it.candidates || []).map((c) => `   ${c.id}: ${c.n} (${c.eq})`).join('\n')).join('\n');
+    const reply = await llm({
+      system: 'You match gym exercise names to entries in an exercise library. For each numbered name, answer with its number and the id of the closest candidate: the same movement, preferring the matching equipment and machine. Close is good enough (seated vs standing, grip width or a variant name are fine). Use null when no candidate is the same kind of movement. Never match a cardio machine (treadmill, rower, elliptical, bike) to a strength exercise.',
+      messages: [{ role: 'user', content: list }],
+      maxTokens: 2000, temperature: 0, timeoutMs: 60000,
+      schema: obj({ picks: { type: 'array', items: obj({ n: int, id: nullable(str) }) } }),
+    });
+    const picks = JSON.parse(reply).picks || [];
+    // Picks come back by number, so names with odd spacing still line up. A name
+    // the model skipped stays unmatched (not "no match"), so a rerun retries it.
+    const links = {};
+    items.forEach((it, i) => {
+      const p = picks.find((x) => x.n === i + 1);
+      if (!p) return;
+      links[it.name] = p.id && (it.candidates || []).some((c) => c.id === p.id) ? p.id : '';
+    });
+    res.json({ success: true, links });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -404,6 +404,17 @@ export function WorkoutProvider({ children }) {
     }
   }, []);
 
+  // Merge { name: libraryId | '' } into the saved exercise links. Kept in a ref
+  // so back-to-back saves (AI batches) build on each other, not on a stale render.
+  const linksRef = useRef({});
+  linksRef.current = settings?.exerciseLinks || {};
+  const saveExerciseLinks = useCallback(async (patch) => {
+    const links = { ...linksRef.current, ...patch };
+    linksRef.current = links;
+    setSettings((s) => ({ ...s, exerciseLinks: links }));
+    await api.saveExerciseLinks(links);
+  }, []);
+
   const setRecoveryNote = useCallback((name, note) => {
     setRecoveryNotes((prev) => {
       const next = { ...prev };
@@ -430,6 +441,7 @@ export function WorkoutProvider({ children }) {
         reloadPrograms,
         reloadHistory,
         reloadSettings,
+        saveExerciseLinks,
         loadAll,
       }}
     >

@@ -7,6 +7,9 @@ import EditWorkoutModal from '../components/EditWorkoutModal';
 import Button from '../components/Button';
 import * as api from '../lib/api';
 import { isMarker } from '../lib/history';
+import BodyMap from '../components/BodyMap';
+import useCatalog from '../hooks/useCatalog';
+import { muscleSets, resolve, REGION_LABEL } from '../lib/catalog';
 
 const MONO = 'var(--font-mono)';
 
@@ -86,6 +89,8 @@ export default function HistoryPage() {
     <div className="g-root px-4 pt-2.5 pb-7 fx-rise">
       <h1 className="mx-1 mt-3 mb-0.5 g-h1">History</h1>
       <p className="mx-1 text-text-tertiary" style={{ font: `400 12px ${MONO}` }}>{totalWorkouts} workout{totalWorkouts !== 1 ? 's' : ''} logged</p>
+
+      <WeekHeat />
 
       <div className="mt-4 bg-bg-1 rounded-[26px] p-4">
         <Calendar workoutDates={workoutDates} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
@@ -205,13 +210,46 @@ export default function HistoryPage() {
   );
 }
 
-function exerciseToMuscleGroup(name) {
-  const n = (name || '').toLowerCase();
-  if (/bench|chest fly|pec deck|push.?up|dip|incline press|decline press|cable cross/.test(n)) return 'Chest';
-  if (/row|pull.?up|pullup|chin.?up|lat pull|deadlift|rdl|rack pull|seal row|back extension/.test(n)) return 'Back';
-  if (/shoulder press|ohp|overhead press|military press|lateral raise|front raise|rear delt|arnold press|upright row/.test(n)) return 'Shoulders';
-  if (/curl|tricep|pushdown|skull|forearm|shrug/.test(n)) return 'Arms';
-  if (/squat|lunge|leg press|leg curl|leg extension|hip thrust|glute|calf|step.?up|hamstring|quad|clean|snatch|sled/.test(n)) return 'Legs';
-  if (/crunch|plank|ab |abs|sit.?up|russian twist|cable crunch|oblique|toes.?to.?bar|hollow/.test(n)) return 'Core';
-  return 'Back';
+// Muscles worked in the last 7 days, from the exercise library's muscle data.
+// 10 sets in a week (target 1, secondaries ½ per set) reads as full colour.
+function WeekHeat() {
+  const { workoutHistory, settings } = useWorkout();
+  const cat = useCatalog();
+  const links = settings?.exerciseLinks;
+  const heat = useMemo(() => (cat ? muscleSets(workoutHistory, links, cat, 7) : {}), [cat, workoutHistory, links]);
+  const unmatched = useMemo(() => {
+    if (!cat) return 0;
+    const since = Date.now() - 7 * 86400000, names = new Set();
+    (workoutHistory || []).forEach((w) => {
+      if (isMarker(w) || !(Date.parse(String(w.date).split('T')[0] + 'T12:00:00') >= since)) return;
+      const exs = typeof w.exercises === 'string' ? JSON.parse(w.exercises) : w.exercises;
+      (exs || []).forEach((e) => e?.name && !(e.name in (links || {})) && !resolve(e.name, links, cat) && names.add(e.name));
+    });
+    return names.size;
+  }, [cat, workoutHistory, links]);
+  if (!cat) return null;
+  const top = Object.entries(heat).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="mt-4 bg-bg-1 rounded-[26px] p-4">
+      <div className="g-label">LAST 7 DAYS · SETS PER MUSCLE</div>
+      <div className="mt-3"><BodyMap heat={heat} full={10} height={240} /></div>
+      {top.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {top.map(([r, v]) => (
+            <span key={r} className="px-2.5 h-7 inline-flex items-center gap-1.5 rounded-[10px] bg-bg-2 text-[12px] font-semibold">
+              {REGION_LABEL[r]}<span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{+v.toFixed(1)}</span>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-center text-text-tertiary" style={{ font: `400 12px ${MONO}` }}>No sets logged this week.</p>
+      )}
+      {unmatched > 0 && (
+        <p className="mt-3 text-text-tertiary" style={{ font: `400 11px ${MONO}`, lineHeight: 1.5 }}>
+          {unmatched} exercise{unmatched > 1 ? 's' : ''} this week {unmatched > 1 ? "aren't" : "isn't"} matched to the library, so {unmatched > 1 ? "they're" : "it's"} not shown. Settings → Exercise library.
+        </p>
+      )}
+    </div>
+  );
 }
