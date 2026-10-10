@@ -10,6 +10,7 @@ import { lvTitle, tierOf, weekKey, pickBossRegion, daysThisWeek, BOSS_SETS, BOSS
 import useCatalog from '../hooks/useCatalog';
 import { muscleSets } from '../lib/catalog';
 import BodyMap from './BodyMap';
+import TypewriterName from './TypewriterName';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
@@ -67,7 +68,10 @@ export default function QuestTitle({ onNavigate }) {
     <div className="g-root flex flex-col min-h-full">
       <div className="px-5 pt-3 pb-3">
         <div className="g-label truncate">{program ? `${program.name} · QUEST` : 'QUEST'}</div>
-        <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{ws.find(([, i]) => i === index)?.[0].name || 'Gains Quest'}</div>
+        <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>
+          {/* Retypes with the cursor whenever you pick a different quest (and now and then on its own). */}
+          <TypewriterName text={ws.find(([, i]) => i === index)?.[0].name || 'Gains Quest'} />
+        </div>
       </div>
       <div className="flex-1 px-3.5 pb-6 flex flex-col gap-2.5">
         <QuestStage phase="title" area={0} heroName={prof.hero} petKey={prof.pet} lvl={prof.lvl} xp={prof.xp}

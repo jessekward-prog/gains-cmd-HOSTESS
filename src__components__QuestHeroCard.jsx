@@ -5,6 +5,7 @@ import useQuest from '../hooks/useQuest';
 import useQuestArt from '../hooks/useQuestArt';
 import DitherCard, { effCard } from './DitherCard';
 import QuestVault from './QuestVault';
+import Ticker from './Ticker';
 import { CARDS, RAR, PAL } from '../lib/dither';
 import { useToast } from '../context/ToastContext';
 import {
@@ -46,7 +47,7 @@ export function MiniHeroCard({ onOpen }) {
         )}
         <div className="absolute left-0 right-0 bottom-0" style={{ padding: '8px 10px 9px', background: 'rgba(5,5,5,.9)' }}>
           <div className="flex justify-between items-baseline gap-1.5">
-            <span className="truncate" style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f0f0' }}>{card ? card.name : 'No card yet'}</span>
+            <Ticker style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f0f0' }}>{card ? card.name : 'No card yet'}</Ticker>
             <span className="flex-shrink-0" style={{ font: `500 10px ${MONO}`, color: '#f0f0f0' }}>LV {prof.lvl}</span>
           </div>
           <div style={{ marginTop: 6, height: 2, background: '#2a2a2a' }}><div className="h-full" style={{ width: `${prof.xp / 10}%`, background: card ? RAR[card.rarity].col : '#f0f0f0' }} /></div>

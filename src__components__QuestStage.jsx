@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import useQuestSprites from '../hooks/useQuestSprites';
+import Ticker from './Ticker';
 import { TINTS, LANDS, SIZES, PETS, heroOf } from '../lib/quest';
 
 const MONO = "'DM Mono', var(--font-mono), monospace";
@@ -123,7 +124,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
         <>
           <div className="absolute" style={{ top: 14, left: 14, width: 172, padding: '10px 12px', ...box, opacity: ent }}>
             <div className="flex justify-between items-baseline gap-1.5">
-              <span className="truncate" style={{ fontFamily: "'Manrope', var(--font-display), sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>{monster.name}</span>
+              <Ticker style={{ fontFamily: "'Manrope', var(--font-display), sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>{monster.name}</Ticker>
               <span className="flex-shrink-0" style={{ fontSize: 10, color: '#999' }}>Lv{monster.lv}</span>
             </div>
             <div style={{ marginTop: 2, fontSize: 9, letterSpacing: '.14em', color: '#666' }}>{monster.species}</div>
