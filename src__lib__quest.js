@@ -250,25 +250,29 @@ export const RIGHTS_LABEL = { pal: 'COMMON+', style: 'RARE+', name: 'EPIC+', img
 export const editsLeft = (vault, id) => Math.max(0, (vault.owned?.[id] || 0) - (vault.edits?.[id] || 0));
 
 // ── Random events ───────────────────────────────────────────────────
-// Code decides when and what (training instructions stay deterministic and
-// tested); the AI only words them. Rolled from a seed per quest + block, so a
-// reload never rerolls. At most one event per block, MAX_EVENTS per quest, and
-// only on normal (non-timed, non-superset, non-drop) blocks. Each is optional.
-// `where`: which working set it lands on. `xp`: XP multiplier for that set when
-// done. `crit`: counts as a crit when done. `pack`: card packs when done.
-// `rest`: seconds added to the rest after that set.
+// Little twists to mix a session up — never harder, never riskier: an event
+// only ever keeps the weight or LOWERS it (pct), never goes to failure, never
+// adds load. Code decides when and what; the AI only words them. Rolled from a
+// seed per quest + block (a reload never rerolls), at most one per block and
+// MAX_EVENTS per quest, only on plain blocks, and always optional.
+// `where`: which working set. `pct`: weight × pct for that set. `reps`/`plusReps`:
+// the rep target it asks for. `timed`: seconds of steady reps instead of a rep
+// target. `xp`: XP multiplier when done. `crit` / `pack`: rewards. `rest`: +s rest.
+// `light`: like pct, needs a real external load to be lighter (see eligibility).
 export const EVENTS = {
-  shield: { title: 'SHIELD UP', color: '#60a5fa', where: 'last', w: 3, xp: 2, crit: true, load: 2.5, toFailure: true,
-    act: 'Add 2.5 kg and take this set to failure — log the reps you get.' },
-  enraged: { title: 'ENRAGED', color: '#ef4444', where: 'notLast', w: 2, xp: 1.5, rest: -30, act: 'Your next rest is 30 s shorter.' },
-  slow: { title: 'SLOW CURSE', color: '#c084fc', where: 'any', w: 2, xp: 1.5, act: 'Lower every rep over 3 seconds.' },
-  paused: { title: 'PAUSED BLOW', color: '#f59e0b', where: 'any', w: 2, xp: 1.5, act: 'Hold 1 second at the bottom of every rep.' },
-  mirror: { title: 'MIRROR MATCH', color: '#22d3ee', where: 'any', w: 2, xp: 2, needsLast: true, act: 'Match last session exactly: {last}.' },
-  goblin: { title: 'TREASURE GOBLIN', color: '#fbbf24', where: 'any', w: 2, pack: 1, act: 'Hit {top} reps to catch it — it drops a card pack.' },
-  weak: { title: 'WEAK POINT', color: '#22c55e', where: 'last', w: 2, crit: true, act: 'Hit {top} reps for a guaranteed crit.' },
-  spring: { title: 'HEALING SPRING', color: '#34d399', where: 'notLast', w: 1, rest: 30, act: 'Take 30 s extra rest after this set, on the house.' },
-  ambush: { title: 'AMBUSH', color: '#fb923c', where: 'last', w: 1, xp: 1.5, bonusSet: true, act: 'Accept for one bonus set at 80% weight after this one.' },
-  plateau: { title: 'PLATEAU BREAKER', color: '#f472b6', where: 'first', xp: 2, load: 2.5, act: 'Stuck at {lw} kg for 3 sessions. Try +2.5 kg this set.' },
+  shield: { title: 'SHIELD UP', color: '#60a5fa', where: 'last', w: 3, xp: 2, crit: true, pct: 0.5, timed: 45,
+    act: 'Half the weight: steady, controlled reps for 45 seconds instead of the set. Then log how many you did.' },
+  enraged: { title: 'ENRAGED', color: '#ef4444', where: 'any', w: 2, xp: 1.5, pct: 0.7, plusReps: 3,
+    act: 'Drop to 70% and go for 3 extra reps — only if they come easy.' },
+  slow: { title: 'SLOW CURSE', color: '#c084fc', where: 'any', w: 2, xp: 1.5, pct: 0.8, act: 'Drop to 80% and lower every rep over 3 seconds.' },
+  paused: { title: 'PAUSED BLOW', color: '#f59e0b', where: 'any', w: 2, xp: 1.5, pct: 0.8, act: 'Drop to 80% and pause for 1 second at the bottom of each rep.' },
+  mirror: { title: 'MIRROR MATCH', color: '#22d3ee', where: 'any', w: 2, xp: 2, needsLast: true, act: 'Match last session: {last}. No more than that.' },
+  goblin: { title: 'TREASURE GOBLIN', color: '#fbbf24', where: 'any', w: 2, pack: 1, act: 'Reach {top} reps if it feels good and it drops a card pack. Stop early any time.' },
+  weak: { title: 'WEAK POINT', color: '#22c55e', where: 'last', w: 2, xp: 1.5, crit: true, pct: 0.6, reps: 15, act: 'A pump set: 60% weight, 15 smooth reps.' },
+  spring: { title: 'HEALING SPRING', color: '#34d399', where: 'any', w: 1, rest: 30, act: 'Take 30 s extra rest after this set, on the house.' },
+  ambush: { title: 'AMBUSH', color: '#fb923c', where: 'last', w: 1, xp: 1.5, light: true, bonusSet: { pct: 0.6, reps: 10 },
+    act: 'Accept for a light finisher after this set: 60% weight, 10 easy reps.' },
+  blessing: { title: 'BLESSING', color: '#e879f9', where: 'any', w: 2, crit: true, act: 'Do the set exactly as planned. The gods grant you a free crit.' },
 };
 export const EVENT_CHANCE = 0.12; // per eligible block
 export const MAX_EVENTS = 2;
@@ -292,51 +296,37 @@ export function topWeights(history = [], name) {
   }
   return out;
 }
-/** Same top weight (> 0) for the last 3+ sessions — not for assisted lifts (inverted). */
-export function plateaued(history, name) {
-  if (isAssisted(name)) return false;
-  const t = topWeights(history, name);
-  return t.length >= 3 && t[0] > 0 && t[0] === t[1] && t[1] === t[2];
-}
 
 const workingSets = (ex) => (ex.sets || []).map((s, i) => [s, i]).filter(([s]) => s.type !== 'drop');
+/** "Lighter" only makes sense with a real external load: not bodyweight (0), and
+ *  never on assisted machines, where less weight means less help (harder). */
+export const canLighten = (ex) => !isAssisted(ex.name) && workingSets(ex).some(([s]) => num(s.weight) > 0);
 
 /**
  * The quest's events: { [blockIndex]: { k, si } } — si = the set index it lands on.
- * Plateaus come first (they're real, not chance), then seeded rolls, capped.
  * `force` (dev/testing) puts that event on the first eligible block.
  */
 export function planEvents(exercises, key, history = [], force = null) {
   const blocks = buildBlocks(exercises);
   const plan = {};
   let n = 0;
-  const eligible = (b) => b.kind === 'normal' && b.indices.length === 1;
   blocks.forEach((b, bi) => {
-    if (n >= MAX_EVENTS || !eligible(b)) return;
-    const ex = exercises[b.indices[0]];
-    if (plateaued(history, ex.name)) { plan[bi] = { k: 'plateau', si: workingSets(ex)[0]?.[1] ?? 0 }; n++; }
-  });
-  blocks.forEach((b, bi) => {
-    if (n >= MAX_EVENTS || plan[bi] || !eligible(b)) return;
+    if (n >= MAX_EVENTS || b.kind !== 'normal' || b.indices.length !== 1) return;
     if (!force && seeded(`${key}|${bi}|roll`) >= EVENT_CHANCE) return;
     const ex = exercises[b.indices[0]];
     const ws = workingSets(ex);
     if (!ws.length) return;
-    const hasLast = topWeights(history, ex.name).length > 0;
-    const opts = Object.entries(EVENTS).filter(([k, e]) => k !== 'plateau' && (!e.needsLast || hasLast)
-      && (e.where !== 'notLast' || ws.length > 1));
+    const hasLast = topWeights(history, ex.name).length > 0, light = canLighten(ex);
+    const opts = Object.entries(EVENTS).filter(([, e]) => (!e.needsLast || hasLast) && (!(e.pct || e.light) || light));
     let k;
-    if (force && EVENTS[force]) k = force;
+    if (force && EVENTS[force] && opts.some(([x]) => x === force)) k = force;
     else {
       const total = opts.reduce((a, [, e]) => a + e.w, 0);
       let r = seeded(`${key}|${bi}|pick`) * total;
       k = opts.find(([, e]) => (r -= e.w) < 0)?.[0] || opts[0][0];
     }
     const e = EVENTS[k];
-    const si = e.where === 'last' ? ws[ws.length - 1][1]
-      : e.where === 'first' ? ws[0][1]
-      : e.where === 'notLast' ? ws[Math.floor(seeded(`${key}|${bi}|set`) * (ws.length - 1))][1]
-      : ws[Math.floor(seeded(`${key}|${bi}|set`) * ws.length)][1];
+    const si = e.where === 'last' ? ws[ws.length - 1][1] : ws[Math.floor(seeded(`${key}|${bi}|set`) * ws.length)][1];
     plan[bi] = { k, si };
     n++;
     force = null;
@@ -344,22 +334,24 @@ export function planEvents(exercises, key, history = [], force = null) {
   return plan;
 }
 
-/** The set as an event asks for it: heavier for shield/plateau (lighter on assisted). */
+const half = (x) => Math.round(x * 2) / 2; // nearest 0.5 kg
+/** The weight an event asks for: the same, or lighter (pct), never heavier. */
 export function eventLoad(ex, s, k) {
   const e = EVENTS[k];
-  if (!e?.load) return num(s.weight);
-  return isAssisted(ex.name) ? Math.max(0, num(s.weight) - e.load) : num(s.weight) + e.load;
+  const w = num(s.weight);
+  if (!e?.pct || !canLighten(ex)) return w;
+  return Math.min(w, half(w * e.pct));
 }
 
 /** Did a completed, accepted event set do what was asked? `last` = { lw, lr } from history. */
 export function eventDone(k, ex, s, last) {
   const reps = num(s.reps), w = num(s.weight);
   if (!s.completed) return false;
-  if (k === 'goblin' || k === 'weak') return reps >= topRep(ex);
+  if (k === 'goblin') return reps >= topRep(ex);
   if (k === 'mirror') {
     if (!last || last.lw == null) return false;
-    const better = isAssisted(ex.name) ? w <= last.lw : w >= last.lw;
-    return better && reps >= last.lr;
+    const same = isAssisted(ex.name) ? w <= last.lw : w >= last.lw;
+    return same && reps >= last.lr;
   }
   return reps > 0; // the rest are about doing it, and they're on your honour
 }
@@ -375,16 +367,16 @@ export function eventBonus(ex, s, kind) {
 
 // Fallback wording (the AI writes fresh lines when it can).
 export const EVENT_LINES = {
-  shield: ['The beast raises a shield of iron!', 'A rune-shield flares around it.', 'It hides behind a slab of steel.'],
-  enraged: ['Its eyes burn red. It will not wait for you.', 'Enraged, it lunges early!', 'Fury makes it quick.'],
+  shield: ['The beast hides behind a shield. Wear it down with a flurry!', 'A rune-shield flares. Chip at it, again and again.', 'Steel raised! Quick light blows will crack it.'],
+  enraged: ['It charges in a rage! Meet it with quick, light strikes.', 'Enraged, it lunges. Stay nimble.', 'Fury makes it reckless. Out-pace it.'],
   slow: ['A slow curse settles on your bones.', 'Time thickens like tar.', 'The air turns to syrup.'],
   paused: ['It braces at the bottom. Hold your ground.', 'Strike, pause, strike again.', 'Patience is the blade.'],
   mirror: ['Your own reflection steps out to fight.', 'A mirror-twin copies your last battle.', 'Can you match your past self?'],
   goblin: ['A treasure goblin darts past, pack in hand!', 'Gold glints behind the monster.', 'Something shiny is running away.'],
-  weak: ['A crack opens in its armour.', 'You spot a weak point!', 'Its guard drops for a moment.'],
+  weak: ['A crack opens in its armour. Many light blows will widen it.', 'You spot a weak point!', 'Its guard drops. Pepper it with strikes.'],
   spring: ['A healing spring bubbles nearby.', 'Cool water. Catch your breath.', 'The spring restores you.'],
-  ambush: ['A second foe leaps from the shadows!', 'Ambush! Another wave comes.', 'It was not alone.'],
-  plateau: ['This one has blocked your path for weeks.', 'The same wall, again. Break it.', 'It has grown fat on your stalls.'],
+  ambush: ['A small foe leaps from the shadows!', 'A straggler attacks. Brush it aside.', 'One more wave, a weak one.'],
+  blessing: ['The gods smile on you today.', 'A warm light fills the hall.', 'Fortune favours this blow.'],
 };
 export const VICTORY_LINES = ['{name} crumbles under {kg} kg!', '{kg} kg moved. {name} is no more.', '{name} falls. The halls echo with {kg} kg of iron.',
   'Your {sets} blows were too much for {name}.', '{name} drops its guard and its dignity.', 'Victory over {name}!'];

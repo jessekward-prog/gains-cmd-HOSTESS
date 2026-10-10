@@ -338,7 +338,7 @@ app.post('/api/quest', requireAuth, async (req, res) => {
 // Quest Mode flavour text, written once when a quest begins (never mid-set).
 // The app decides every event and number; the model only words them. Anything
 // odd is dropped and the app falls back to its own lines.
-const QUEST_EVENT_KEYS = ['shield', 'enraged', 'slow', 'paused', 'mirror', 'goblin', 'weak', 'spring', 'ambush', 'plateau'];
+const QUEST_EVENT_KEYS = ['shield', 'enraged', 'slow', 'paused', 'mirror', 'goblin', 'weak', 'spring', 'ambush', 'blessing'];
 const cleanLine = (t) => (typeof t === 'string' ? t.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim() : '');
 const okLine = (t, max = 110) => t && t.length <= max;
 app.post('/api/quest/script', requireAuth, async (req, res) => {
@@ -360,10 +360,10 @@ app.post('/api/quest/script', requireAuth, async (req, res) => {
       messages: [{ role: 'user', content: [
         `Exercises (numbered): ${names.map((n, i) => `${i + 1}. ${n}`).join('; ')}`,
         keys.length ? `events: for each key give 3 different one-line narrations of it happening to the monster. Keys and meaning: ${keys.map((k) => ({
-          shield: 'monster raises a shield', enraged: 'monster becomes enraged and impatient', slow: 'a slow curse on the hero',
-          paused: 'the hero must pause and hold', mirror: 'the hero fights a mirror image of their past self', goblin: 'a treasure goblin appears',
-          weak: 'a weak point appears in the monster armour', spring: 'a healing spring appears', ambush: 'a second foe ambushes',
-          plateau: 'an old foe that has blocked the path for weeks' }[k])).join('; ')}` : 'events: return an empty object.',
+          shield: 'monster hides behind a shield the hero wears down with a long flurry of light blows', enraged: 'monster charges in a rage, hero answers with quick light strikes',
+          slow: 'a slow curse on the hero', paused: 'the hero must pause and hold', mirror: 'the hero fights a mirror image of their past self',
+          goblin: 'a treasure goblin appears', weak: 'a weak point the hero peppers with many light blows', spring: 'a healing spring appears',
+          ambush: 'a small weak foe ambushes', blessing: 'the gods bless the hero' }[k])).join('; ')}` : 'events: return an empty object.',
         'victory: 6 one-line victory templates. Use {name} for the monster and {kg} for the kilograms moved; you may use {sets} for sets. No other braces.',
         'rest: for each numbered exercise, n = its number and 2 lines: one practical form cue for that exercise from a wise mentor, one taunt from the monster.',
         boss ? `boss: this week's boss embodies the neglected muscle group "${boss}". Give it a two-to-four word name and a one-line battle cry.` : 'boss: name "" and cry "".',

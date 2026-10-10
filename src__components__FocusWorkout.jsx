@@ -603,7 +603,7 @@ export default function FocusWorkout({
       const hitSet = { ...s, reps }, crit = isCrit(x, hitSet) || (evOk && EVENTS[ev.k]?.crit);
       const evLine = !ev ? '' : !evOk ? ' The event slips away.'
         : { shield: ' The shield shatters!', goblin: ' Goblin caught: +1 card pack!', mirror: ' You matched your past self!', weak: ' Critical hit!',
-          plateau: ' The wall cracks!', enraged: ' You kept pace!', slow: ' The curse breaks.', paused: ' Rock steady.', spring: '', ambush: ' Ambush repelled!' }[ev.k] || '';
+          enraged: ' You out-paced it!', slow: ' The curse breaks.', paused: ' Rock steady.', spring: '', ambush: ' Ambush repelled!', blessing: ' Blessed strike!' }[ev.k] || '';
       setQHit({ at: Date.now(), bi: ci, dmg: setDamage(x, hitSet, kind), crit,
         msg: `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${evLine}${allDone ? ' Finishing blow!' : ''}` });
     }
@@ -711,8 +711,14 @@ export default function FocusWorkout({
     return ls[Math.floor(seeded(`${qKey}|${ci}|line`) * ls.length)];
   };
   const evAct = (k) => EVENTS[k].act.replace('{top}', topRep(ex))
-    .replace('{last}', st?.lw != null ? `${fmtW(st.lw)} kg × ${st.lr}` : 'last time')
-    .replace('{lw}', fmtW(st?.lw ?? fs?.weight));
+    .replace('{last}', st?.lw != null ? `${fmtW(st.lw)} kg × ${st.lr}` : 'last time');
+  // Shield's 45 s of steady reps: a timer in the banner, its start kept on the set.
+  const timedLeft = evActive && EVENTS[evActive].timed && fs.qe.at ? Math.max(0, EVENTS[evActive].timed - (Date.now() - fs.qe.at) / 1000) : null;
+  useTick(timedLeft !== null && timedLeft > 0, 250);
+  const buzzed = useRef(null);
+  useEffect(() => {
+    if (timedLeft === 0 && buzzed.current !== fs?.qe?.at) { buzzed.current = fs.qe.at; try { navigator.vibrate?.([200, 100, 200]); } catch { /* no vibration */ } }
+  }, [timedLeft === 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const acceptEvent = () => {
     const k = evOffered, e = EVENTS[k];
     if (k === 'ambush') {
@@ -722,13 +728,14 @@ export default function FocusWorkout({
         const next = { ...prev, exercises: [...prev.exercises] };
         const sets = [...next.exercises[ei].sets];
         sets[fi] = { ...sets[fi], qe: { k, st: 'seen' } };
-        sets.push({ weight: roundW(num(fs.weight) * 0.8), reps: '', completed: false, qe: { k, st: 'accepted' } });
+        sets.push({ weight: roundW(Math.round(num(fs.weight) * e.bonusSet.pct * 2) / 2), reps: String(e.bonusSet.reps), completed: false, qe: { k, st: 'accepted' } });
         next.exercises[ei] = { ...next.exercises[ei], sets };
         return next;
       });
       return;
     }
-    patchSet(ei, fi, { qe: { k, st: 'accepted' }, ...(e.load ? { weight: roundW(eventLoad(ex, fs, k)) } : {}), ...(e.toFailure ? { reps: String(topRep(ex)) } : {}) });
+    const reps = e.reps ? String(e.reps) : e.plusReps ? String(num(qReps) + e.plusReps) : null;
+    patchSet(ei, fi, { qe: { k, st: 'accepted' }, ...(e.pct ? { weight: roundW(eventLoad(ex, fs, k)) } : {}), ...(reps ? { reps } : {}) });
   };
   const declineEvent = () => patchSet(ei, fi, { qe: { k: evOffered, st: 'declined' } });
 
@@ -901,6 +908,20 @@ export default function FocusWorkout({
                   {evAct(evKey)}
                   {EVENTS[evKey].xp > 1 ? ` · ${EVENTS[evKey].xp}× XP` : ''}{EVENTS[evKey].crit ? ' · crit' : ''}{EVENTS[evKey].pack ? ' · +1 card pack' : ''}
                 </div>
+                {evActive && EVENTS[evActive].timed && (
+                  timedLeft === null ? (
+                    <button onClick={() => patchSet(ei, fi, { qe: { ...fs.qe, at: Date.now() } })} className="w-full mt-3 h-11 rounded-[14px] font-extrabold text-[14px]"
+                      style={{ background: EVENTS[evActive].color, color: '#050505' }}>Start {EVENTS[evActive].timed} s</button>
+                  ) : (
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="g-tab" style={{ font: `500 26px ${MONO}`, color: timedLeft > 0 ? 'var(--color-text-primary)' : EVENTS[evActive].color }}>{mmss(timedLeft + (timedLeft > 0 ? 0.999 : 0))}</span>
+                      <div className="flex-1 h-1.5 rounded-[3px] bg-bg-3 overflow-hidden">
+                        <div className="h-full" style={{ width: `${(1 - timedLeft / EVENTS[evActive].timed) * 100}%`, background: EVENTS[evActive].color, transition: 'width .25s linear' }} />
+                      </div>
+                      <span className="text-text-secondary" style={{ font: `500 11px ${MONO}` }}>{timedLeft > 0 ? 'keep going' : 'time! log your reps'}</span>
+                    </div>
+                  )
+                )}
                 {evOffered && (
                   <div className="flex gap-2 mt-3">
                     <button onClick={declineEvent} className="flex-1 h-11 rounded-[14px] bg-bg-2 text-text-secondary font-bold text-[13px]">Not today</button>

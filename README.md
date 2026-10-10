@@ -26,8 +26,8 @@ a hand-off screen between exercises, and a summary with your PRs when you finish
   titles, pets and hero-card borders, opens a loot chest and earns a card pack for
   the dithered Card Vault (with a Forge for your own art). Progress is saved to the
   account. Rare random events (Shield, Enraged, Mirror Match, Treasure Goblin,
-  Plateau Breaker and more) ask for a little extra on one set for bonus XP, crits
-  or packs; a weekly boss is your least-trained muscle. Your local model words the
+  Blessing and more) mix up one set — always the same weight or lighter, never to
+  failure (e.g. half the weight, steady reps for 45 s) — for bonus XP, crits or packs; a weekly boss is your least-trained muscle. Your local model words the
   events, writes victory lines, rest scrolls and a short quest chronicle saved to
   History — written up front or after the save, never while you train, with
   built-in lines when it's offline. Sprite and art credits are in [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -115,7 +115,7 @@ console.log('clear checks passed');
 }
 console.log('forge checks passed');
 
-// Events: deterministic per quest, capped, only on plain blocks; plateau first.
+// Events: deterministic per quest, capped, only on plain blocks.
 {
   const S2 = (w, r, done = false, extra = {}) => ({ weight: String(w), reps: String(r), completed: done, ...extra });
   const exs = Array.from({ length: 30 }, (_, i) => ex(`Lift ${i}`, [S2(50, 8), S2(50, 8), S2(50, 8)]));
@@ -124,17 +124,24 @@ console.log('forge checks passed');
   assert.ok(Object.keys(a).length <= Q.MAX_EVENTS);
   const many = Array.from({ length: 40 }, (_, k) => Object.keys(Q.planEvents(exs, `q${k}`)).length);
   assert.ok(many.some((n) => n > 0) && many.some((n) => n === 0)); // rare, not never
-  // plateau: same top weight 3 sessions running → plateau on that block's first set
-  const hist = [1, 2, 3].map((d) => ({ exercises: [{ name: 'Lift 3', sets: [S2(60, 8, true)] }] }));
-  const p = Q.planEvents(exs, 'quest-B', hist);
-  assert.deepEqual(p[3], { k: 'plateau', si: 0 });
-  assert.ok(!Q.plateaued(hist.map((h) => ({ exercises: [{ ...h.exercises[0], name: 'Assisted dip' }] })), 'Assisted dip'));
-  // supersets / cardio never get events; force puts one on the first plain block
-  const f = Q.planEvents([{ name: 'Treadmill', type: 'cardio', sets: [{ type: 'cardio' }] }, ex('Row', [S2(40, 8), S2(40, 8)])], 'k', [], 'shield');
-  assert.deepEqual(Object.keys(f), ['1']); assert.equal(f[1].k, 'shield'); assert.equal(f[1].si, 1);
-  // shield load: heavier, but LIGHTER counterweight on assisted machines
-  assert.equal(Q.eventLoad(ex('Bench', []), S2(80, 8), 'shield'), 82.5);
-  assert.equal(Q.eventLoad(ex('Assisted pull-up', []), S2(30, 8), 'shield'), 27.5);
+  // Safety: an event never makes a set heavier, and lightening needs a real
+  // external load (never assisted — less counterweight is harder — or bodyweight).
+  for (const [k, e] of Object.entries(Q.EVENTS)) {
+    assert.ok(!('load' in e) && !('toFailure' in e), `${k} must not add load or go to failure`);
+    assert.ok(Q.eventLoad(ex('Bench', []), S2(80, 8), k) <= 80, `${k} heavier`);
+    assert.equal(Q.eventLoad(ex('Assisted pull-up', [S2(30, 8)]), S2(30, 8), k), 30, `${k} changed an assisted load`);
+  }
+  assert.equal(Q.eventLoad(ex('Bench', [S2(80, 8)]), S2(80, 8), 'shield'), 40);
+  assert.equal(Q.eventLoad(ex('Bench', [S2(55, 8)]), S2(55, 8), 'slow'), 44);
+  for (let k = 0; k < 60; k++) { // assisted / bodyweight lifts only ever get load-neutral events
+    for (const name of ['Assisted pull-up', 'Push-ups']) {
+      const w = name === 'Push-ups' ? 0 : 30;
+      const plan = Q.planEvents([ex(name, [S2(w, 8), S2(w, 8)])], `s${k}`);
+      for (const ev of Object.values(plan)) assert.ok(!Q.EVENTS[ev.k].pct && !Q.EVENTS[ev.k].light, `${name} got ${ev.k}`);
+    }
+  }
+  assert.deepEqual(Object.keys(Q.planEvents([ex('Assisted pull-up', [S2(30, 8)])], 'k', [], 'shield')), ['0']);
+  assert.notEqual(Q.planEvents([ex('Assisted pull-up', [S2(30, 8)])], 'k', [], 'shield')[0].k, 'shield');
   // success + bonus read back from the set
   assert.ok(Q.eventDone('goblin', ex('x', []), S2(50, 12, true)));
   assert.ok(!Q.eventDone('goblin', ex('x', []), S2(50, 11, true)));
