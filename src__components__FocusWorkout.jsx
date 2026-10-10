@@ -441,6 +441,9 @@ export default function FocusWorkout({
   // Phase is derived from the real state (rest timer, sets done) plus three
   // stamps: the last hit, the last victory, and when this encounter began.
   const quest = layout === 'quest';
+  // Dense and Quest: swipe left/right changes exercise, and vertical drags just
+  // scroll the page (Quest has the set pips on screen, so no set swiping).
+  const swipeExercises = dense || quest;
   const { prof } = useQuest();
   const mult = xpMult(prof, prof.lvl);
   const [qHit, setQHit] = useState(null); // { at, bi, dmg, crit, msg }
@@ -579,7 +582,7 @@ export default function FocusWorkout({
   // ── Swipe ─────────────────────────────────────────────────────────
   const swipe = (dir) => {
     let apply = null;
-    if (!dense && (dir === 'left' || dir === 'right')) {
+    if (!swipeExercises && (dir === 'left' || dir === 'right')) {
       const ni = fi + (dir === 'left' ? 1 : -1);
       if (ni >= 0 && ni < ex.sets.length) apply = () => setFset(ni);
     } else {
@@ -609,7 +612,7 @@ export default function FocusWorkout({
     if (!d.moved && Math.hypot(dx, dy) > 10) {
       d.moved = true;
       d.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-      if (dense && d.axis === 'y') { d.on = false; return; }
+      if (swipeExercises && d.axis === 'y') { d.on = false; return; }
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     }
     if (d.moved) setDrag({ dx: d.axis === 'x' ? dx : 0, dy: d.axis === 'y' ? dy * 0.6 : 0, anim: false });
@@ -728,7 +731,7 @@ export default function FocusWorkout({
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
             className="relative flex-shrink-0 select-none"
             style={{
-              touchAction: dense ? 'pan-y' : 'none',
+              touchAction: swipeExercises ? 'pan-y' : 'none',
               transform: `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 40}deg)`,
               transition: drag.anim ? 'transform .3s cubic-bezier(.2,1.2,.3,1)' : 'none',
               opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
@@ -743,7 +746,7 @@ export default function FocusWorkout({
             className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
             style={{
               padding: dense ? 16 : 20,
-              touchAction: dense ? 'pan-y' : 'none',
+              touchAction: swipeExercises ? 'pan-y' : 'none',
               transform: `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 40}deg)`,
               transition: drag.anim ? 'transform .3s cubic-bezier(.2,1.2,.3,1)' : 'none',
               opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
@@ -897,7 +900,7 @@ export default function FocusWorkout({
             )}
 
             <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
-              {quest && qPreview && kind !== 'interval' ? qPreview : dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
+              {quest && qPreview && kind !== 'interval' ? `${qPreview} · ← → exercises` : dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
             </div>
 
             {goFlash && !quest && (
