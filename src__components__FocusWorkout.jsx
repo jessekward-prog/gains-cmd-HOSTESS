@@ -138,7 +138,7 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
   const dSets = d ? d.indices.flatMap((i) => exercises[i].sets.filter((s) => s.completed)) : [];
   const dVol = dSets.reduce((a, s) => a + num(s.weight) * num(s.reps), 0);
   const n = next >= 0 ? blocks[next] : null, n0 = n && exercises[n.indices[0]];
-  const left = intro ? intro.left : timer.remaining, total = intro ? intro.total : timer.total;
+  const left = intro ? Math.max(0, intro.left) : timer.remaining, total = intro ? intro.total : timer.total;
   return (
     <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
       {d && (
@@ -171,7 +171,7 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
       {walking && !onClaim && (
         <div className="mt-[18px] relative overflow-hidden flex items-center gap-2.5 py-2.5 pr-2.5 pl-3.5 rounded-[14px] bg-bg-2">
           <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-acc-soft)', width: `${total ? (1 - left / total) * 100 : 0}%`, transition: 'width 1s linear' }} />
-          <span className="relative g-label">{intro ? 'SETTING OFF' : 'REST · WALKING'}</span>
+          <span className="relative g-label">{intro ? intro.label : 'REST · WALKING'}</span>
           <span className="relative flex-1 g-tab" style={{ font: `500 20px ${MONO}` }}>{mmss(left)}</span>
           {!intro && <button onClick={() => timer.extend(15)} className="relative h-[34px] px-2.5 rounded-[10px] bg-bg-3 text-text-primary" style={{ font: `500 11px ${MONO}` }}>+15s</button>}
           <button onClick={onSkip} className="relative h-[34px] px-3 rounded-[10px] bg-accent font-bold text-xs" style={{ color: 'var(--color-on-accent)' }}>Sprint</button>
@@ -462,6 +462,7 @@ export default function FocusWorkout({
   const blockIsDone = blockDone(exercises, block);
   const allClear = blocks.every((b) => blockDone(exercises, b));
   const clearRef = useRef(onQuestClear);
+  const winRef = useRef(null); // the pending victory → next-monster step
   clearRef.current = onQuestClear;
   useEffect(() => {
     if (!quest || !blockIsDone || celebrated.current.has(ci)) return;
@@ -473,11 +474,21 @@ export default function FocusWorkout({
     const un = unlocks(before.lvl, won.lvl);
     setQWin({ at: hitAt, msg: `HERO gained ${gain.toLocaleString()} XP!${won.lvl > before.lvl ? ` Grew to Lv ${won.lvl}!` : ''}${un ? ` Unlocked ${un}!` : ''}` });
     const nx = nextOpenBlock(exercises, blocks, ci);
+    // The last monster goes straight to the loot (which shows the XP) once it falls.
     const t = setTimeout(() => {
+      winRef.current = null;
       if (nx < 0) { timer.stop(); clearRef.current?.(); } else openBlock(nx);
-    }, hitAt - Date.now() + 3800);
+    }, hitAt - Date.now() + (nx < 0 ? 1400 : 3800));
+    winRef.current = { t, nx };
     return () => clearTimeout(t);
   }, [quest, ci, blockIsDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sprint during a victory: skip the rest of it and the rest timer, on to the next monster.
+  const skipVictory = () => {
+    const w = winRef.current;
+    if (!w) return;
+    clearTimeout(w.t); winRef.current = null; setQWin(null);
+    if (w.nx < 0) { timer.stop(); clearRef.current?.(); } else { timer.stop(); openBlock(w.nx); }
+  };
 
   // Re-render at each phase boundary; the scene animates itself in between.
   const [, qBump] = useState(0);
@@ -546,7 +557,7 @@ export default function FocusWorkout({
     if (quest) {
       const hitSet = { ...s, reps }, crit = isCrit(x, hitSet);
       setQHit({ at: Date.now(), bi: ci, dmg: setDamage(x, hitSet, kind), crit,
-        msg: `HERO lifts ${fmtW(s.weight)} kg × ${reps}!${crit ? " It's super effective!" : ''}${allDone ? ' Finishing blow!' : ''}` });
+        msg: `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${allDone ? ' Finishing blow!' : ''}` });
     }
     if (allDone) {
       if (quest) return; // the victory effect below takes it from here
@@ -659,13 +670,14 @@ export default function FocusWorkout({
       : qPhase === 'encounter' ? 'Something stirs in the dark…'
       : blockStarted ? `${mon.species} gets back up. Set ${label} — go!` : `A wild ${mon.name} appeared!`;
     if (!fs?.completed && kind !== 'cardio' && kind !== 'interval') {
-      completeLabel = qPhase === 'attack' ? 'Hit!' : `Attack · ${completeLabel[0].toLowerCase()}${completeLabel.slice(1)}`;
+      completeLabel = `Attack · ${completeLabel[0].toLowerCase()}${completeLabel.slice(1)}`;
     }
   }
   const qShown = quest ? addXp(prof.lvl, prof.xp, questSession(exercises, mult).xp) : null;
   const qClear = quest && allClear && qPhase !== 'victory';
   if (qClear) { qPhase = 'walk'; qMsg = 'Quest clear! The last monster dropped a loot chest.'; }
-  const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory' || qPhase === 'encounter');
+  // The encounter only plays on the stage — the controls are usable straight away.
+  const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory');
   const qReps = fs ? shownReps(ex, fs, st) : '';
   const qPreview = fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
 
@@ -705,8 +717,10 @@ export default function FocusWorkout({
           <QuestTravel exercises={exercises} blocks={blocks}
             defeated={qPhase === 'victory' || qClear ? ci : ci > 0 && blockDone(exercises, blocks[ci - 1]) ? ci - 1 : -1}
             next={qClear ? -1 : qPhase === 'victory' ? nextOpenBlock(exercises, blocks, ci) : ci}
-            walking={qPhase === 'walk'} intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4 } : null}
-            timer={timer} onSkip={introOn ? () => setIntroOff(true) : skipRest}
+            walking={qPhase === 'walk' || qPhase === 'victory'}
+            intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4, label: 'SETTING OFF' }
+              : qPhase === 'victory' && !resting && qWin ? { left: (qWin.at + 3800 - Date.now()) / 1000, total: 3.8, label: 'ONWARD' } : null}
+            timer={timer} onSkip={introOn ? () => setIntroOff(true) : qPhase === 'victory' ? skipVictory : skipRest}
             onClaim={qClear ? onQuestClear : null} />
         ) : kind === 'cardio' ? (
           // Same swipe handling as the other cards, so cardio blocks cycle too.
@@ -900,7 +914,7 @@ export default function FocusWorkout({
           </div>
         )}
 
-        {!dense && nx >= 0 && nx !== ci && (
+        {!dense && !qTravel && nx >= 0 && nx !== ci && (
           <button onClick={() => openBlock(nx)} className="flex-shrink-0 flex items-center gap-3 px-[18px] py-4 rounded-[22px] bg-bg-1 text-left opacity-85">
             <div className="flex-1 min-w-0">
               <div className="g-label">UP NEXT</div>

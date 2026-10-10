@@ -150,7 +150,9 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
   useBackHandler(phase === 'summary', finish);
 
   if (phase === 'loot' && !failed) {
-    return <QuestLoot exercises={summary.exercises} questKey={questKey} onDone={() => setPhase('analysis')} />;
+    // The loot IS a quest's reward moment: straight on to the summary after it
+    // (coach notes keep arriving there; PRs are on the summary too).
+    return <QuestLoot exercises={summary.exercises} questKey={questKey} onDone={() => setPhase('summary')} />;
   }
 
   if (failed) {
@@ -347,21 +349,22 @@ function QuestLoot({ exercises, questKey, onDone }) {
   const { prof, updProf } = useQuest();
   const [start] = useState(() => ({ prof, session: questSession(exercises, xpMult(prof, prof.lvl)), at: Date.now() }));
   const [cardOpen, setCardOpen] = useState(false);
+  const [skipped, setSkipped] = useState(false); // tap anywhere: straight to the reveal
   const [, tick] = useState(0);
   useEffect(() => { updProf((p) => clearQuest(p, questKey, start.session)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 100); return () => clearInterval(id); }, []);
 
-  const t = (Date.now() - start.at) / 1000;
+  const t = skipped ? 9 : (Date.now() - start.at) / 1000;
   const loot = prof.lastChest === questKey ? prof.lastLoot : null;
   const after = addXp(start.prof.lvl, start.prof.xp, start.session.xp);
   const up = after.lvl > start.prof.lvl;
-  const reelT = t - 1.2, rolling = reelT >= 0 && (reelT < 2.4 || !loot), shown = reelT >= 2.4 && loot;
+  const reelT = t - 0.6, rolling = reelT >= 0 && (reelT < 2.4 || !loot), shown = reelT >= 2.4 && loot;
   const reelI = Math.floor(Math.pow(Math.max(0, reelT), 0.6) * 12);
   const k = Math.min(1, t / 1.0);
   const xpNow = Math.round(start.session.xp * (1 - Math.pow(1 - k, 3)));
 
   return portal(
-    <div className={`${LAYER} overflow-y-auto flex flex-col items-center justify-center text-center px-6 fx-fade`} style={{ background: '#050505' }}>
+    <div onClick={() => setSkipped(true)} className={`${LAYER} overflow-y-auto flex flex-col items-center justify-center text-center px-6 fx-fade`} style={{ background: '#050505' }}>
       <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>QUEST CLEAR</div>
       <div className="mt-2" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1 }}>+{xpNow.toLocaleString()} XP</div>
       <div className="mt-2 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
@@ -389,6 +392,8 @@ function QuestLoot({ exercises, questKey, onDone }) {
       <div className="w-full max-w-sm flex gap-2 mt-6" style={{ opacity: shown ? 1 : 0, transition: 'opacity .3s', pointerEvents: shown ? 'auto' : 'none' }}>
         <button onClick={() => setCardOpen(true)} className="flex-1 h-[56px] rounded-[18px] bg-bg-2 font-bold text-sm">Hero card</button>
         <button onClick={onDone} className="flex-[2] h-[56px] rounded-[18px] font-extrabold text-[15px]" style={{ background: '#ff2222', color: '#fff' }}>Continue</button>
+      </div>
+      <div className="mt-3 text-text-tertiary" style={{ font: `400 10px ${MONO}`, opacity: shown ? 0 : 1 }}>Tap to skip
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
     </div>
