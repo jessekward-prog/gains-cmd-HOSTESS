@@ -18,6 +18,14 @@ a hand-off screen between exercises, and a summary with your PRs when you finish
   Settings → Exercise library matches them to the library (exact spellings match
   themselves, the local model suggests the rest, and you can change any match).
   Data, animation and body-map credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
+- **Quest Mode (optional layout):** Settings → Workout layout → Quest turns the
+  workout into a pixel monster battler. Each exercise is a monster whose HP is the
+  planned work, every set you log is an attack (kg × reps; bodyweight and assisted
+  lifts hit for a flat 60 kg), rest is the monster catching its breath, and beating
+  the top of your rep range is a crit. Clearing a quest banks XP toward levels,
+  titles, pets and hero-card borders, opens a loot chest and earns a card pack for
+  the dithered Card Vault (with a Forge for your own art). Progress is saved to the
+  account. Sprite and art credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
 - **AI (optional):** a local model writes post-workout notes, answers in the Coach
   tab, builds programs in the AI Wizard and remixes workouts. Everything else
   works without it.

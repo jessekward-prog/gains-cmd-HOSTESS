@@ -1,0 +1,3 @@
+Monster + knight sprites, dungeon tiles: 16x16 DungeonTileset II by 0x72 (https://0x72.itch.io/dungeontileset-ii), CC0 1.0.
+Heroes (samurai, ronin, brawler, kings, warlord, sellsword, iron guard, huntress, archer, wizard, warlock, sorcerer, hexblade): LuizMelo packs (https://luizmelo.itch.io), CC0 1.0.
+Landscape layers (land_*.png): ansimuz — Mountain Dusk Parallax background (https://ansimuz.itch.io/mountain-dusk-parallax-background), CC0 1.0.

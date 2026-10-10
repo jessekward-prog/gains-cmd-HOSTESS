@@ -11,6 +11,7 @@ import BlockGridView from '../components/BlockGridView';
 import SupersetCard from '../components/SupersetCard';
 import CardioCard from '../components/CardioCard';
 import FocusWorkout from '../components/FocusWorkout';
+import QuestTitle from '../components/QuestTitle';
 import { Countdown, FinishFlow } from '../components/FocusTransitions';
 import { summarize, workoutLayout as readLayout } from '../lib/focus';
 import { moodState } from '../lib/mood';
@@ -79,10 +80,12 @@ export default function WorkoutPage({ onNavigate }) {
   const [variationData, setVariationData] = useState(null);
   const [reordering, setReordering] = useState(false);
   const [workoutLayout] = useState(readLayout);
-  const isFocus = workoutLayout === 'focus' || workoutLayout === 'dense';
+  const isQuest = workoutLayout === 'quest';
+  const isFocus = workoutLayout === 'focus' || workoutLayout === 'dense' || isQuest;
   // A workout started a moment ago (from Programs) opens with the countdown.
+  // Quest Mode has its own opening: the hero setting off across the meadow.
   const [countdown, setCountdown] = useState(() =>
-    isFocus && !!activeWorkout && Date.now() - new Date(activeWorkout.startTime).getTime() < 4000);
+    isFocus && !isQuest && !!activeWorkout && Date.now() - new Date(activeWorkout.startTime).getTime() < 4000);
   const [finishing, setFinishing] = useState(null); // { summary } while the finish flow is up
   const [finishError, setFinishError] = useState(null);
   const [activeTimerIndices, setActiveTimerIndices] = useState({});
@@ -680,6 +683,7 @@ export default function WorkoutPage({ onNavigate }) {
     return (
       <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <FinishFlow
+        quest={isQuest}
         summary={finishing.summary}
         result={completeResult}
         failed={finishError}
@@ -707,6 +711,13 @@ export default function WorkoutPage({ onNavigate }) {
     );
   }
 
+  if (!activeWorkout && isQuest) {
+    return (
+      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="h-full">
+        <QuestTitle onNavigate={onNavigate} />
+      </motion.div>
+    );
+  }
   if (!activeWorkout) {
     return (
       <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="g-root flex flex-col items-center justify-center gap-3 min-h-[60vh] text-center px-10">

@@ -47,6 +47,10 @@ export const getSettings = () => api.get('/api/settings');
 export const saveAppearance = (appearance) => api.post('/api/appearance', { appearance });
 export const saveExerciseLinks = (links) => api.post('/api/exercise-links', { links });
 export const suggestExerciseLinks = (items) => api.post('/api/exercise-links/suggest', { items });
+export const saveQuest = (quest) => api.post('/api/quest', { quest });
+export const getQuestArt = () => api.get('/api/quest/art');
+export const saveQuestArt = (slot, rec) => api.put(`/api/quest/art/${slot}`, rec);
+export const deleteQuestArt = (slot) => api.del(`/api/quest/art/${slot}`);
 export const updateAggression = (data) => api.post('/api/aggression', data);
 
 // Chat

@@ -100,8 +100,8 @@ function AppShell() {
       <AppearanceSync />
 
       {/* Global rest timer — always mounted, survives page navigation. The
-          Focus/Dense card shows rest in-card, so the circle only floats on other tabs. */}
-      <GlobalRestTimer hidden={tab === 'workout' && !!activeWorkout && ['focus', 'dense'].includes(workoutLayout())} />
+          Focus/Dense/Quest card shows rest in-card, so the circle only floats on other tabs. */}
+      <GlobalRestTimer hidden={tab === 'workout' && !!activeWorkout && ['focus', 'dense', 'quest'].includes(workoutLayout())} />
     </div>
   );
 }

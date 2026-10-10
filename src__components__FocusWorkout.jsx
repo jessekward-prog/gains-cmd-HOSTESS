@@ -18,6 +18,9 @@ import {
 import { nextMemberForRound, roundOfSet } from '../lib/supersets';
 import { moodState } from '../lib/mood';
 import ExerciseInfo from './ExerciseInfo';
+import QuestStage from './QuestStage';
+import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
+import { monsterOf, questSession, blockXp, addXp, unlocks, xpMult, setDamage, isCrit, topRep, loadOf, LANDS } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
@@ -99,6 +102,78 @@ function RestRing({ timer, next, onSkip }) {
         <button onClick={() => timer.extend(15)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
         <button onClick={onSkip} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
       </div>
+    </div>
+  );
+}
+
+// ── Quest Mode panels (the handoff's ctlRest / ctlTravel) ────────────
+function QuestRest({ timer, next, onSkip }) {
+  const done = timer.total > 0 ? 1 - timer.remaining / timer.total : 0;
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center pt-[18px] pb-1.5">
+        <span className="g-label" style={{ letterSpacing: '.16em' }}>REST</span>
+        <span className="g-tab" style={{ fontSize: 52, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05 }}>{mmss(timer.remaining)}</span>
+        <div className="w-full h-1 rounded-[2px] bg-bg-3 mt-3.5 overflow-hidden">
+          <div className="h-full bg-accent" style={{ width: `${done * 100}%`, transition: 'width 1s linear' }} />
+        </div>
+        {next && (
+          <>
+            <div className="mt-4 g-label">NEXT · {next.tag}</div>
+            <div className="mt-1.5 text-center" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
+            <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
+          </>
+        )}
+      </div>
+      <div className="flex gap-2 w-full mt-3.5">
+        <button onClick={() => timer.extend(15)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
+        <button onClick={onSkip} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>Skip rest</button>
+      </div>
+    </div>
+  );
+}
+
+function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer, onSkip }) {
+  const d = defeated >= 0 ? blocks[defeated] : null;
+  const dSets = d ? d.indices.flatMap((i) => exercises[i].sets.filter((s) => s.completed)) : [];
+  const dVol = dSets.reduce((a, s) => a + num(s.weight) * num(s.reps), 0);
+  const n = next >= 0 ? blocks[next] : null, n0 = n && exercises[n.indices[0]];
+  const left = intro ? intro.left : timer.remaining, total = intro ? intro.total : timer.total;
+  return (
+    <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
+      {d && (
+        <>
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-full bg-success text-white flex items-center justify-center font-bold flex-shrink-0">✓</span>
+            <div className="min-w-0">
+              <div className="text-base font-bold text-text-secondary truncate">{blockName(exercises, d)} defeated</div>
+              <div className="mt-0.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{dSets.length} sets · {Math.round(dVol).toLocaleString()} kg moved</div>
+            </div>
+          </div>
+          {n && <div className="h-px bg-bg-3 my-5" />}
+        </>
+      )}
+      {n && (
+        <>
+          <div className="flex justify-between items-center">
+            <span className="text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>NEXT ENCOUNTER · {next + 1} OF {blocks.length}</span>
+            <span className="px-2 py-1 rounded-[8px] bg-bg-2 text-text-secondary" style={{ font: `600 10px ${MONO}`, letterSpacing: '.12em' }}>LV {Math.round(num(n0.sets[0]?.weight)) || '—'}</span>
+          </div>
+          <div className="mt-2.5" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 0.98, textWrap: 'balance' }}>{blockName(exercises, n)}</div>
+          <div className="mt-2.5 text-text-secondary" style={{ font: `400 13px ${MONO}` }}>
+            {n.kind === 'cardio' ? 'Cardio' : `${n0.sets.length} sets × ${n0.targetReps} reps · ${restLabel(n0.restSeconds)} rest`}
+          </div>
+        </>
+      )}
+      {walking && (
+        <div className="mt-[18px] relative overflow-hidden flex items-center gap-2.5 py-2.5 pr-2.5 pl-3.5 rounded-[14px] bg-bg-2">
+          <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-acc-soft)', width: `${total ? (1 - left / total) * 100 : 0}%`, transition: 'width 1s linear' }} />
+          <span className="relative g-label">{intro ? 'SETTING OFF' : 'REST · WALKING'}</span>
+          <span className="relative flex-1 g-tab" style={{ font: `500 20px ${MONO}` }}>{mmss(left)}</span>
+          {!intro && <button onClick={() => timer.extend(15)} className="relative h-[34px] px-2.5 rounded-[10px] bg-bg-3 text-text-primary" style={{ font: `500 11px ${MONO}` }}>+15s</button>}
+          <button onClick={onSkip} className="relative h-[34px] px-3 rounded-[10px] bg-accent font-bold text-xs" style={{ color: 'var(--color-on-accent)' }}>Sprint</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -359,6 +434,32 @@ export default function FocusWorkout({
   const kind = block.kind;
   const isTimed = kind === 'bfr' || kind === 'interval';
 
+  // ── Quest Mode: the same workout as a monster battler ─────────────
+  // Phase is derived from the real state (rest timer, sets done) plus three
+  // stamps: the last hit, the last victory, and when this encounter began.
+  const quest = layout === 'quest';
+  const { prof } = useQuest();
+  const mult = xpMult(prof, prof.lvl);
+  const [qHit, setQHit] = useState(null); // { at, bi, dmg, crit, msg }
+  const [qWin, setQWin] = useState(null); // { at, msg } — victory starts after the finishing hit
+  const [encAt, setEncAt] = useState(0);
+  const [introOff, setIntroOff] = useState(false);
+  const introEnd = quest && !introOff ? new Date(workout.startTime).getTime() + 4000 : 0;
+  const blockStarted = block.indices.some((i) => exercises[i].sets.some((s) => s.completed));
+  const introOn = Date.now() < introEnd;
+  useEffect(() => {
+    if (quest && !timer.isRunning && !blockStarted && !introOn) setEncAt(Date.now());
+  }, [quest, ci, timer.isRunning, introOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-render at each phase boundary; the scene animates itself in between.
+  const [, qBump] = useState(0);
+  useEffect(() => {
+    if (!quest) return;
+    const now = Date.now();
+    const ends = [introEnd, encAt + 2500, qHit && qHit.at + 1500, qWin && qWin.at, qWin && qWin.at + 1400].filter((t) => t && t > now);
+    const ids = ends.map((t) => setTimeout(() => qBump((n) => n + 1), t - now + 20));
+    return () => ids.forEach(clearTimeout);
+  }, [quest, introEnd, encAt, qHit, qWin]);
+
   // GO flash when a rest runs out on its own (TimerContext stamps endedAt).
   useEffect(() => { if (timer.endedAt) setGoAt(timer.endedAt); }, [timer.endedAt]);
   const [, bump] = useState(0);
@@ -413,12 +514,25 @@ export default function FocusWorkout({
     const nextIsDrop = x.sets[si + 1]?.type === 'drop' && !x.sets[si + 1].completed;
     if (!nextIsDrop) onSetComplete(xi, si, x.restSeconds);
 
+    if (quest) {
+      const hitSet = { ...s, reps }, crit = isCrit(x, hitSet);
+      setQHit({ at: Date.now(), bi: ci, dmg: setDamage(x, hitSet, kind), crit,
+        msg: `HERO lifts ${fmtW(s.weight)} kg × ${reps}!${crit ? " It's super effective!" : ''}${allDone ? ' Finishing blow!' : ''}` });
+    }
     if (allDone) {
-      setTimeout(() => {
-        const after = exercises.map((e, i) => (i === xi ? { ...e, sets: e.sets.map((ss, j) => (j === si ? { ...ss, completed: true } : ss)) } : e));
-        const nx = nextOpenBlock(after, blocks, ci);
-        if (nx < 0) onFinish(); else setHandoff({ from: ci, to: nx });
-      }, 600);
+      const after = exercises.map((e, i) => (i === xi ? { ...e, sets: e.sets.map((ss, j) => (j === si ? { ...ss, completed: true, reps: reps ?? '' } : ss)) } : e));
+      const nx = nextOpenBlock(after, blocks, ci);
+      if (quest) {
+        // Hit (1.5s) → victory with the XP line (3.8s) → walk on to the next encounter.
+        const gain = blockXp(after, block, mult);
+        const before = addXp(prof.lvl, prof.xp, questSession(exercises, mult).xp);
+        const won = addXp(before.lvl, before.xp, gain);
+        const un = unlocks(before.lvl, won.lvl);
+        setQWin({ at: Date.now() + 1500, msg: `HERO gained ${gain.toLocaleString()} XP!${won.lvl > before.lvl ? ` Grew to Lv ${won.lvl}!` : ''}${un ? ` Unlocked ${un}!` : ''}` });
+        setTimeout(() => { if (nx < 0) onFinish(); else openBlock(nx); }, 1500 + 3800);
+        return;
+      }
+      setTimeout(() => { if (nx < 0) onFinish(); else setHandoff({ from: ci, to: nx }); }, 600);
       return;
     }
     if (block.kind === 'superset' && roundOfSet(x, si) >= 0) {
@@ -506,13 +620,40 @@ export default function FocusWorkout({
   const resting = timer.isRunning;
   const cardMoved = Math.abs(drag.dx) + Math.abs(drag.dy);
 
+  // Quest phase: victory → hit → setting off → rest/walk → encounter → battle.
+  let qPhase = 'battle', qT = 0, qStart = 0, qMsg = '';
+  const mon = quest ? monsterOf(exercises, block, ci) : null;
+  if (quest) {
+    const now = Date.now(), since = (t) => (now - t) / 1000;
+    if (qWin && since(qWin.at) >= 0 && since(qWin.at) < 3.8) { qPhase = 'victory'; qStart = qWin.at; }
+    else if (qHit && qHit.bi === ci && since(qHit.at) < 1.5) { qPhase = 'attack'; qStart = qHit.at; }
+    else if (introOn) qPhase = 'walk';
+    else if (resting) qPhase = blockStarted ? 'rest' : 'walk';
+    else if (!blockStarted && since(encAt) < 2.5) { qPhase = 'encounter'; qStart = encAt; }
+    else if (!blockStarted && encAt) qStart = encAt + 2500; // battle entry: bars wipe out, monster slides in
+    qT = qStart ? since(qStart) : 9;
+    qMsg = qPhase === 'victory' ? (qT < 1.4 ? `Wild ${mon.name} fainted!` : qWin.msg)
+      : qPhase === 'attack' ? qHit.msg
+      : qPhase === 'walk' ? (introOn ? 'HERO sets out across the meadow. Something is out there…' : 'HERO pushes deeper. Rest up while the halls roll by…')
+      : qPhase === 'rest' ? `${mon.species} is catching its breath…`
+      : qPhase === 'encounter' ? 'Something stirs in the dark…'
+      : blockStarted ? `${mon.species} gets back up. Set ${label} — go!` : `A wild ${mon.name} appeared!`;
+    if (!fs?.completed && kind !== 'cardio' && kind !== 'interval') {
+      completeLabel = qPhase === 'attack' ? 'Hit!' : `Attack · ${completeLabel[0].toLowerCase()}${completeLabel.slice(1)}`;
+    }
+  }
+  const qShown = quest ? addXp(prof.lvl, prof.xp, questSession(exercises, mult).xp) : null;
+  const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory' || qPhase === 'encounter');
+  const qReps = fs ? shownReps(ex, fs, st) : '';
+  const qPreview = fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
+
   return (
     <div className="g-root flex flex-col min-h-full">
       {/* Header */}
       <div className="px-5 pt-3 pb-3">
         <div className="flex justify-between items-end gap-3">
           <div className="min-w-0">
-            <div className="g-label truncate">{workout.programName}</div>
+            <div className="g-label truncate">{workout.programName}{quest ? ' · QUEST' : ''}</div>
             <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{workout.workoutName}</div>
           </div>
           <div className="text-right flex-shrink-0">
@@ -533,7 +674,18 @@ export default function FocusWorkout({
       </div>
 
       <div className="flex-1 px-3.5 pb-6 flex flex-col gap-2.5">
-        {kind === 'cardio' ? (
+        {quest && (
+          <QuestStage phase={qPhase} start={qStart} monster={mon} hit={qHit} area={Math.min(ci, LANDS.length - 1)}
+            heroName={prof.hero} petKey={prof.pet} lvl={qShown.lvl} xp={qShown.xp}
+            tint={readTint()} scanlines={readScanlines()} msg={qMsg} goFlash={goFlash} />
+        )}
+        {qTravel ? (
+          <QuestTravel exercises={exercises} blocks={blocks}
+            defeated={qPhase === 'victory' ? ci : ci > 0 && blockDone(exercises, blocks[ci - 1]) ? ci - 1 : -1}
+            next={qPhase === 'victory' ? nextOpenBlock(exercises, blocks, ci) : ci}
+            walking={qPhase === 'walk'} intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4 } : null}
+            timer={timer} onSkip={introOn ? () => setIntroOff(true) : skipRest} />
+        ) : kind === 'cardio' ? (
           // Same swipe handling as the other cards, so cardio blocks cycle too.
           <div
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
@@ -577,16 +729,20 @@ export default function FocusWorkout({
             )}
 
             <div className="flex justify-between items-center gap-2">
-              <span className="g-label truncate">BLOCK {ci + 1} OF {blocks.length} · {kind === 'interval' ? 'INTERVAL' : ex.targetReps}{ex.restSeconds ? ` · ${restLabel(ex.restSeconds)}` : ''}</span>
+              <span className="g-label truncate">{quest ? 'ENCOUNTER' : 'BLOCK'} {ci + 1} OF {blocks.length} · {kind === 'interval' ? 'INTERVAL' : `${ex.targetReps}${quest ? ' REPS' : ''}`}{ex.restSeconds ? ` · ${restLabel(ex.restSeconds)}` : ''}</span>
               <span className="flex items-center gap-2 flex-shrink-0">
-                <Tag kind={kind} />
+                {quest && (kind === 'normal' || kind === 'drop')
+                  ? <span className="g-tag" style={{ '--tag': resting ? '#f59e0b' : '#ff2222' }}>{resting ? 'ITS TURN' : 'BATTLE'}</span>
+                  : <Tag kind={kind} />}
                 <button onClick={() => setEditOpen(true)} aria-label="Edit exercise" className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2" style={{ font: `700 16px ${MONO}` }}>⋯</button>
               </span>
             </div>
-            <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
-              {ex.substituted && <span className="text-text-tertiary line-through mr-2" style={{ fontSize: '0.6em' }}>{ex.substituted.original}</span>}
-              <TypewriterName text={ex.name} />
-            </div>
+            {!quest && (
+              <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
+                {ex.substituted && <span className="text-text-tertiary line-through mr-2" style={{ fontSize: '0.6em' }}>{ex.substituted.original}</span>}
+                <TypewriterName text={ex.name} />
+              </div>
+            )}
             <div className="mt-1.5 g-meta">{lastLine}</div>
 
             {!dense && kind !== 'interval' && (
@@ -616,12 +772,12 @@ export default function FocusWorkout({
             {!dense && kind !== 'interval' && fs && (
               <div className="grid mt-4">
                 <div key={`rest-${resting}`} aria-hidden={!resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'visible' : 'hidden', animation: resting ? 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' : 'none' }}>
-                  <RestRing timer={timer} next={restNext} onSkip={skipRest} />
+                  {quest ? <QuestRest timer={timer} next={restNext} onSkip={skipRest} /> : <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
                 </div>
                 <div key={`set-${resting}`} aria-hidden={resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
                   <div className="grid grid-cols-2 gap-2.5 flex-1">
-                    <Stepper label="KG" value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
-                    <Stepper label="REPS" value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
+                    <Stepper label={quest ? 'KG · POWER' : 'KG'} value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
+                    <Stepper label={quest ? 'REPS · HITS' : 'REPS'} value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
                   </div>
                   {kind === 'bfr' && !fs.completed && (
                     <BFRBlock set={fs}
@@ -704,10 +860,10 @@ export default function FocusWorkout({
             )}
 
             <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
-              {dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
+              {quest && qPreview && kind !== 'interval' ? qPreview : dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
             </div>
 
-            {goFlash && (
+            {goFlash && !quest && (
               // The panel only fades, clipped to the card; just the word pops, so
               // nothing grows past the card edge or slips under its contents.
               <div key={goAt} className="absolute inset-0 z-20 rounded-[28px] overflow-hidden bg-accent flex items-center justify-center pointer-events-none"

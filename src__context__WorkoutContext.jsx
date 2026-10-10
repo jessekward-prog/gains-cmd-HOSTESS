@@ -415,6 +415,18 @@ export function WorkoutProvider({ children }) {
     await api.saveExerciseLinks(links);
   }, []);
 
+  // Quest Mode state { profile, vault }, saved whole. `fn` gets the current
+  // value (ref, so chained saves build on each other) and returns the next.
+  const questRef = useRef(null);
+  questRef.current = settings?.quest || null;
+  const saveQuest = useCallback(async (fn) => {
+    const next = fn(questRef.current || {});
+    questRef.current = next;
+    setSettings((s) => ({ ...s, quest: next }));
+    await api.saveQuest(next);
+    return next;
+  }, []);
+
   const setRecoveryNote = useCallback((name, note) => {
     setRecoveryNotes((prev) => {
       const next = { ...prev };
@@ -442,6 +454,7 @@ export function WorkoutProvider({ children }) {
         reloadHistory,
         reloadSettings,
         saveExerciseLinks,
+        saveQuest,
         loadAll,
       }}
     >

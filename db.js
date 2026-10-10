@@ -229,6 +229,15 @@ async function initializeTables() {
     // After creation so it also lands on a brand-new database.
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS appearance JSONB');
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exercise_links JSONB');
+    // Quest Mode: profile + vault in one small column; Forge art (images) in its own table.
+    await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS quest JSONB');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quest_art (
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        slot INTEGER NOT NULL,
+        data JSONB NOT NULL,
+        PRIMARY KEY (user_id, slot)
+      )`);
   } catch (error) {
     console.error('❌ Error initializing tables:', error);
     throw error;
@@ -396,7 +405,7 @@ async function deleteWorkoutById(userId, workoutId) {
 // Settings functions
 async function getSettings(userId) {
   const result = await pool.query(
-    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance, exercise_links FROM user_settings WHERE user_id = $1',
+    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance, exercise_links, quest FROM user_settings WHERE user_id = $1',
     [userId]
   );
   
@@ -435,6 +444,29 @@ async function updateExerciseLinks(userId, links) {
     'UPDATE user_settings SET exercise_links = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
     [JSON.stringify(links), userId]
   );
+}
+
+async function updateQuest(userId, quest) {
+  await pool.query(
+    'UPDATE user_settings SET quest = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+    [JSON.stringify(quest), userId]
+  );
+}
+
+async function getQuestArt(userId) {
+  const { rows } = await pool.query('SELECT slot, data FROM quest_art WHERE user_id = $1', [userId]);
+  return Object.fromEntries(rows.map((r) => [r.slot, r.data]));
+}
+
+async function setQuestArt(userId, slot, data) {
+  await pool.query(
+    'INSERT INTO quest_art (user_id, slot, data) VALUES ($1, $2, $3) ON CONFLICT (user_id, slot) DO UPDATE SET data = $3',
+    [userId, slot, JSON.stringify(data)]
+  );
+}
+
+async function deleteQuestArt(userId, slot) {
+  await pool.query('DELETE FROM quest_art WHERE user_id = $1 AND slot = $2', [userId, slot]);
 }
 
 async function updateAggressionSettings(userId, aggressionSettings) {
@@ -588,6 +620,10 @@ module.exports = {
   updateAggressionSettings,
   updateAppearance,
   updateExerciseLinks,
+  updateQuest,
+  getQuestArt,
+  setQuestArt,
+  deleteQuestArt,
   getChatHistory,
   saveChatMessage,
   clearChatHistory,

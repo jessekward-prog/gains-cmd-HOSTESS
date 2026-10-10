@@ -9,6 +9,9 @@ import { useWorkout } from '../context/WorkoutContext';
 import useCatalog from '../hooks/useCatalog';
 import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
 import BodyMap from './BodyMap';
+import QuestHeroCard from './QuestHeroCard';
+import useQuest from '../hooks/useQuest';
+import { questSession, commitQuest, rollLoot, xpMult, luckOf, oddsOf, REEL, RARITY } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -75,7 +78,7 @@ export function Countdown({ workout, onDone }) {
 // `result` is null until finishWorkout() resolves; the analysis screen paces
 // itself to it. Coach notes are written server-side after the save, so they
 // are polled from history until they land (or we give up and say so).
-export function FinishFlow({ summary, result, failed, onDone, onProgress }) {
+export function FinishFlow({ summary, result, failed, onDone, onProgress, quest = false }) {
   const haptics = useHaptics();
   const [step, setStep] = useState(0);
   const [phase, setPhase] = useState('analysis');
@@ -238,6 +241,7 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress }) {
           </div>
         )}
 
+        {quest && <QuestChest exercises={summary.exercises} workoutId={result?.workoutId} />}
         <SessionMuscles exercises={summary.exercises} />
         <Strength rows={summary.strength} />
 
@@ -327,5 +331,84 @@ function Strength({ rows }) {
       })}
       <p className="mt-3 text-text-tertiary" style={{ font: `400 10px ${MONO}`, lineHeight: 1.5 }}>From your best set of 1–12 reps. Not shown for bodyweight or assisted lifts.</p>
     </div>
+  );
+}
+
+// Quest Mode's reward: bank the quest's XP (+ a card pack) once the workout is
+// saved, then open the loot chest. Both are keyed to the saved workout id in
+// the profile, so a re-render or a reload can't award or roll them twice.
+function QuestChest({ exercises, workoutId }) {
+  const { prof, updProf } = useQuest();
+  const [session] = useState(() => questSession(exercises, xpMult(prof, prof.lvl)));
+  const [roll, setRoll] = useState(null); // { at, loot }
+  const [cardOpen, setCardOpen] = useState(false);
+  const [, tick] = useState(0);
+  useEffect(() => { if (workoutId) updProf((p) => commitQuest(p, workoutId, session)); }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!roll) return;
+    const id = setInterval(() => tick((n) => n + 1), 100);
+    return () => clearInterval(id);
+  }, [roll]);
+
+  const banked = !!workoutId && prof.lastQuest === workoutId;
+  const opened = banked && prof.lastChest === workoutId;
+  const t = roll ? (Date.now() - roll.at) / 1000 : 0;
+  const rolling = roll && t < 2.4;
+  const luck = luckOf(session.crits), od = oddsOf(luck);
+  const open = () => {
+    if (!banked || opened || roll) return;
+    const loot = rollLoot(prof, session.crits);
+    setRoll({ at: Date.now(), loot });
+    setTimeout(() => updProf(() => ({ ...loot.prof, lastChest: workoutId })), 2400);
+  };
+  const reelI = Math.floor(Math.pow(t, 0.6) * 12);
+  const loot = roll?.loot;
+  const shown = roll && !rolling ? loot : null;
+  const border = shown ? shown.color : opened ? '#2a2a2a' : 'var(--color-accent)';
+
+  return (
+    <>
+      <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .45s both' }}>
+        <div className="flex justify-between items-baseline">
+          <span style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>QUEST CLEAR · LV {prof.lvl}</span>
+          <span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{session.beaten}/{session.total} defeated</span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 mt-3">
+          {[[`+${session.xp.toLocaleString()}`, 'XP'], [String(session.crits), 'CRITS'], ['+1', 'CARD PACK']].map(([v, l]) => (
+            <div key={l} className="rounded-[14px] bg-bg-2 p-3 text-center">
+              <div style={{ font: `500 9px ${MONO}`, letterSpacing: '.14em' }} className="text-text-tertiary">{l}</div>
+              <div className="mt-1" style={{ font: `500 18px ${MONO}` }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3 p-3.5 rounded-[18px] bg-bg-2" style={{ boxShadow: `inset 0 0 0 1.5px ${border}` }}>
+          <div className="flex-1 min-w-0">
+            <div className="g-label">LOOT CHEST</div>
+            {rolling ? (
+              <div className="mt-1" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: RARITY[reelI % 4][1], transform: t < 2 ? `translateX(${reelI % 2 ? 2 : -2}px)` : 'none' }}>{REEL[reelI % REEL.length]}</div>
+            ) : shown ? (
+              <>
+                <div className="mt-1 inline-block px-2 py-0.5 rounded-[8px]" style={{ font: `600 10px ${MONO}`, letterSpacing: '.2em', color: '#050505', background: shown.color }}>{shown.tier}</div>
+                <div className="mt-1.5" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: shown.color }}>{shown.label}</div>
+                <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}` }}>{shown.sub} · saved to your hero card</div>
+              </>
+            ) : (
+              <>
+                <div className="mt-1" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em' }}>{opened ? 'Opened' : banked ? '1 chest earned' : 'Saving your quest…'}</div>
+                <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}`, textWrap: 'pretty' }}>
+                  {session.crits} crit{session.crits === 1 ? '' : 's'} → luck +{Math.round(luck * 100)}% · Rare {Math.round(od.r * 100)}% · Epic {Math.round(od.e * 100)}% · Legendary {Math.round(od.l * 100)}%
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={shown || opened ? () => setCardOpen(true) : open} disabled={!banked || rolling}
+            className="flex-shrink-0 h-12 px-4 rounded-[14px] font-extrabold text-sm disabled:opacity-45"
+            style={{ background: shown || opened ? 'var(--color-bg-3)' : '#ff2222', color: '#fff' }}>
+            {shown || opened ? 'Hero card' : 'Open'}
+          </button>
+        </div>
+      </div>
+      {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
+    </>
   );
 }

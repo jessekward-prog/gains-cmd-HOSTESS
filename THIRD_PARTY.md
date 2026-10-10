@@ -85,3 +85,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Quest Mode sprites — `quest/sprites/`
+
+All CC0 1.0 (see `quest/LICENSE-sprites.txt`):
+- Monster, pet and knight sprites, dungeon tiles: 16x16 DungeonTileset II by 0x72 (https://0x72.itch.io/dungeontileset-ii).
+- Heroes (samurai, ronin, brawler, kings, warlord, sellsword, iron guard, huntress, archer, wizard,
+  warlock, sorcerer, hexblade): LuizMelo packs (https://luizmelo.itch.io).
+- Landscape layers (`land_*.png`): ansimuz — Mountain Dusk Parallax background
+  (https://ansimuz.itch.io/mountain-dusk-parallax-background).
+
+## Quest Mode vault art — `quest/art/`
+
+The 31 illustrations the Card Vault dithers came with the Quest Mode design handoff **without a
+licence or source attribution**, and at least one carries a third-party watermark. They are included
+at the repo owner's direction; their copyright belongs to their original creators, not to this
+project. If you are a rights holder and want an image removed, open an issue. Anyone reusing this
+repo should replace them with their own art — the in-app Forge does that per card slot.
+
+## Card dither engine — `src__lib__dither.js`
+
+From the Quest Mode design handoff (`dither-kit.js`), made into an ES module.

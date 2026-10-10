@@ -9,7 +9,7 @@ import * as api from '../lib/api';
 const KEYS = [
   'gains-cmd-theme', 'gains-cmd-accent', 'gains-cmd-intensity', 'gains-cmd-font', 'gains-cmd-text-size',
   'gains-cmd-banner-enabled', 'gains-cmd-banner-text', 'gains-cmd-scale-px', 'gains-cmd-workout-layout', 'gains-cmd-expand-mode',
-  'gains-cmd-waves', 'gains-cmd-greeting',
+  'gains-cmd-waves', 'gains-cmd-greeting', 'gains-cmd-quest-tint', 'gains-cmd-quest-scanlines',
 ];
 const AT_KEY = 'gains-cmd-appearance-at';
 

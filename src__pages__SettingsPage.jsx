@@ -5,6 +5,9 @@ import { useToast } from '../context/ToastContext';
 import { useHeaderMessage } from '../context/HeaderMessageContext';
 import ImportModal from '../components/ImportModal';
 import ExerciseInfo from '../components/ExerciseInfo';
+import QuestHeroCard from '../components/QuestHeroCard';
+import useQuest, { QUEST_TINT_KEY, QUEST_SCAN_KEY, readTint, readScanlines } from '../hooks/useQuest';
+import { TINTS, lvTitle } from '../lib/quest';
 import { exerciseNames } from '../components/ExerciseNameOptions';
 import { useWorkout } from '../context/WorkoutContext';
 import useCatalog from '../hooks/useCatalog';
@@ -27,6 +30,7 @@ const LAYOUTS = [
   { id: 'dense', name: 'Dense', desc: 'Classic-style · all sets listed' },
   { id: 'classic', name: 'Classic', desc: 'Stacked cards' },
   { id: 'block-grid', name: 'Block Grid', desc: '2-column blocks' },
+  { id: 'quest', name: 'Quest', desc: 'Pixel monster battler' },
 ];
 
 
@@ -106,6 +110,7 @@ export default function SettingsPage() {
               </div>
             </>
           )}
+          {workoutLayout === 'quest' && <QuestSettings />}
         </Section>
 
         <Section title="Theme">
@@ -289,6 +294,33 @@ function LibrarySection() {
       )}
       <ExerciseInfo open={!!info} onClose={() => setInfo(null)} name={info} />
     </Section>
+  );
+}
+
+// Quest Mode look (scene tint, scanlines) and a way into the Hero Card / Vault.
+function QuestSettings() {
+  const { prof } = useQuest();
+  const [tint, setTint] = useState(readTint);
+  const [scan, setScan] = useState(readScanlines);
+  const [card, setCard] = useState(false);
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  return (
+    <div className="mt-4">
+      <div className="g-label mb-2" style={{ fontSize: 9 }}>SCENE TINT</div>
+      <div className="grid grid-cols-2 gap-2">
+        {Object.entries(TINTS).map(([k, [name, hex]]) => (
+          <Tile key={k} active={tint === k} onClick={() => { setTint(k); save(QUEST_TINT_KEY, k); }}>
+            <span className="flex items-center gap-2 text-[14px] font-extrabold"><span className="w-3 h-3 rounded-full" style={{ background: hex }} />{name}</span>
+          </Tile>
+        ))}
+      </div>
+      <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>SCANLINES</div>
+      <Segmented value={scan} onChange={(v) => { setScan(v); save(QUEST_SCAN_KEY, v ? 'on' : 'off'); }} options={[[true, 'On'], [false, 'Off']]} />
+      <button onClick={() => setCard(true)} className="mt-4 w-full h-12 rounded-[15px] bg-bg-2 text-text-primary font-bold text-sm">
+        Hero card · Lv {prof.lvl} {lvTitle(prof.lvl)}
+      </button>
+      {card && <QuestHeroCard open onClose={() => setCard(false)} />}
+    </div>
   );
 }
 

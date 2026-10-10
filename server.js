@@ -180,6 +180,7 @@ app.get('/sw.js', (req, res) => {
 });
 app.use('/manifest.json', express.static(path.join(__dirname, 'manifest.json')));
 app.use('/icons', express.static(path.join(__dirname, 'icons')));
+app.use('/quest', express.static(path.join(__dirname, 'quest'), { maxAge: '30d' }));
 app.set('trust proxy', 1); // behind a reverse proxy (Hostess/Tailscale serve)
 // Built in start() once the secret is known; requests only arrive after listen().
 let sessionMiddleware;
@@ -302,7 +303,7 @@ app.put('/api/lm', adminOrSync, async (req, res) => {
 app.get('/api/settings', requireAuth, async (req, res) => {
   try {
     const settings = await db.getSettings(req.user.id);
-    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null, exerciseLinks: settings.exercise_links || {} });
+    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null, exerciseLinks: settings.exercise_links || {}, quest: settings.quest || null });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -314,6 +315,54 @@ app.post('/api/appearance', requireAuth, async (req, res) => {
     const { appearance } = req.body || {};
     if (!appearance || typeof appearance.values !== 'object' || !Number.isFinite(appearance.at)) return badRequest(res, 'appearance {at, values} required');
     await db.updateAppearance(req.user.id, appearance);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Quest Mode: { profile, vault } — the client holds the whole object and saves it back.
+app.post('/api/quest', requireAuth, async (req, res) => {
+  try {
+    const { quest } = req.body || {};
+    if (!quest || typeof quest !== 'object' || Array.isArray(quest) || JSON.stringify(quest).length > 100000) {
+      return badRequest(res, 'quest {profile, vault} required');
+    }
+    await db.updateQuest(req.user.id, quest);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Forge art: one record per vault slot { name, style, pal, img (data URL) }.
+const questSlot = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 200 ? n : null; };
+app.get('/api/quest/art', requireAuth, async (req, res) => {
+  try {
+    res.json({ success: true, art: await db.getQuestArt(req.user.id) });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+app.put('/api/quest/art/:slot', requireAuth, async (req, res) => {
+  try {
+    const slot = questSlot(req.params.slot);
+    const { name, style, pal, img } = req.body || {};
+    if (!slot || typeof name !== 'string' || typeof style !== 'string' || typeof pal !== 'string'
+      || (img != null && (typeof img !== 'string' || !img.startsWith('data:image/') || img.length > 600000))) {
+      return badRequest(res, 'slot 1–200 and { name, style, pal, img? (image data URL ≤ 600 KB) } required');
+    }
+    await db.setQuestArt(req.user.id, slot, { name: name.slice(0, 80), style, pal, img: img || null });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+app.delete('/api/quest/art/:slot', requireAuth, async (req, res) => {
+  try {
+    const slot = questSlot(req.params.slot);
+    if (!slot) return badRequest(res, 'slot 1–200 required');
+    await db.deleteQuestArt(req.user.id, slot);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
