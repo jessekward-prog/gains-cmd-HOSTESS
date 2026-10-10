@@ -80,8 +80,6 @@ export default function QuestHeroCard({ open, onClose }) {
   const ups = [...LV_TITLES.filter((t) => t[0] > lvl).map((t) => [t[0], `TITLE "${t[1].toUpperCase()}"`]), ...PETS.filter((p) => p[2] > lvl).map((p) => [p[2], `${p[1].toUpperCase()} PET`])].sort((a, b) => a[0] - b[0]);
   const nextUp = ups.length ? ups.filter((u) => u[0] === ups[0][0]) : [];
   const owned = BORDERS.filter((x) => ownsBorder(prof, lvl, x));
-  const cycle = (seq, cur) => seq[(seq.indexOf(cur) + 1) % seq.length];
-  const btn = { height: 48, borderRadius: 16, background: '#0e0e0e', color: '#f0f0f0', font: `500 11px ${MONO}`, padding: '0 10px' };
 
   // The vault sits outside the backdrop: React events bubble through portals
   // along the component tree, so inside it every tap would close this card.
@@ -123,31 +121,9 @@ export default function QuestHeroCard({ open, onClose }) {
         <div className="text-center" style={{ marginTop: -6, font: `400 10px ${MONO}`, letterSpacing: '.1em', color: '#666' }}>
           {nextUp.length ? `NEXT · LV ${nextUp[0][0]} · ${nextUp.map((u) => u[1]).join(' + ')}` : 'EVERY LEVEL REWARD UNLOCKED'}
         </div>
-        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-          {[['hero', `Hero · ${prof.hero}`], ['pet', petDef ? `Pet · ${petDef[1]} +${petDef[2] ? 5 : 10}%` : 'Pet · none'], ['border', `Border · ${bd[1]}`]].map(([k, label]) => (
-            <button key={k} className="min-w-0 truncate" onClick={() => toggle(k)}
-              style={{ ...btn, boxShadow: `inset 0 0 0 1.5px ${panel === k ? '#ff2222' : 'transparent'}` }}>{label} {panel === k ? '▴' : '▾'}</button>
-          ))}
-          {prof.epithets.length > 0 && (
-            <button className="min-w-0 truncate" style={btn} onClick={() => save((q) => ({ ...q, epithet: cycle([null, ...q.epithets], q.epithet) }))}>
-              {prof.epithet ? `Epithet · ${prof.epithet}` : 'Epithet · none'}
-            </button>
-          )}
-        </div>
-        <button onClick={() => setVaultOpen(true)} className="flex items-center gap-3.5 text-left"
-          style={{ padding: 14, borderRadius: 20, background: prof.packs ? 'radial-gradient(ellipse at 15% 50%, rgba(255,34,34,.2), #0e0e0e 70%)' : '#0e0e0e', boxShadow: `inset 0 0 0 1.5px ${prof.packs ? '#ff2222' : '#2a2a2a'}` }}>
-          <span className="relative flex-shrink-0" style={{ width: 40, height: 52 }}>
-            {[-9, 7].map((r) => <span key={r} className="absolute inset-0" style={{ borderRadius: 7, background: '#141414', boxShadow: 'inset 0 0 0 1.5px #ff2222', transform: `rotate(${r}deg)` }} />)}
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Card Vault</span>
-            <span className="block truncate" style={{ marginTop: 2, font: `400 11px ${MONO}`, color: '#999' }}>
-              {prof.packs ? `${prof.packs} pack${prof.packs > 1 ? 's' : ''} to open · ` : ''}{Object.keys(vault.owned).length} cards · change your card
-            </span>
-          </span>
-          <span style={{ font: `500 18px ${MONO}`, color: prof.packs ? '#ff2222' : '#666' }}>›</span>
-        </button>
-
+        {/* Each option is a tile like the Card Vault one; its picker opens right under it. */}
+        <OptionRow open={panel === 'hero'} onClick={() => toggle('hero')} title="Hero" sub={`${prof.hero} · ${Object.keys(HEROES).length} to choose from`}
+          icon={<SpriteIcon src={`${ASSET}sprites/${HEROES[prof.hero]?.[0] || 'warrior'}_idle_0.png`} h={HEROES[prof.hero] || HEROES.Warlord} />} />
         {panel === 'hero' && (
           <Picker title="HERO" count={`${Object.keys(HEROES).length}`}>
             {Object.entries(HEROES).map(([name, h]) => (
@@ -156,6 +132,10 @@ export default function QuestHeroCard({ open, onClose }) {
             ))}
           </Picker>
         )}
+
+        <OptionRow open={panel === 'pet'} onClick={() => toggle('pet')} title="Pet"
+          sub={petDef ? `${petDef[1]} · +${petDef[2] ? 5 : 10}% XP` : `None · ${PETS.filter((p) => ownsPet(prof, lvl, p)).length} of ${PETS.length} found`}
+          icon={petDef ? <img src={`${ASSET}sprites/pet_${petDef[0]}_0.png`} alt="" style={{ height: 40, imageRendering: 'pixelated' }} /> : <EmptyIcon />} />
         {panel === 'pet' && (
           <Picker title="PETS" count={`${PETS.filter((p) => ownsPet(prof, lvl, p)).length} / ${PETS.length}`}>
             <Tile on={!petDef} onClick={() => save((q) => ({ ...q, pet: null }))} name="None" sub={!petDef ? 'CHOSEN' : ''} />
@@ -169,6 +149,9 @@ export default function QuestHeroCard({ open, onClose }) {
             })}
           </Picker>
         )}
+
+        <OptionRow open={panel === 'border'} onClick={() => toggle('border')} title="Border" sub={`${bd[1]} · ${owned.length} of ${BORDERS.length} unlocked`}
+          icon={<div style={{ width: 34, height: 46, padding: Math.max(1, Math.round(bc[1] / 2)), borderRadius: 8, background: bc[0], boxShadow: `0 0 12px ${bc[2]}` }}><div className="w-full h-full" style={{ borderRadius: 6, background: '#0b0b0b' }} /></div>} />
         {panel === 'border' && (
           <Picker title="BORDERS" count={`${owned.length} / ${BORDERS.length}`}>
             {BORDERS.map((x) => {
@@ -190,6 +173,34 @@ export default function QuestHeroCard({ open, onClose }) {
           </Picker>
         )}
 
+        <OptionRow open={panel === 'epithet'} onClick={() => prof.epithets.length && toggle('epithet')} title="Epithet"
+          sub={prof.epithets.length ? `${prof.epithet || 'None'} · ${prof.epithets.length} won` : 'Win one from a Rare chest'}
+          dim={!prof.epithets.length} icon={<FeatherIcon />} />
+        {panel === 'epithet' && (
+          <Picker title="EPITHETS" count={`${prof.epithets.length} / 8`} wrap>
+            {[null, ...prof.epithets].map((e) => (
+              <button key={e || 'none'} onClick={() => save((q) => ({ ...q, epithet: e }))}
+                style={{ height: 38, padding: '0 12px', borderRadius: 12, background: prof.epithet === e ? 'rgba(255,34,34,.1)' : '#171717', boxShadow: `inset 0 0 0 1.5px ${prof.epithet === e ? '#ff2222' : 'transparent'}`, font: `500 11px ${MONO}` }}>
+                {e || 'None'}
+              </button>
+            ))}
+          </Picker>
+        )}
+
+        <button onClick={() => setVaultOpen(true)} className="flex items-center gap-3.5 text-left"
+          style={{ padding: 14, borderRadius: 20, background: prof.packs ? 'radial-gradient(ellipse at 15% 50%, rgba(255,34,34,.2), #0e0e0e 70%)' : '#0e0e0e', boxShadow: `inset 0 0 0 1.5px ${prof.packs ? '#ff2222' : '#2a2a2a'}` }}>
+          <span className="relative flex-shrink-0" style={{ width: 40, height: 52 }}>
+            {[-9, 7].map((r) => <span key={r} className="absolute inset-0" style={{ borderRadius: 7, background: '#141414', boxShadow: 'inset 0 0 0 1.5px #ff2222', transform: `rotate(${r}deg)` }} />)}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Card Vault</span>
+            <span className="block truncate" style={{ marginTop: 2, font: `400 11px ${MONO}`, color: '#999' }}>
+              {prof.packs ? `${prof.packs} pack${prof.packs > 1 ? 's' : ''} to open · ` : ''}{Object.keys(vault.owned).length} cards · change your card
+            </span>
+          </span>
+          <span style={{ font: `500 18px ${MONO}`, color: prof.packs ? '#ff2222' : '#666' }}>›</span>
+        </button>
+
         <button onClick={onClose} style={{ height: 56, borderRadius: 18, background: '#ff2222', color: '#fff', fontWeight: 800, fontSize: 15 }}>Save card</button>
         <div className="text-center" style={{ marginTop: -6, font: `400 10px ${MONO}`, color: '#666' }}>Every change is saved to your account as you make it.</div>
       </div>
@@ -199,13 +210,13 @@ export default function QuestHeroCard({ open, onClose }) {
 }
 
 // Opens below the big card, so it scrolls itself into view.
-function Picker({ title, count, children }) {
+function Picker({ title, count, wrap, children }) {
   const ref = useRef(null);
   useEffect(() => { ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, []);
   return (
     <div ref={ref} style={{ background: '#0e0e0e', borderRadius: 20, padding: 14, scrollMarginBottom: 16 }}>
       <div className="flex justify-between" style={{ font: `500 10px ${MONO}`, letterSpacing: '.14em', color: '#666' }}><span>{title}</span><span>{count}</span></div>
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', marginTop: 10 }}>{children}</div>
+      <div className={wrap ? 'flex flex-wrap gap-1.5' : 'grid gap-1.5'} style={{ gridTemplateColumns: wrap ? undefined : 'repeat(4, minmax(0, 1fr))', marginTop: 10 }}>{children}</div>
     </div>
   );
 }
@@ -230,3 +241,33 @@ function Tile({ on, locked, onClick, img, frame, name, sub }) {
     </button>
   );
 }
+
+// A Hero Card option as a tile (same shape as the Card Vault tile).
+function OptionRow({ icon, title, sub, open, onClick, dim }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-3.5 text-left"
+      style={{ padding: 14, borderRadius: 20, background: '#0e0e0e', boxShadow: `inset 0 0 0 1.5px ${open ? '#ff2222' : '#2a2a2a'}`, opacity: dim ? 0.55 : 1 }}>
+      <span className="flex-shrink-0 flex items-end justify-center overflow-hidden" style={{ width: 40, height: 52 }}>{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{title}</span>
+        <span className="block truncate" style={{ marginTop: 2, font: `400 11px ${MONO}`, color: '#999' }}>{sub}</span>
+      </span>
+      <span className="inline-block transition-transform" style={{ font: `500 18px ${MONO}`, color: open ? '#ff2222' : '#666', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+    </button>
+  );
+}
+
+// The chosen hero's first idle frame, centred on its body like the picker tiles.
+function SpriteIcon({ src, h }) {
+  const k = Math.min(1.6, 50 / h[2]);
+  return <div className="w-full" style={{ height: h[2] * k, backgroundImage: `url(${src})`, backgroundRepeat: 'no-repeat', imageRendering: 'pixelated',
+    backgroundSize: `${h[1] * k}px ${h[2] * k}px`, backgroundPosition: `calc(50% - ${(h[4] - h[1] / 2) * k}px) bottom` }} />;
+}
+const EmptyIcon = () => <div style={{ width: 30, height: 30, marginBottom: 10, borderRadius: 8, boxShadow: 'inset 0 0 0 1.5px #3a3a3a', background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px' }} />;
+// Lucide "feather" (an epithet is a flourish on your title).
+const FeatherIcon = () => (
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 11 }}>
+    <path d="M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z" />
+    <path d="M16 8 2 22" /><path d="M17.5 15H9" />
+  </svg>
+);

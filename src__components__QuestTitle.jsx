@@ -99,9 +99,11 @@ export default function QuestTitle({ onNavigate }) {
             </div>
             );
           })}
-          <div className="flex gap-2 mt-3.5 sticky bottom-2 pt-2" style={{ background: 'linear-gradient(transparent, var(--color-bg-1) 30%)' }}>
-            <button onClick={() => setCardOpen(true)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}` }}>Hero card</button>
-            <button onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)' }}>
+          {/* Reverse vignette: the list fades to the card colour behind the buttons,
+              and each button casts a dark halo, so nothing busy shows through. */}
+          <div className="flex gap-2 sticky bottom-0 -mx-5 px-5 pb-3" style={{ marginTop: -28, paddingTop: 44, borderRadius: '0 0 28px 28px', background: 'linear-gradient(to bottom, transparent, var(--color-bg-1) 38%)' }}>
+            <button onClick={() => setCardOpen(true)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}, 0 0 28px 10px var(--color-bg-1)` }}>Hero card</button>
+            <button onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)', boxShadow: '0 0 28px 10px var(--color-bg-1)' }}>
               {program ? 'Begin quest' : 'Make a program'}
             </button>
           </div>
