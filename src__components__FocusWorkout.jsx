@@ -19,8 +19,12 @@ import { nextMemberForRound, roundOfSet } from '../lib/supersets';
 import { moodState } from '../lib/mood';
 import ExerciseInfo from './ExerciseInfo';
 import QuestStage from './QuestStage';
-import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
-import { monsterOf, questSession, blockXp, addXp, unlocks, xpMult, setDamage, isCrit, topRep, loadOf, LANDS } from '../lib/quest';
+import useQuest, { readTint, readScanlines, readScrolls } from '../hooks/useQuest';
+import {
+  monsterOf, questSession, blockXp, addXp, unlocks, xpMult, setDamage, isCrit, topRep, loadOf, LANDS,
+  EVENTS, EVENT_LINES, VICTORY_LINES, REST_LINES, planEvents, eventLoad, eventDone, seeded, fillLine, weekKey,
+} from '../lib/quest';
+import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
@@ -107,7 +111,7 @@ function RestRing({ timer, next, onSkip }) {
 }
 
 // ── Quest Mode panels (the handoff's ctlRest / ctlTravel) ────────────
-function QuestRest({ timer, next, onSkip }) {
+function QuestRest({ timer, next, onSkip, scroll }) {
   const done = timer.total > 0 ? 1 - timer.remaining / timer.total : 0;
   return (
     <div className="h-full flex flex-col">
@@ -123,6 +127,11 @@ function QuestRest({ timer, next, onSkip }) {
             <div className="mt-1.5 text-center" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
             <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
           </>
+        )}
+        {scroll && (
+          <div className="mt-4 px-3.5 py-2.5 rounded-[14px] text-center text-text-secondary fx-in" style={{ background: 'var(--color-bg-2)', font: `400 12px/1.5 ${MONO}`, textWrap: 'pretty' }}>
+            {scroll}
+          </div>
         )}
       </div>
       <div className="flex gap-2 w-full mt-3.5">
@@ -444,8 +453,37 @@ export default function FocusWorkout({
   // Dense and Quest: swipe left/right changes exercise, and vertical drags just
   // scroll the page (Quest has the set pips on screen, so no set swiping).
   const swipeExercises = dense || quest;
-  const { prof } = useQuest();
+  const { prof, updProf } = useQuest();
   const mult = xpMult(prof, prof.lvl);
+  const qKey = workout.startTime;
+
+  // Random events: planned once per quest and stored on the workout, so a reload
+  // (or a bonus set changing which set is "last") can't move them.
+  // localStorage 'gains-cmd-quest-force' = an event key forces one (testing).
+  useEffect(() => {
+    if (!quest || workout.questPlan) return;
+    let force = null; try { force = localStorage.getItem('gains-cmd-quest-force'); } catch { /* none */ }
+    const plan = planEvents(exercises, qKey, history, force);
+    updateWorkout((prev) => (prev && !prev.questPlan ? { ...prev, questPlan: plan } : prev));
+  }, [quest, !!workout.questPlan]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Flavour text from the local AI, written once when the quest begins and kept
+  // on the workout. Never awaited: until (or unless) it lands, the app's own lines are used.
+  const scriptAsked = useRef(false);
+  useEffect(() => {
+    if (!quest || !workout.questPlan || workout.questScript || scriptAsked.current) return;
+    scriptAsked.current = true;
+    const names = [...new Set(exercises.filter((e) => !(e.type === 'cardio' || e.sets?.[0]?.type === 'cardio')).map((e) => e.name))];
+    const boss = prof.boss?.week === weekKey() && !prof.boss.ai ? prof.boss.label : null;
+    api.questScript({ exercises: names, events: [...new Set(Object.values(workout.questPlan).map((e) => e.k))], boss })
+      .then((r) => {
+        if (!r?.script) return;
+        updateWorkout((prev) => (prev ? { ...prev, questScript: r.script } : prev));
+        if (r.script.boss) updProf((p) => (p.boss?.week === weekKey() ? { ...p, boss: { ...p.boss, ...r.script.boss, ai: true } } : p)).catch(() => {});
+      })
+      .catch(() => { /* offline or the model is busy — the built-in lines carry on */ });
+  }, [quest, !!workout.questPlan, !!workout.questScript]); // eslint-disable-line react-hooks/exhaustive-deps
+  const script = workout.questScript || null;
   const [qHit, setQHit] = useState(null); // { at, bi, dmg, crit, msg }
   const [qWin, setQWin] = useState(null); // { at, msg } — victory starts after the finishing hit
   const [encAt, setEncAt] = useState(0);
@@ -541,7 +579,10 @@ export default function FocusWorkout({
     if (s.completed) { patchSet(xi, si, { completed: false }); setFset(si); return; }
     const shown = shownReps(x, s, stats[x.name]);
     const reps = shown === 'failure' ? s.reps : shown;
-    patchSet(xi, si, { completed: true, reps: reps ?? '' });
+    // An accepted event is judged here, and the verdict kept on the set (XP reads it back).
+    const ev = s.qe?.st === 'accepted' ? s.qe : null;
+    const evOk = ev ? eventDone(ev.k, x, { ...s, reps, completed: true }, stats[x.name] && { lw: stats[x.name].lw, lr: stats[x.name].lr }) : false;
+    patchSet(xi, si, { completed: true, reps: reps ?? '', ...(ev ? { qe: { ...ev, ok: evOk } } : {}) });
     moodState.pulse = Date.now();
     haptics.tap();
     setFset(null);
@@ -555,12 +596,16 @@ export default function FocusWorkout({
     const doneNow = (i, j) => (i === xi && j === si) || exercises[i].sets[j].completed;
     const allDone = block.indices.every((i) => exercises[i].sets.every((_, j) => doneNow(i, j)));
     const nextIsDrop = x.sets[si + 1]?.type === 'drop' && !x.sets[si + 1].completed;
-    if (!nextIsDrop) onSetComplete(xi, si, x.restSeconds);
+    const restMod = ev ? EVENTS[ev.k]?.rest || 0 : 0;
+    if (!nextIsDrop) onSetComplete(xi, si, Math.max(15, (x.restSeconds || 0) + restMod));
 
     if (quest) {
-      const hitSet = { ...s, reps }, crit = isCrit(x, hitSet);
+      const hitSet = { ...s, reps }, crit = isCrit(x, hitSet) || (evOk && EVENTS[ev.k]?.crit);
+      const evLine = !ev ? '' : !evOk ? ' The event slips away.'
+        : { shield: ' The shield shatters!', goblin: ' Goblin caught: +1 card pack!', mirror: ' You matched your past self!', weak: ' Critical hit!',
+          plateau: ' The wall cracks!', enraged: ' You kept pace!', slow: ' The curse breaks.', paused: ' Rock steady.', spring: '', ambush: ' Ambush repelled!' }[ev.k] || '';
       setQHit({ at: Date.now(), bi: ci, dmg: setDamage(x, hitSet, kind), crit,
-        msg: `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${allDone ? ' Finishing blow!' : ''}` });
+        msg: `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${evLine}${allDone ? ' Finishing blow!' : ''}` });
     }
     if (allDone) {
       if (quest) return; // the victory effect below takes it from here
@@ -654,6 +699,39 @@ export default function FocusWorkout({
   const resting = timer.isRunning;
   const cardMoved = Math.abs(drag.dx) + Math.abs(drag.dy);
 
+  // ── Quest events on the set in focus ────────────────────────────
+  // Offered on its planned set until accepted or declined; once accepted, the
+  // banner stays as the instruction until the set is done.
+  const qEvent = quest && kind === 'normal' ? workout.questPlan?.[ci] : null;
+  const evActive = quest && fs && !fs.completed && fs.qe?.st === 'accepted' ? fs.qe.k : null;
+  const evOffered = qEvent && fs && qEvent.si === fi && !fs.completed && !fs.qe ? qEvent.k : null;
+  const evKey = evActive || evOffered;
+  const evText = (k) => {
+    const ls = script?.events?.[k]?.length ? script.events[k] : EVENT_LINES[k];
+    return ls[Math.floor(seeded(`${qKey}|${ci}|line`) * ls.length)];
+  };
+  const evAct = (k) => EVENTS[k].act.replace('{top}', topRep(ex))
+    .replace('{last}', st?.lw != null ? `${fmtW(st.lw)} kg × ${st.lr}` : 'last time')
+    .replace('{lw}', fmtW(st?.lw ?? fs?.weight));
+  const acceptEvent = () => {
+    const k = evOffered, e = EVENTS[k];
+    if (k === 'ambush') {
+      // One bonus set at 80%, appended; the bonus is earned on that set.
+      updateWorkout((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, exercises: [...prev.exercises] };
+        const sets = [...next.exercises[ei].sets];
+        sets[fi] = { ...sets[fi], qe: { k, st: 'seen' } };
+        sets.push({ weight: roundW(num(fs.weight) * 0.8), reps: '', completed: false, qe: { k, st: 'accepted' } });
+        next.exercises[ei] = { ...next.exercises[ei], sets };
+        return next;
+      });
+      return;
+    }
+    patchSet(ei, fi, { qe: { k, st: 'accepted' }, ...(e.load ? { weight: roundW(eventLoad(ex, fs, k)) } : {}), ...(e.toFailure ? { reps: String(topRep(ex)) } : {}) });
+  };
+  const declineEvent = () => patchSet(ei, fi, { qe: { k: evOffered, st: 'declined' } });
+
   // Quest phase: victory → hit → setting off → rest/walk → encounter → battle.
   let qPhase = 'battle', qT = 0, qStart = 0, qMsg = '';
   const mon = quest ? monsterOf(exercises, block, ci) : null;
@@ -666,11 +744,16 @@ export default function FocusWorkout({
     else if (!blockStarted && since(encAt) < 2.5) { qPhase = 'encounter'; qStart = encAt; }
     else if (!blockStarted && encAt) qStart = encAt + 2500; // battle entry: bars wipe out, monster slides in
     qT = qStart ? since(qStart) : 9;
-    qMsg = qPhase === 'victory' ? (qT < 1.4 ? `Wild ${mon.name} fainted!` : qWin.msg)
+    const won = block.indices.flatMap((i) => exercises[i].sets.filter((x) => x.completed));
+    const vLines = script?.victory?.length ? script.victory : VICTORY_LINES;
+    const vLine = fillLine(vLines[Math.floor(seeded(`${qKey}|${ci}|win`) * vLines.length)], {
+      name: mon.name, kg: Math.round(won.reduce((a, x) => a + num(x.weight) * num(x.reps), 0)).toLocaleString(), sets: won.length });
+    qMsg = qPhase === 'victory' ? (qT < 1.4 ? vLine : qWin.msg)
       : qPhase === 'attack' ? qHit.msg
       : qPhase === 'walk' ? (introOn ? 'HERO sets out across the meadow. Something is out there…' : 'HERO pushes deeper. Rest up while the halls roll by…')
       : qPhase === 'rest' ? `${mon.species} is catching its breath…`
       : qPhase === 'encounter' ? 'Something stirs in the dark…'
+      : evKey ? evText(evKey)
       : blockStarted ? `${mon.species} gets back up. Set ${label} — go!` : `A wild ${mon.name} appeared!`;
     if (!fs?.completed && kind !== 'cardio' && kind !== 'interval') {
       completeLabel = `Attack · ${completeLabel[0].toLowerCase()}${completeLabel.slice(1)}`;
@@ -714,7 +797,8 @@ export default function FocusWorkout({
         {quest && (
           <QuestStage phase={qPhase} start={qStart} monster={mon} hit={qHit} area={Math.min(ci, LANDS.length - 1)}
             heroName={prof.hero} petKey={prof.pet} lvl={qShown.lvl} xp={qShown.xp}
-            tint={readTint()} scanlines={readScanlines()} msg={qMsg} goFlash={goFlash} />
+            tint={readTint()} scanlines={readScanlines()} msg={qMsg} goFlash={goFlash}
+            aura={evKey && (qPhase === 'battle' || qPhase === 'encounter') ? EVENTS[evKey].color : null} />
         )}
         {qTravel ? (
           <QuestTravel exercises={exercises} blocks={blocks}
@@ -806,13 +890,35 @@ export default function FocusWorkout({
               </div>
             )}
 
+            {evKey && !resting && (
+              <div className="mt-3.5 rounded-[18px] p-3.5 fx-in" style={{ background: `color-mix(in srgb, ${EVENTS[evKey].color} 13%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${EVENTS[evKey].color}` }}>
+                <div className="flex justify-between items-center gap-2">
+                  <span style={{ font: `700 11px ${MONO}`, letterSpacing: '.16em', color: EVENTS[evKey].color }}>{EVENTS[evKey].title}</span>
+                  <span className="text-text-tertiary" style={{ font: `500 9px ${MONO}`, letterSpacing: '.12em' }}>{evActive ? 'ACCEPTED' : 'RANDOM EVENT'}</span>
+                </div>
+                <div className="mt-1.5 text-[14px] font-bold" style={{ lineHeight: 1.35 }}>{evText(evKey)}</div>
+                <div className="mt-1 text-text-secondary" style={{ font: `400 11px/1.5 ${MONO}` }}>
+                  {evAct(evKey)}
+                  {EVENTS[evKey].xp > 1 ? ` · ${EVENTS[evKey].xp}× XP` : ''}{EVENTS[evKey].crit ? ' · crit' : ''}{EVENTS[evKey].pack ? ' · +1 card pack' : ''}
+                </div>
+                {evOffered && (
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={declineEvent} className="flex-1 h-11 rounded-[14px] bg-bg-2 text-text-secondary font-bold text-[13px]">Not today</button>
+                    <button onClick={acceptEvent} className="flex-[2] h-11 rounded-[14px] font-extrabold text-[14px]" style={{ background: EVENTS[evKey].color, color: '#050505' }}>Accept</button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Focus: rest and the steppers share one grid cell, both always
                 laid out, so the card is the same size in either state and the
                 bottom button lands in the same place. Only one is visible. */}
             {!dense && kind !== 'interval' && fs && (
               <div className="grid mt-4">
                 <div key={`rest-${resting}`} aria-hidden={!resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'visible' : 'hidden', animation: resting ? 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' : 'none' }}>
-                  {quest ? <QuestRest timer={timer} next={restNext} onSkip={skipRest} /> : <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
+                  {quest ? <QuestRest timer={timer} next={restNext} onSkip={skipRest}
+                    scroll={readScrolls() ? ((l) => l[Math.floor(seeded(`${qKey}|${ci}|${fi}|rest`) * l.length)])(script?.rest?.[ex.name]?.length ? script.rest[ex.name] : REST_LINES) : null} />
+                    : <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
                 </div>
                 <div key={`set-${resting}`} aria-hidden={resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
                   <div className="grid grid-cols-2 gap-2.5 flex-1">

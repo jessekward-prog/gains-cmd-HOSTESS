@@ -114,3 +114,39 @@ console.log('clear checks passed');
   assert.ok(Q.FORGE_RIGHTS.L.img && !Q.FORGE_RIGHTS.E.img);
 }
 console.log('forge checks passed');
+
+// Events: deterministic per quest, capped, only on plain blocks; plateau first.
+{
+  const S2 = (w, r, done = false, extra = {}) => ({ weight: String(w), reps: String(r), completed: done, ...extra });
+  const exs = Array.from({ length: 30 }, (_, i) => ex(`Lift ${i}`, [S2(50, 8), S2(50, 8), S2(50, 8)]));
+  const a = Q.planEvents(exs, 'quest-A'), b = Q.planEvents(exs, 'quest-A');
+  assert.deepEqual(a, b);                                   // same quest → same events
+  assert.ok(Object.keys(a).length <= Q.MAX_EVENTS);
+  const many = Array.from({ length: 40 }, (_, k) => Object.keys(Q.planEvents(exs, `q${k}`)).length);
+  assert.ok(many.some((n) => n > 0) && many.some((n) => n === 0)); // rare, not never
+  // plateau: same top weight 3 sessions running → plateau on that block's first set
+  const hist = [1, 2, 3].map((d) => ({ exercises: [{ name: 'Lift 3', sets: [S2(60, 8, true)] }] }));
+  const p = Q.planEvents(exs, 'quest-B', hist);
+  assert.deepEqual(p[3], { k: 'plateau', si: 0 });
+  assert.ok(!Q.plateaued(hist.map((h) => ({ exercises: [{ ...h.exercises[0], name: 'Assisted dip' }] })), 'Assisted dip'));
+  // supersets / cardio never get events; force puts one on the first plain block
+  const f = Q.planEvents([{ name: 'Treadmill', type: 'cardio', sets: [{ type: 'cardio' }] }, ex('Row', [S2(40, 8), S2(40, 8)])], 'k', [], 'shield');
+  assert.deepEqual(Object.keys(f), ['1']); assert.equal(f[1].k, 'shield'); assert.equal(f[1].si, 1);
+  // shield load: heavier, but LIGHTER counterweight on assisted machines
+  assert.equal(Q.eventLoad(ex('Bench', []), S2(80, 8), 'shield'), 82.5);
+  assert.equal(Q.eventLoad(ex('Assisted pull-up', []), S2(30, 8), 'shield'), 27.5);
+  // success + bonus read back from the set
+  assert.ok(Q.eventDone('goblin', ex('x', []), S2(50, 12, true)));
+  assert.ok(!Q.eventDone('goblin', ex('x', []), S2(50, 11, true)));
+  assert.ok(Q.eventDone('mirror', ex('Assisted dip', []), S2(25, 8, true), { lw: 30, lr: 8 }));
+  const done = S2(80, 10, true, { qe: { k: 'shield', st: 'accepted', ok: true } });
+  assert.deepEqual(Q.eventBonus(ex('Bench', []), done, 'normal'), { xp: 200, crit: 1, pack: 0 });
+  const sess = Q.questSession([ex('Bench', [done, S2(80, 8, true, { qe: { k: 'goblin', st: 'accepted', ok: true } })])], 1);
+  assert.equal(sess.packs, 1); assert.equal(sess.crits, 1);
+  assert.equal(sess.xp, Math.round((800 + 640) / 4 + 200));
+}
+assert.equal(Q.fillLine('{name} took {kg} kg {evil}', { name: 'Ogre', kg: 500 }), 'Ogre took 500 kg ');
+assert.equal(Q.weekKey(new Date(2026, 9, 11)), '2026-10-05'); // a Sunday → its Monday
+assert.equal(Q.pickBossRegion({ chest: 9, upperBack: 4, deltoids: 0 }), 'deltoids'); // fewest; ties go to list order
+assert.equal(Q.pickBossRegion({ chest: 9, upperBack: 4, deltoids: 3, quadriceps: 2, hamstring: 2, gluteal: 5, biceps: 6, triceps: 7, abs: 8 }), 'quadriceps');
+console.log('event checks passed');

@@ -49,4 +49,9 @@ const one = sessionMuscles([
 assert.equal(one.sets.chest, 2);
 assert.deepEqual(one.unmatched, ['Mystery Move']);
 
+// A workout logged this morning counts before noon too.
+{
+  const morning = Date.parse('2026-10-09T08:00:00');
+  assert.equal(muscleSets([{ date: '2026-10-09', exercises: [{ name: 'Barbell Bench Press', sets: sets(2, 2) }] }], {}, cat, 7, morning).chest, 2);
+}
 console.log('catalog.check: ok');

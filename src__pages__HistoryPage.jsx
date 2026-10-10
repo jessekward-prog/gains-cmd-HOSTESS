@@ -131,6 +131,7 @@ export default function HistoryPage() {
               const cardioNotes = cardioIdx >= 0 ? cleanNotes.substring(cardioIdx) : '';
               const open = expandedAnalysis[workout.id];
               const cardioOpen = expandedAnalysis[workout.id + '-cardio'];
+              const taleOpen = expandedAnalysis[workout.id + '-tale'];
 
               return (
                 <div key={workout.id} className="bg-bg-1 rounded-[22px] p-4 fx-in">
@@ -177,10 +178,18 @@ export default function HistoryPage() {
                         <span className="inline-block transition-transform" style={{ transform: cardioOpen ? 'rotate(90deg)' : 'none' }}>›</span>Cardio data
                       </button>
                     )}
+                    {workout.chronicle && (
+                      <button onClick={() => toggleAnalysis(workout.id + '-tale')} className="flex items-center gap-1.5" style={{ font: `500 11px ${MONO}`, color: '#ff9a3c' }}>
+                        <span className="inline-block transition-transform" style={{ transform: taleOpen ? 'rotate(90deg)' : 'none' }}>›</span>Quest chronicle
+                      </button>
+                    )}
                     <button onClick={() => setDeleteConfirm(workout.id)} className="ml-auto text-error/70" style={{ font: `500 10px ${MONO}` }}>Delete</button>
                   </div>
                   {open && aiNotes && (
                     <div className="mt-2.5 p-3.5 rounded-2xl bg-bg-2 text-[13px] text-text-secondary whitespace-pre-line fx-in" style={{ lineHeight: 1.55 }}>{aiNotes}</div>
+                  )}
+                  {taleOpen && workout.chronicle && (
+                    <div className="mt-2.5 p-3.5 rounded-2xl bg-bg-2 text-[13px] text-text-secondary fx-in" style={{ lineHeight: 1.6 }}>{workout.chronicle}</div>
                   )}
                   {cardioOpen && cardioNotes && (
                     <div className="mt-2.5 p-3.5 rounded-2xl bg-bg-2 text-[13px] text-text-secondary whitespace-pre-line fx-in" style={{ lineHeight: 1.55 }}>{cardioNotes}</div>

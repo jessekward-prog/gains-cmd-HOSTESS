@@ -231,6 +231,7 @@ async function initializeTables() {
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exercise_links JSONB');
     // Quest Mode: profile + vault in one small column; Forge art (images) in its own table.
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS quest JSONB');
+    await client.query('ALTER TABLE workout_history ADD COLUMN IF NOT EXISTS chronicle TEXT');
     await client.query(`
       CREATE TABLE IF NOT EXISTS quest_art (
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -359,7 +360,7 @@ async function updateProgram(userId, programId, name, workouts) {
 
 // Workout history functions
 async function getWorkoutHistory(userId, startDate = null, endDate = null) {
-  let query = 'SELECT id, program_name, workout_name, date, exercises, duration, notes, created_at FROM workout_history WHERE user_id = $1';
+  let query = 'SELECT id, program_name, workout_name, date, exercises, duration, notes, chronicle, created_at FROM workout_history WHERE user_id = $1';
   const params = [userId];
   
   if (startDate && endDate) {
@@ -392,6 +393,15 @@ async function updateWorkout(userId, workoutId, programName, workoutName, date, 
 
 async function updateWorkoutNotes(userId, workoutId, notes) {
   await pool.query('UPDATE workout_history SET notes = $3 WHERE user_id = $1 AND id = $2', [userId, workoutId, notes]);
+}
+
+async function getWorkoutById(userId, workoutId) {
+  const { rows } = await pool.query('SELECT id, program_name, workout_name, date, exercises, duration, chronicle FROM workout_history WHERE user_id = $1 AND id = $2', [userId, workoutId]);
+  return rows[0] || null;
+}
+
+async function setChronicle(userId, workoutId, text) {
+  await pool.query('UPDATE workout_history SET chronicle = $1 WHERE user_id = $2 AND id = $3', [text, userId, workoutId]);
 }
 
 async function deleteWorkoutById(userId, workoutId) {
@@ -621,6 +631,8 @@ module.exports = {
   updateAppearance,
   updateExerciseLinks,
   updateQuest,
+  getWorkoutById,
+  setChronicle,
   getQuestArt,
   setQuestArt,
   deleteQuestArt,

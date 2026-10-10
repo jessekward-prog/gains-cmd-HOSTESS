@@ -108,7 +108,8 @@ export function muscleSets(history, links, cat, days = 7, now = Date.now()) {
   const out = {};
   (history || []).forEach((w) => {
     const t = Date.parse(String(w.date).split('T')[0] + 'T12:00:00');
-    if (!(t >= since) || t > now) return;
+    // A date counts as its noon, so "today" must not be cut off before 12pm.
+    if (!(t >= since) || t > now + 86400000) return;
     const exs = typeof w.exercises === 'string' ? JSON.parse(w.exercises) : w.exercises;
     Object.entries(sessionMuscles(exs, links, cat).sets).forEach(([r, v]) => { out[r] = (out[r] || 0) + v; });
   });

@@ -335,6 +335,89 @@ app.post('/api/quest', requireAuth, async (req, res) => {
   }
 });
 
+// Quest Mode flavour text, written once when a quest begins (never mid-set).
+// The app decides every event and number; the model only words them. Anything
+// odd is dropped and the app falls back to its own lines.
+const QUEST_EVENT_KEYS = ['shield', 'enraged', 'slow', 'paused', 'mirror', 'goblin', 'weak', 'spring', 'ambush', 'plateau'];
+const cleanLine = (t) => (typeof t === 'string' ? t.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim() : '');
+const okLine = (t, max = 110) => t && t.length <= max;
+app.post('/api/quest/script', requireAuth, async (req, res) => {
+  try {
+    const { exercises, events, boss } = req.body || {};
+    const names = (Array.isArray(exercises) ? exercises : []).filter((n) => typeof n === 'string').slice(0, 16);
+    const keys = (Array.isArray(events) ? events : []).filter((k) => QUEST_EVENT_KEYS.includes(k));
+    if (!names.length) return badRequest(res, 'exercises[] required');
+    const arr = { type: 'array', items: str };
+    const schema = obj({
+      events: obj(Object.fromEntries(keys.map((k) => [k, arr]))),
+      victory: arr,
+      rest: { type: 'array', items: obj({ n: int, lines: arr }) },
+      boss: obj({ name: str, cry: str }),
+    });
+    const reply = await llm({
+      system: 'You write short, punchy fantasy-RPG flavour text for a gym workout game where each exercise is a monster. '
+        + 'Every line under 90 characters, no emojis, no hashtags. Never give numbers, weights or instructions: the app adds those.',
+      messages: [{ role: 'user', content: [
+        `Exercises (numbered): ${names.map((n, i) => `${i + 1}. ${n}`).join('; ')}`,
+        keys.length ? `events: for each key give 3 different one-line narrations of it happening to the monster. Keys and meaning: ${keys.map((k) => ({
+          shield: 'monster raises a shield', enraged: 'monster becomes enraged and impatient', slow: 'a slow curse on the hero',
+          paused: 'the hero must pause and hold', mirror: 'the hero fights a mirror image of their past self', goblin: 'a treasure goblin appears',
+          weak: 'a weak point appears in the monster armour', spring: 'a healing spring appears', ambush: 'a second foe ambushes',
+          plateau: 'an old foe that has blocked the path for weeks' }[k])).join('; ')}` : 'events: return an empty object.',
+        'victory: 6 one-line victory templates. Use {name} for the monster and {kg} for the kilograms moved; you may use {sets} for sets. No other braces.',
+        'rest: for each numbered exercise, n = its number and 2 lines: one practical form cue for that exercise from a wise mentor, one taunt from the monster.',
+        boss ? `boss: this week's boss embodies the neglected muscle group "${boss}". Give it a two-to-four word name and a one-line battle cry.` : 'boss: name "" and cry "".',
+      ].join('\n') }],
+      maxTokens: 1500, temperature: 0.9, timeoutMs: 90000, schema,
+    });
+    const raw = JSON.parse(reply);
+    const out = { events: {}, victory: [], rest: {}, boss: null };
+    for (const k of keys) out.events[k] = (raw.events?.[k] || []).map(cleanLine).filter((t) => okLine(t)).slice(0, 3);
+    out.victory = (raw.victory || []).map(cleanLine)
+      .filter((t) => okLine(t) && t.includes('{name}') && !/\{(?!name\}|kg\}|sets\})/.test(t)).slice(0, 6);
+    for (const r of raw.rest || []) {
+      const name = names[(r.n | 0) - 1];
+      if (name) out.rest[name] = (r.lines || []).map(cleanLine).filter((t) => okLine(t, 120)).slice(0, 2);
+    }
+    if (boss && okLine(cleanLine(raw.boss?.name), 40)) out.boss = { name: cleanLine(raw.boss.name), cry: okLine(cleanLine(raw.boss?.cry)) ? cleanLine(raw.boss.cry) : '' };
+    res.json({ success: true, script: out });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// The quest chronicle: a short story of a saved workout, from its real sets
+// plus a few quest facts the app sends (crits, loot, events). Saved on the row.
+app.post('/api/quest/chronicle', requireAuth, async (req, res) => {
+  try {
+    const { workoutId, facts } = req.body || {};
+    const w = await db.getWorkoutById(req.user.id, Number(workoutId));
+    if (!w) return res.status(404).json({ success: false, error: 'Workout not found' });
+    if (w.chronicle) return res.json({ success: true, chronicle: w.chronicle });
+    const exs = (typeof w.exercises === 'string' ? JSON.parse(w.exercises) : w.exercises) || [];
+    const lines = exs.map((e) => {
+      const done = (e.sets || []).filter((s) => s.completed);
+      if (!done.length) return null;
+      const top = done.reduce((a, s) => (parseFloat(s.weight) || 0) > (parseFloat(a.weight) || 0) ? s : a, done[0]);
+      return `${e.name}: ${done.length} sets, best ${parseFloat(top.weight) || 0} kg x ${top.reps}`;
+    }).filter(Boolean);
+    const f = facts && typeof facts === 'object' ? facts : {};
+    const extra = ['crits', 'xp', 'level', 'loot', 'events', 'boss'].filter((k) => f[k] != null && String(f[k]).length < 200).map((k) => `${k}: ${f[k]}`);
+    const text = cleanLine(await llm({
+      system: 'You are the bard of a gym workout RPG. Write the chronicle of today\'s quest in 3 to 5 sentences, second person, past tense, '
+        + 'heroic and a little funny. Each exercise was a monster. Only use numbers that appear in the facts. No emojis, no lists, no title.',
+      messages: [{ role: 'user', content: `Quest: ${w.workout_name}. Duration ${w.duration || 0} min.\nBattles:\n${lines.join('\n')}${extra.length ? `\n${extra.join('\n')}` : ''}` }],
+      maxTokens: 600, temperature: 0.9, timeoutMs: 90000,
+    }));
+    if (!text || text.length < 40) return res.status(502).json({ success: false, error: 'The bard had nothing to say' });
+    const chronicle = text.slice(0, 1200);
+    await db.setChronicle(req.user.id, w.id, chronicle);
+    res.json({ success: true, chronicle });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Forge art: one record per vault slot { name, style, pal, img (data URL) }.
 const questSlot = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 200 ? n : null; };
 app.get('/api/quest/art', requireAuth, async (req, res) => {

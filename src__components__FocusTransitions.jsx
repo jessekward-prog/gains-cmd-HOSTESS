@@ -11,7 +11,8 @@ import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
 import BodyMap from './BodyMap';
 import QuestHeroCard from './QuestHeroCard';
 import useQuest from '../hooks/useQuest';
-import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET } from '../lib/quest';
+import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET, EVENTS, weekKey, daysThisWeek, BOSS_SETS } from '../lib/quest';
+import { muscleSets as weekSets } from '../lib/catalog';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -249,7 +250,7 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
           </div>
         )}
 
-        {quest && <QuestChest exercises={summary.exercises} questKey={questKey} />}
+        {quest && <QuestChest exercises={summary.exercises} questKey={questKey} workoutId={result?.workoutId} />}
         <SessionMuscles exercises={summary.exercises} />
         <Strength rows={summary.strength} />
 
@@ -347,11 +348,35 @@ function Strength({ rows }) {
 // play it out — trophy → reel → reveal — while the save runs behind it.
 function QuestLoot({ exercises, questKey, onDone }) {
   const { prof, updProf } = useQuest();
+  const { workoutHistory, settings } = useWorkout();
+  const cat = useCatalog();
   const [start] = useState(() => ({ prof, session: questSession(exercises, xpMult(prof, prof.lvl)), at: Date.now() }));
   const [cardOpen, setCardOpen] = useState(false);
   const [skipped, setSkipped] = useState(false); // tap anywhere: straight to the reveal
+  const [bossWon, setBossWon] = useState(false);
   const [, tick] = useState(0);
-  useEffect(() => { updProf((p) => clearQuest(p, questKey, start.session)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Bank once the library is in (it is by now — the quest screen loaded it) so the
+  // weekly boss can be judged; give up waiting after 2s and bank without it.
+  const banked = useRef(false);
+  useEffect(() => {
+    const bank = (withCat) => {
+      if (banked.current) return;
+      banked.current = true;
+      const wk = weekKey(), b = prof.boss;
+      let won = false;
+      if (withCat && b?.week === wk && prof.bossBeat !== wk) {
+        const before = weekSets(workoutHistory, settings?.exerciseLinks, withCat, daysThisWeek())[b.region] || 0;
+        const now = sessionMuscles(exercises, settings?.exerciseLinks, withCat).sets[b.region] || 0;
+        won = before + now >= BOSS_SETS; // beaten and not yet claimed this week (however it got there)
+      }
+      setBossWon(won);
+      const session = won ? { ...start.session, packs: (start.session.packs || 0) + 1 } : start.session;
+      updProf((p) => { const c = clearQuest(p, questKey, session); return c === p || !won ? c : { ...c, bossBeat: wk }; }).catch(() => {});
+    };
+    if (cat) bank(cat);
+    const t = setTimeout(() => bank(null), 2000);
+    return () => clearTimeout(t);
+  }, [cat]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 100); return () => clearInterval(id); }, []);
 
   const t = skipped ? 9 : (Date.now() - start.at) / 1000;
@@ -368,8 +393,13 @@ function QuestLoot({ exercises, questKey, onDone }) {
       <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>QUEST CLEAR</div>
       <div className="mt-2" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1 }}>+{xpNow.toLocaleString()} XP</div>
       <div className="mt-2 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
-        {up ? `LV ${start.prof.lvl} → LV ${after.lvl} · ${lvTitle(after.lvl)}` : `LV ${after.lvl} · ${after.xp} / 1000`} · {start.session.crits} crit{start.session.crits === 1 ? '' : 's'} · +1 card pack
+        {up ? `LV ${start.prof.lvl} → LV ${after.lvl} · ${lvTitle(after.lvl)}` : `LV ${after.lvl} · ${after.xp} / 1000`} · {start.session.crits} crit{start.session.crits === 1 ? '' : 's'} · +{1 + (start.session.packs || 0) + (bossWon ? 1 : 0)} card pack{(start.session.packs || bossWon) ? 's' : ''}
       </div>
+      {bossWon && (
+        <div className="mt-3 px-3 py-1.5 rounded-[10px]" style={{ font: `600 11px ${MONO}`, letterSpacing: '.14em', color: '#050505', background: 'var(--color-success)' }}>
+          WEEKLY BOSS DEFEATED · {prof.boss?.name}
+        </div>
+      )}
       <div className="mt-8 flex flex-col items-center gap-3" style={{ minHeight: 230 }}>
         {reelT < 0 && (
           <div style={{ fontSize: 13, lineHeight: 1.15, whiteSpace: 'pre', color: '#fbbf24', fontFamily: MONO, animation: 'fx-pop .5s cubic-bezier(.2,1.4,.4,1) both' }}>{TROPHY}</div>
@@ -401,11 +431,20 @@ function QuestLoot({ exercises, questKey, onDone }) {
 }
 
 // The quest's line on the summary: what it banked and what the chest dropped.
-function QuestChest({ exercises, questKey }) {
+function QuestChest({ exercises, questKey, workoutId }) {
   const { prof } = useQuest();
   const [session] = useState(() => questSession(exercises, xpMult(prof, prof.lvl)));
   const [cardOpen, setCardOpen] = useState(false);
   const loot = prof.lastChest === questKey ? prof.lastLoot : null;
+  // The chronicle: written by the local AI from the saved workout + these facts.
+  const [tale, setTale] = useState(null); // null = writing, '' = unavailable
+  useEffect(() => {
+    if (!workoutId) return;
+    const events = exercises.flatMap((e) => (e.sets || []).filter((x) => x.qe?.st === 'accepted' && x.qe.ok).map((x) => `${EVENTS[x.qe.k]?.title.toLowerCase()} on ${e.name}`));
+    const facts = { crits: session.crits, xp: session.xp, level: prof.lvl, loot: loot?.label, events: events.join('; ') || null,
+      boss: prof.bossBeat === weekKey() ? `defeated the weekly boss ${prof.boss?.name}` : null };
+    api.questChronicle(workoutId, facts).then((r) => setTale(r.chronicle || '')).catch(() => setTale(''));
+  }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .45s both' }}>
@@ -429,6 +468,14 @@ function QuestChest({ exercises, questKey }) {
               <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}` }}>{loot.tier} · {loot.sub}</div>
             </div>
             <button onClick={() => setCardOpen(true)} className="flex-shrink-0 h-12 px-4 rounded-[14px] bg-bg-3 font-extrabold text-sm">Hero card</button>
+          </div>
+        )}
+        {workoutId && tale !== '' && (
+          <div className="mt-3 p-3.5 rounded-[18px] bg-bg-2">
+            <div className="g-label">QUEST CHRONICLE</div>
+            <p className="mt-2 text-sm text-text-secondary" style={{ lineHeight: 1.6, textWrap: 'pretty', fontStyle: tale ? 'normal' : 'italic' }}>
+              {tale || 'The bard is writing…'}
+            </p>
           </div>
         )}
       </div>

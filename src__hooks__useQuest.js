@@ -7,6 +7,8 @@ import { withDefaults, TINTS } from '../lib/quest';
 export const QUEST_TINT_KEY = 'gains-cmd-quest-tint';
 export const QUEST_SCAN_KEY = 'gains-cmd-quest-scanlines';
 export const readTint = () => { try { const v = localStorage.getItem(QUEST_TINT_KEY); return TINTS[v] ? v : 'amber'; } catch { return 'amber'; } };
+export const QUEST_SCROLL_KEY = 'gains-cmd-quest-scrolls';
+export const readScrolls = () => { try { return localStorage.getItem(QUEST_SCROLL_KEY) !== 'off'; } catch { return true; } };
 export const readScanlines = () => { try { return localStorage.getItem(QUEST_SCAN_KEY) !== 'off'; } catch { return true; } };
 
 // The handoff's starter vault: five commons/rares and one starred favourite.

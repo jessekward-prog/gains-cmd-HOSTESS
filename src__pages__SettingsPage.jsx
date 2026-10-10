@@ -6,7 +6,7 @@ import { useHeaderMessage } from '../context/HeaderMessageContext';
 import ImportModal from '../components/ImportModal';
 import ExerciseInfo from '../components/ExerciseInfo';
 import QuestHeroCard from '../components/QuestHeroCard';
-import useQuest, { QUEST_TINT_KEY, QUEST_SCAN_KEY, readTint, readScanlines } from '../hooks/useQuest';
+import useQuest, { QUEST_TINT_KEY, QUEST_SCAN_KEY, QUEST_SCROLL_KEY, readTint, readScanlines, readScrolls } from '../hooks/useQuest';
 import { TINTS, lvTitle } from '../lib/quest';
 import { exerciseNames } from '../components/ExerciseNameOptions';
 import { useWorkout } from '../context/WorkoutContext';
@@ -305,6 +305,7 @@ function QuestSettings() {
   const { prof } = useQuest();
   const [tint, setTint] = useState(readTint);
   const [scan, setScan] = useState(readScanlines);
+  const [scrolls, setScrolls] = useState(readScrolls);
   const [card, setCard] = useState(false);
   const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   return (
@@ -319,6 +320,9 @@ function QuestSettings() {
       </div>
       <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>SCANLINES</div>
       <Segmented value={scan} onChange={(v) => { setScan(v); save(QUEST_SCAN_KEY, v ? 'on' : 'off'); }} options={[[true, 'On'], [false, 'Off']]} />
+      <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>REST SCROLLS</div>
+      <p className="mb-2 text-xs text-text-secondary" style={{ lineHeight: 1.5 }}>A form cue or a monster taunt under the rest timer, written by your local AI when it's available.</p>
+      <Segmented value={scrolls} onChange={(v) => { setScrolls(v); save(QUEST_SCROLL_KEY, v ? 'on' : 'off'); }} options={[[true, 'On'], [false, 'Off']]} />
       <button onClick={() => setCard(true)} className="mt-4 w-full h-12 rounded-[15px] bg-bg-2 text-text-primary font-bold text-sm">
         Hero card · Lv {prof.lvl} {lvTitle(prof.lvl)}
       </button>

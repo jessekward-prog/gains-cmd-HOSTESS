@@ -51,6 +51,8 @@ export const saveQuest = (quest) => api.post('/api/quest', { quest });
 export const getQuestArt = () => api.get('/api/quest/art');
 export const saveQuestArt = (slot, rec) => api.put(`/api/quest/art/${slot}`, rec);
 export const deleteQuestArt = (slot) => api.del(`/api/quest/art/${slot}`);
+export const questScript = (body) => api.post('/api/quest/script', body);
+export const questChronicle = (workoutId, facts) => api.post('/api/quest/chronicle', { workoutId, facts });
 export const updateAggression = (data) => api.post('/api/aggression', data);
 
 // Chat

@@ -28,7 +28,7 @@ function useTyped(text, frame) {
  * monster: monsterOf() result · hit: { dmg, crit } for the attack float ·
  * area: index into LANDS · lvl/xp: shown on the hero box · msg: dialogue line.
  */
-export default function QuestStage({ phase, start = 0, monster, hit, area = 0, heroName = 'Warlord', petKey = null, lvl, xp, tint = 'amber', scanlines = true, msg = '', goFlash = false, title, card }) {
+export default function QuestStage({ phase, start = 0, aura = null, monster, hit, area = 0, heroName = 'Warlord', petKey = null, lvl, xp, tint = 'amber', scanlines = true, msg = '', goFlash = false, title, card }) {
   const frame = useFrame();
   const t = start ? Math.max(0, (Date.now() - start) / 1000) : 9;
   const [wf, setWf] = useState(0);
@@ -140,7 +140,7 @@ export default function QuestStage({ phase, start = 0, monster, hit, area = 0, h
 
           <div className="absolute flex flex-col items-center" style={{ top: 18, right: 12, transform: `translate(${monX}px, ${monY}px)`, opacity: monOp }}>
             <div className="flex items-end justify-center" style={{ height: 112, paddingRight: 8 }}>
-              <div style={{ backgroundImage: monSrc, backgroundSize: '100% 100%', width: SIZES[monster.sprite][0] * monster.scale, height: SIZES[monster.sprite][1] * monster.scale, imageRendering: 'pixelated', filter: `${glow} brightness(${phase === 'rest' ? 0.7 : 1})` }} />
+              <div style={{ backgroundImage: monSrc, backgroundSize: '100% 100%', width: SIZES[monster.sprite][0] * monster.scale, height: SIZES[monster.sprite][1] * monster.scale, imageRendering: 'pixelated', filter: aura ? `drop-shadow(0 0 ${6 + (frame % 10 < 5 ? 4 : 0)}px ${aura}) drop-shadow(0 0 2px ${aura})` : `${glow} brightness(${phase === 'rest' ? 0.7 : 1})` }} />
             </div>
             <div style={{ width: 96, height: 14, marginTop: -6, borderRadius: '50%', background: 'rgba(0,0,0,.55)' }} />
           </div>

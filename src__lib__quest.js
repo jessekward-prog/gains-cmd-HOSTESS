@@ -150,6 +150,7 @@ export function blockXp(exercises, block, mult = 1) {
       if (!s.completed) continue;
       if (timedBlock(block.kind)) timed++;
       else vol += loadOf(ex.name, s.weight) * num(s.reps);
+      vol += eventBonus(ex, s, block.kind).xp * 4; // event bonus, in the same units
     }
   }
   return Math.round((vol / 4 + timed * TIMED_XP) * mult);
@@ -158,7 +159,7 @@ export function blockXp(exercises, block, mult = 1) {
 /** The whole session so far: XP from beaten blocks, crits, real kg moved. */
 export function questSession(exercises = [], mult = 1) {
   const blocks = buildBlocks(exercises);
-  let xp = 0, crits = 0, vol = 0, beaten = 0;
+  let xp = 0, crits = 0, vol = 0, beaten = 0, packs = 0;
   blocks.forEach((b) => {
     const m = monsterOf(exercises, b, 0);
     if (m.done) { xp += blockXp(exercises, b, mult); beaten++; }
@@ -168,11 +169,13 @@ export function questSession(exercises = [], mult = 1) {
       for (const s of ex.sets || []) {
         if (!s.completed) continue;
         vol += num(s.weight) * num(s.reps);
-        if (isCrit(ex, s)) crits++;
+        const bonus = eventBonus(ex, s, b.kind);
+        if (isCrit(ex, s) || bonus.crit) crits++;
+        packs += bonus.pack;
       }
     }
   });
-  return { xp, crits, vol: Math.round(vol), beaten, total: blocks.length };
+  return { xp, crits, vol: Math.round(vol), beaten, total: blocks.length, packs };
 }
 
 /**
@@ -183,7 +186,7 @@ export function questSession(exercises = [], mult = 1) {
 export function commitQuest(prof, workoutId, session) {
   if (!workoutId || prof.lastQuest === workoutId) return prof;
   const { lvl, xp } = addXp(prof.lvl, prof.xp, session.xp);
-  const p = { ...prof, lvl, xp, quests: prof.quests + 1, vol: prof.vol + session.vol, crits: prof.crits + session.crits, packs: (prof.packs || 0) + 1, lastQuest: workoutId };
+  const p = { ...prof, lvl, xp, quests: prof.quests + 1, vol: prof.vol + session.vol, crits: prof.crits + session.crits, packs: (prof.packs || 0) + 1 + (session.packs || 0), lastQuest: workoutId };
   if (!p.pet) { const np = PETS.find((x) => x[2] && x[2] > prof.lvl && x[2] <= lvl); if (np) p.pet = np[0]; }
   return p;
 }
@@ -245,3 +248,168 @@ export const FORGE_RIGHTS = {
 };
 export const RIGHTS_LABEL = { pal: 'COMMON+', style: 'RARE+', name: 'EPIC+', img: 'LEGENDARY' };
 export const editsLeft = (vault, id) => Math.max(0, (vault.owned?.[id] || 0) - (vault.edits?.[id] || 0));
+
+// ── Random events ───────────────────────────────────────────────────
+// Code decides when and what (training instructions stay deterministic and
+// tested); the AI only words them. Rolled from a seed per quest + block, so a
+// reload never rerolls. At most one event per block, MAX_EVENTS per quest, and
+// only on normal (non-timed, non-superset, non-drop) blocks. Each is optional.
+// `where`: which working set it lands on. `xp`: XP multiplier for that set when
+// done. `crit`: counts as a crit when done. `pack`: card packs when done.
+// `rest`: seconds added to the rest after that set.
+export const EVENTS = {
+  shield: { title: 'SHIELD UP', color: '#60a5fa', where: 'last', w: 3, xp: 2, crit: true, load: 2.5, toFailure: true,
+    act: 'Add 2.5 kg and take this set to failure — log the reps you get.' },
+  enraged: { title: 'ENRAGED', color: '#ef4444', where: 'notLast', w: 2, xp: 1.5, rest: -30, act: 'Your next rest is 30 s shorter.' },
+  slow: { title: 'SLOW CURSE', color: '#c084fc', where: 'any', w: 2, xp: 1.5, act: 'Lower every rep over 3 seconds.' },
+  paused: { title: 'PAUSED BLOW', color: '#f59e0b', where: 'any', w: 2, xp: 1.5, act: 'Hold 1 second at the bottom of every rep.' },
+  mirror: { title: 'MIRROR MATCH', color: '#22d3ee', where: 'any', w: 2, xp: 2, needsLast: true, act: 'Match last session exactly: {last}.' },
+  goblin: { title: 'TREASURE GOBLIN', color: '#fbbf24', where: 'any', w: 2, pack: 1, act: 'Hit {top} reps to catch it — it drops a card pack.' },
+  weak: { title: 'WEAK POINT', color: '#22c55e', where: 'last', w: 2, crit: true, act: 'Hit {top} reps for a guaranteed crit.' },
+  spring: { title: 'HEALING SPRING', color: '#34d399', where: 'notLast', w: 1, rest: 30, act: 'Take 30 s extra rest after this set, on the house.' },
+  ambush: { title: 'AMBUSH', color: '#fb923c', where: 'last', w: 1, xp: 1.5, bonusSet: true, act: 'Accept for one bonus set at 80% weight after this one.' },
+  plateau: { title: 'PLATEAU BREAKER', color: '#f472b6', where: 'first', xp: 2, load: 2.5, act: 'Stuck at {lw} kg for 3 sessions. Try +2.5 kg this set.' },
+};
+export const EVENT_CHANCE = 0.12; // per eligible block
+export const MAX_EVENTS = 2;
+
+/** Deterministic 0–1 from a string (FNV-1a), so the same quest always rolls the same. */
+export function seeded(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 100000) / 100000;
+}
+
+/** Top weight per past session for an exact exercise name, newest first. */
+export function topWeights(history = [], name) {
+  const out = [];
+  for (const w of history) {
+    let exs = w.exercises;
+    if (typeof exs === 'string') { try { exs = JSON.parse(exs); } catch { exs = []; } }
+    const ex = (exs || []).find((e) => e?.name === name);
+    const ws = (ex?.sets || []).filter((s) => s.completed && s.type !== 'drop').map((s) => num(s.weight));
+    if (ws.length) out.push(Math.max(...ws));
+  }
+  return out;
+}
+/** Same top weight (> 0) for the last 3+ sessions — not for assisted lifts (inverted). */
+export function plateaued(history, name) {
+  if (isAssisted(name)) return false;
+  const t = topWeights(history, name);
+  return t.length >= 3 && t[0] > 0 && t[0] === t[1] && t[1] === t[2];
+}
+
+const workingSets = (ex) => (ex.sets || []).map((s, i) => [s, i]).filter(([s]) => s.type !== 'drop');
+
+/**
+ * The quest's events: { [blockIndex]: { k, si } } — si = the set index it lands on.
+ * Plateaus come first (they're real, not chance), then seeded rolls, capped.
+ * `force` (dev/testing) puts that event on the first eligible block.
+ */
+export function planEvents(exercises, key, history = [], force = null) {
+  const blocks = buildBlocks(exercises);
+  const plan = {};
+  let n = 0;
+  const eligible = (b) => b.kind === 'normal' && b.indices.length === 1;
+  blocks.forEach((b, bi) => {
+    if (n >= MAX_EVENTS || !eligible(b)) return;
+    const ex = exercises[b.indices[0]];
+    if (plateaued(history, ex.name)) { plan[bi] = { k: 'plateau', si: workingSets(ex)[0]?.[1] ?? 0 }; n++; }
+  });
+  blocks.forEach((b, bi) => {
+    if (n >= MAX_EVENTS || plan[bi] || !eligible(b)) return;
+    if (!force && seeded(`${key}|${bi}|roll`) >= EVENT_CHANCE) return;
+    const ex = exercises[b.indices[0]];
+    const ws = workingSets(ex);
+    if (!ws.length) return;
+    const hasLast = topWeights(history, ex.name).length > 0;
+    const opts = Object.entries(EVENTS).filter(([k, e]) => k !== 'plateau' && (!e.needsLast || hasLast)
+      && (e.where !== 'notLast' || ws.length > 1));
+    let k;
+    if (force && EVENTS[force]) k = force;
+    else {
+      const total = opts.reduce((a, [, e]) => a + e.w, 0);
+      let r = seeded(`${key}|${bi}|pick`) * total;
+      k = opts.find(([, e]) => (r -= e.w) < 0)?.[0] || opts[0][0];
+    }
+    const e = EVENTS[k];
+    const si = e.where === 'last' ? ws[ws.length - 1][1]
+      : e.where === 'first' ? ws[0][1]
+      : e.where === 'notLast' ? ws[Math.floor(seeded(`${key}|${bi}|set`) * (ws.length - 1))][1]
+      : ws[Math.floor(seeded(`${key}|${bi}|set`) * ws.length)][1];
+    plan[bi] = { k, si };
+    n++;
+    force = null;
+  });
+  return plan;
+}
+
+/** The set as an event asks for it: heavier for shield/plateau (lighter on assisted). */
+export function eventLoad(ex, s, k) {
+  const e = EVENTS[k];
+  if (!e?.load) return num(s.weight);
+  return isAssisted(ex.name) ? Math.max(0, num(s.weight) - e.load) : num(s.weight) + e.load;
+}
+
+/** Did a completed, accepted event set do what was asked? `last` = { lw, lr } from history. */
+export function eventDone(k, ex, s, last) {
+  const reps = num(s.reps), w = num(s.weight);
+  if (!s.completed) return false;
+  if (k === 'goblin' || k === 'weak') return reps >= topRep(ex);
+  if (k === 'mirror') {
+    if (!last || last.lw == null) return false;
+    const better = isAssisted(ex.name) ? w <= last.lw : w >= last.lw;
+    return better && reps >= last.lr;
+  }
+  return reps > 0; // the rest are about doing it, and they're on your honour
+}
+
+/** Extra XP, crits and packs a set's accepted event earned (read back from s.qe). */
+export function eventBonus(ex, s, kind) {
+  const q = s.qe;
+  if (!q || q.st !== 'accepted' || !q.ok) return { xp: 0, crit: 0, pack: 0 };
+  const e = EVENTS[q.k] || {};
+  const base = timedBlock(kind) ? TIMED_XP : (loadOf(ex.name, s.weight) * num(s.reps)) / 4;
+  return { xp: Math.round(base * ((e.xp || 1) - 1)), crit: e.crit ? 1 : 0, pack: e.pack || 0 };
+}
+
+// Fallback wording (the AI writes fresh lines when it can).
+export const EVENT_LINES = {
+  shield: ['The beast raises a shield of iron!', 'A rune-shield flares around it.', 'It hides behind a slab of steel.'],
+  enraged: ['Its eyes burn red. It will not wait for you.', 'Enraged, it lunges early!', 'Fury makes it quick.'],
+  slow: ['A slow curse settles on your bones.', 'Time thickens like tar.', 'The air turns to syrup.'],
+  paused: ['It braces at the bottom. Hold your ground.', 'Strike, pause, strike again.', 'Patience is the blade.'],
+  mirror: ['Your own reflection steps out to fight.', 'A mirror-twin copies your last battle.', 'Can you match your past self?'],
+  goblin: ['A treasure goblin darts past, pack in hand!', 'Gold glints behind the monster.', 'Something shiny is running away.'],
+  weak: ['A crack opens in its armour.', 'You spot a weak point!', 'Its guard drops for a moment.'],
+  spring: ['A healing spring bubbles nearby.', 'Cool water. Catch your breath.', 'The spring restores you.'],
+  ambush: ['A second foe leaps from the shadows!', 'Ambush! Another wave comes.', 'It was not alone.'],
+  plateau: ['This one has blocked your path for weeks.', 'The same wall, again. Break it.', 'It has grown fat on your stalls.'],
+};
+export const VICTORY_LINES = ['{name} crumbles under {kg} kg!', '{kg} kg moved. {name} is no more.', '{name} falls. The halls echo with {kg} kg of iron.',
+  'Your {sets} blows were too much for {name}.', '{name} drops its guard and its dignity.', 'Victory over {name}!'];
+export const REST_LINES = ['Breathe. The next blow lands harder rested.', 'Shake it out. Your grip will thank you.', 'Sip water, steady your stance.',
+  'The monster circles. Rest while it does.', 'Reset your setup before you strike again.'];
+/** Fill a victory template — only {name} {kg} {sets} survive; anything else is dropped. */
+export const fillLine = (tpl, v) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : ''));
+
+// ── Weekly boss: your most-neglected muscle ─────────────────────────
+export const BOSS_REGIONS = ['chest', 'upperBack', 'deltoids', 'quadriceps', 'hamstring', 'gluteal', 'biceps', 'triceps', 'abs'];
+export const BOSS_SETS = 8;
+/** Monday-based week key, e.g. '2026-10-05'. */
+export function weekKey(now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** The region with the fewest sets over the last 14 days (ties: list order). */
+export function pickBossRegion(sets14) {
+  return BOSS_REGIONS.reduce((best, r) => ((sets14[r] || 0) < (sets14[best] || 0) ? r : best), BOSS_REGIONS[0]);
+}
+// Plain-word muscle names (for the AI prompt and the panel) and fallback boss names.
+export const BOSS_WORDS = { chest: 'chest', upperBack: 'upper back and lats', deltoids: 'shoulders', quadriceps: 'quads', hamstring: 'hamstrings',
+  gluteal: 'glutes', biceps: 'biceps', triceps: 'triceps', abs: 'abs' };
+export const BOSS_NAMES = { chest: 'The Breastplate Golem', upperBack: 'The Lat Wraith', deltoids: 'The Shoulder Harpy', quadriceps: 'The Thigh Titan',
+  hamstring: 'The Hamstring Hydra', gluteal: 'The Glute Colossus', biceps: 'The Curl Kraken', triceps: 'The Tricep Troll', abs: 'The Core Basilisk' };
+/** Days from this week's Monday through today, for muscleSets(…, days). */
+export const daysThisWeek = (now = new Date()) => ((now.getDay() + 6) % 7) + 1;

@@ -25,7 +25,12 @@ a hand-off screen between exercises, and a summary with your PRs when you finish
   the top of your rep range is a crit. Clearing a quest banks XP toward levels,
   titles, pets and hero-card borders, opens a loot chest and earns a card pack for
   the dithered Card Vault (with a Forge for your own art). Progress is saved to the
-  account. Sprite and art credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
+  account. Rare random events (Shield, Enraged, Mirror Match, Treasure Goblin,
+  Plateau Breaker and more) ask for a little extra on one set for bonus XP, crits
+  or packs; a weekly boss is your least-trained muscle. Your local model words the
+  events, writes victory lines, rest scrolls and a short quest chronicle saved to
+  History — written up front or after the save, never while you train, with
+  built-in lines when it's offline. Sprite and art credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
 - **AI (optional):** a local model writes post-workout notes, answers in the Coach
   tab, builds programs in the AI Wizard and remixes workouts. Everything else
   works without it.
