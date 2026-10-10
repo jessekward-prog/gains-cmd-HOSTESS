@@ -32,7 +32,9 @@ export default function QuestTitle({ onNavigate }) {
   const [pick, setPick] = useState(null);
   const program = programs.find((p) => p.id === pick?.programId) || upNext?.program;
   const index = pick?.index ?? (program === upNext?.program ? upNext?.index : 0) ?? 0;
-  const ws = program ? parse(program).map((w, i) => [w, i]).filter(([w]) => !w.variationOf) : [];
+  const ws = program ? parse(program).map((w, i) => [w, i]) : [];
+  // Every workout in every program can be a quest — up-next's program first.
+  const groups = upNext ? [upNext.program, ...programs.filter((p) => p !== upNext.program)] : programs;
 
   const tier = tierOf(prof.lvl);
   const begin = async () => {
@@ -53,38 +55,34 @@ export default function QuestTitle({ onNavigate }) {
 
         <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
           <div className="text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>
-          {programs.length > 1 && (
-            <div className="flex gap-1.5 overflow-x-auto mt-3" style={{ scrollbarWidth: 'none' }}>
-              {programs.map((p) => (
-                <button key={p.id} onClick={() => setPick({ programId: p.id, index: 0 })} className="flex-shrink-0 h-8 px-3 rounded-[10px]"
-                  style={{ font: `500 11px ${MONO}`, background: p === program ? 'var(--color-accent)' : 'var(--color-bg-2)', color: p === program ? 'var(--color-on-accent)' : 'var(--color-text-secondary)' }}>{p.name}</button>
-              ))}
-            </div>
-          )}
           {!program && (
             <div className="mt-3 text-sm text-text-secondary">No program yet. Make one in Programs and it becomes your quest list.</div>
           )}
-          <div className="flex flex-col gap-1.5 mt-3">
-            {ws.map(([w, i]) => {
-              const on = i === index;
-              const exs = w.exercises || [];
-              const sets = exs.reduce((a, e) => a + (Number(e.sets) || 0), 0);
-              return (
-                <button key={i} onClick={() => setPick({ programId: program.id, index: i })} className="flex items-center gap-3 px-4 py-3.5 rounded-[18px] text-left"
-                  style={{ background: on ? 'rgba(255,34,34,.08)' : 'var(--color-bg-2)', boxShadow: `inset 0 0 0 1.5px ${on ? 'var(--color-accent)' : 'transparent'}` }}>
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: on ? 'var(--color-accent)' : '#333' }} />
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{w.name}</span>
-                    <span className="block mt-0.5 truncate text-text-secondary" style={{ font: `400 11px ${MONO}` }}>{exs.slice(0, 3).map((e) => e.name).join(' · ')}</span>
-                  </span>
-                  <span className="text-right text-text-tertiary flex-shrink-0" style={{ font: `400 10px ${MONO}` }}>
-                    {buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters{sets ? ` · ${sets} sets` : ''}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-2 mt-3.5">
+          {groups.map((pg) => (
+            <div key={pg.id} className="mt-4">
+              {groups.length > 1 && <div className="g-label truncate mb-2">{pg.name}</div>}
+              <div className="flex flex-col gap-1.5">
+                {parse(pg).map((w, i) => {
+                  const on = pg === program && i === index;
+                  const exs = w.exercises || [];
+                  const sets = exs.reduce((a, e) => a + (Number(e.sets) || 0), 0);
+                  return (
+                    <button key={i} onClick={() => setPick({ programId: pg.id, index: i })} className="flex items-center gap-3 px-4 py-3.5 rounded-[18px] text-left"
+                      style={{ background: on ? 'rgba(255,34,34,.08)' : 'var(--color-bg-2)', boxShadow: `inset 0 0 0 1.5px ${on ? 'var(--color-accent)' : 'transparent'}` }}>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: on ? 'var(--color-accent)' : '#333' }} />
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{w.name}</span>
+                        <span className="block mt-0.5 truncate text-text-secondary" style={{ font: `400 11px ${MONO}` }}>
+                          {buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters{sets ? ` · ${sets} sets` : ''} · {exs.map((e) => e.name).join(' · ')}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-3.5 sticky bottom-2 pt-2" style={{ background: 'linear-gradient(transparent, var(--color-bg-1) 30%)' }}>
             <button onClick={() => setCardOpen(true)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}` }}>Hero card</button>
             <button onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)' }}>
               {program ? 'Begin quest' : 'Make a program'}
