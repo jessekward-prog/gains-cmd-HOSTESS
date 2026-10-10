@@ -9,6 +9,8 @@
 import { num, isAssisted, buildBlocks, isCardio } from './focus.js';
 
 export const ASSET = '/quest/';
+const R = String.raw;
+export const TROPHY = [R`   .-------.   `, R`  _|       |_  `, R` ( |  ***  | ) `, R`  '|       |'  `, R`    \     /    `, R`     '. .'     `, R`      | |      `, R`    .-' '-.    `, R`    '-----'    `].join('\n');
 
 // ── Scene data (verbatim from the handoff) ──────────────────────────
 // [sprite key, display scale]; frame sizes in px.
@@ -218,3 +220,28 @@ export function rollLoot(prof, crits, rand = Math.random) {
   }
   return { ...loot, tier: RARITY[tier][0], color: RARITY[tier][1], prof: p };
 }
+
+/**
+ * Finish a quest in one step: bank its XP + pack, then roll the chest — both
+ * keyed to `key`, so calling it again for the same quest changes nothing. The
+ * drop is remembered (lastLoot) so the summary can show it later.
+ */
+export function clearQuest(prof, key, session, rand = Math.random) {
+  if (!key || prof.lastChest === key) return prof;
+  const banked = commitQuest(prof, key, session);
+  const loot = rollLoot(banked, session.crits, rand);
+  const { prof: after, ...shown } = loot;
+  return { ...after, lastChest: key, lastLoot: shown };
+}
+
+// ── Card customising (the Forge) ────────────────────────────────────
+// Each copy of a card you own is one customise, so duplicates are worth
+// having. What a customise may change rises with rarity.
+export const FORGE_RIGHTS = {
+  C: { pal: true, style: false, name: false, img: false },
+  R: { pal: true, style: true, name: false, img: false },
+  E: { pal: true, style: true, name: true, img: false },
+  L: { pal: true, style: true, name: true, img: true },
+};
+export const RIGHTS_LABEL = { pal: 'COMMON+', style: 'RARE+', name: 'EPIC+', img: 'LEGENDARY' };
+export const editsLeft = (vault, id) => Math.max(0, (vault.owned?.[id] || 0) - (vault.edits?.[id] || 0));

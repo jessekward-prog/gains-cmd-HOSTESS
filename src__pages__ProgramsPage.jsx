@@ -1030,7 +1030,11 @@ export default function ProgramsPage({ onNavigate }) {
                 <button onClick={() => onNavigate('quest')}
                   className="h-14 rounded-[18px] bg-bg-2 text-text-primary font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
                   style={{ boxShadow: 'inset 0 0 0 1.5px #ff9a3c' }}>
-                  Quest <span style={{ fontFamily: MONO, color: '#ff9a3c' }}>→</span>
+                  <span className="flex flex-col items-start leading-none">
+                    Quest
+                    <span className="mt-1" style={{ font: `600 8px ${MONO}`, letterSpacing: '.16em', color: '#ff9a3c' }}>ALPHA TEST</span>
+                  </span>
+                  <span style={{ fontFamily: MONO, color: '#ff9a3c' }}>→</span>
                 </button>
               </div>
             )}

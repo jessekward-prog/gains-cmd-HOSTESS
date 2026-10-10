@@ -30,6 +30,7 @@ export default function QuestTitle({ onNavigate }) {
     return { program, index };
   }, [programs, workoutHistory]);
   const [pick, setPick] = useState(null);
+  const [openIds, setOpenIds] = useState(null); // null = just the selected workout's program
   const program = programs.find((p) => p.id === pick?.programId) || upNext?.program;
   const index = pick?.index ?? (program === upNext?.program ? upNext?.index : 0) ?? 0;
   const ws = program ? parse(program).map((w, i) => [w, i]) : [];
@@ -58,10 +59,24 @@ export default function QuestTitle({ onNavigate }) {
           {!program && (
             <div className="mt-3 text-sm text-text-secondary">No program yet. Make one in Programs and it becomes your quest list.</div>
           )}
-          {groups.map((pg) => (
-            <div key={pg.id} className="mt-4">
-              {groups.length > 1 && <div className="g-label truncate mb-2">{pg.name}</div>}
-              <div className="flex flex-col gap-1.5">
+          {groups.map((pg) => {
+            const open = openIds ? openIds.includes(pg.id) : pg === program;
+            const toggle = () => setOpenIds((ids) => {
+              const cur = ids || (program ? [program.id] : []);
+              return cur.includes(pg.id) ? cur.filter((x) => x !== pg.id) : [...cur, pg.id];
+            });
+            const n = parse(pg).length;
+            return (
+            <div key={pg.id} className="mt-2">
+              {groups.length > 1 && (
+                <button onClick={toggle} className="w-full flex items-center gap-2 px-1 py-2.5 text-left">
+                  <span className="flex-1 min-w-0 truncate" style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: pg === program ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>{pg.name}</span>
+                  <span className="text-text-tertiary flex-shrink-0" style={{ font: `400 10px ${MONO}` }}>{n} workout{n === 1 ? '' : 's'}</span>
+                  <span className="text-text-tertiary inline-block transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none', font: `500 14px ${MONO}` }}>›</span>
+                </button>
+              )}
+              {(open || groups.length === 1) && (
+              <div className="flex flex-col gap-1.5 fx-in">
                 {parse(pg).map((w, i) => {
                   const on = pg === program && i === index;
                   const exs = w.exercises || [];
@@ -80,8 +95,10 @@ export default function QuestTitle({ onNavigate }) {
                   );
                 })}
               </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           <div className="flex gap-2 mt-3.5 sticky bottom-2 pt-2" style={{ background: 'linear-gradient(transparent, var(--color-bg-1) 30%)' }}>
             <button onClick={() => setCardOpen(true)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}` }}>Hero card</button>
             <button onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] h-[62px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)' }}>

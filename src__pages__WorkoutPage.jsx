@@ -608,7 +608,9 @@ export default function WorkoutPage({ onNavigate }) {
   const runFinish = useCallback(async (afterSave) => {
     setCompleting(true);
     setFinishError(null);
-    if (isFocus) setFinishing({ summary: summarize(activeWorkout, workoutHistory), quest: isQuest });
+    // questKey (the start time) keys the quest's XP + chest, so the loot can open
+    // before the save even returns — and never twice.
+    if (isFocus) setFinishing({ summary: summarize(activeWorkout, workoutHistory), quest: isQuest, questKey: activeWorkout.startTime });
     try {
       const result = await finishWorkout(cardioStats);
       if (afterSave) await afterSave();
@@ -684,6 +686,7 @@ export default function WorkoutPage({ onNavigate }) {
       <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <FinishFlow
         quest={!!finishing.quest}
+        questKey={finishing.questKey}
         summary={finishing.summary}
         result={completeResult}
         failed={finishError}
@@ -736,6 +739,7 @@ export default function WorkoutPage({ onNavigate }) {
           onFinish={() => { setShowFinish(true); setCardioStats(null); }}
           onCancel={() => setShowCancel(true)}
           onAddExercise={() => setShowAddExercise(true)}
+          onQuestClear={handleConfirmFinish}
         />
       )}
       {isFocus && countdown && <Countdown workout={activeWorkout} onDone={() => setCountdown(false)} />}

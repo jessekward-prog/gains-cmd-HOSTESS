@@ -11,7 +11,7 @@ import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
 import BodyMap from './BodyMap';
 import QuestHeroCard from './QuestHeroCard';
 import useQuest from '../hooks/useQuest';
-import { questSession, commitQuest, rollLoot, xpMult, luckOf, oddsOf, REEL, RARITY } from '../lib/quest';
+import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -78,16 +78,18 @@ export function Countdown({ workout, onDone }) {
 // `result` is null until finishWorkout() resolves; the analysis screen paces
 // itself to it. Coach notes are written server-side after the save, so they
 // are polled from history until they land (or we give up and say so).
-export function FinishFlow({ summary, result, failed, onDone, onProgress, quest = false }) {
+export function FinishFlow({ summary, result, failed, onDone, onProgress, quest = false, questKey = null }) {
   const haptics = useHaptics();
   const [step, setStep] = useState(0);
-  const [phase, setPhase] = useState('analysis');
+  // A quest opens on its loot first; saving + analysis carry on behind it.
+  const [phase, setPhase] = useState(quest ? 'loot' : 'analysis');
   const [notes, setNotes] = useState(null);
   const [notesGaveUp, setNotesGaveUp] = useState(false);
   const [prVal, setPrVal] = useState(summary.prs[0]?.best ?? 0);
 
   // Step 1 waits for the save; 2 and 3 are paced; 4 waits for notes (max ~15s).
   useEffect(() => {
+    if (phase !== 'analysis') return;
     if (step === 0 && result) { const t = setTimeout(() => setStep(1), 600); return () => clearTimeout(t); }
     if (step === 1 || step === 2) { const t = setTimeout(() => setStep(step + 1), 850); return () => clearTimeout(t); }
     if (step === 3 && (notes !== null || notesGaveUp)) { const t = setTimeout(() => setStep(4), 300); return () => clearTimeout(t); }
@@ -96,7 +98,7 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
       const t = setTimeout(() => setPhase(summary.prs.length ? 'pr' : 'summary'), 400);
       return () => clearTimeout(t);
     }
-  }, [step, result, notes, notesGaveUp, summary.prs.length]);
+  }, [phase, step, result, notes, notesGaveUp, summary.prs.length]);
 
   // Poll for the coach's notes for up to a minute — they keep arriving on the
   // summary screen if the analysis outlasts the checklist.
@@ -146,6 +148,10 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
 
   const finish = useCallback(() => onDone(), [onDone]);
   useBackHandler(phase === 'summary', finish);
+
+  if (phase === 'loot' && !failed) {
+    return <QuestLoot exercises={summary.exercises} questKey={questKey} onDone={() => setPhase('analysis')} />;
+  }
 
   if (failed) {
     return portal(
@@ -241,7 +247,7 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
           </div>
         )}
 
-        {quest && <QuestChest exercises={summary.exercises} workoutId={result?.workoutId} />}
+        {quest && <QuestChest exercises={summary.exercises} questKey={questKey} />}
         <SessionMuscles exercises={summary.exercises} />
         <Strength rows={summary.strength} />
 
@@ -334,38 +340,67 @@ function Strength({ rows }) {
   );
 }
 
-// Quest Mode's reward: bank the quest's XP (+ a card pack) once the workout is
-// saved, then open the loot chest. Both are keyed to the saved workout id in
-// the profile, so a re-render or a reload can't award or roll them twice.
-function QuestChest({ exercises, workoutId }) {
+// Quest Mode's loot, first thing after the last monster falls: bank the XP and
+// roll the chest in one keyed step (clearQuest), so it can't award twice, then
+// play it out — trophy → reel → reveal — while the save runs behind it.
+function QuestLoot({ exercises, questKey, onDone }) {
   const { prof, updProf } = useQuest();
-  const [session] = useState(() => questSession(exercises, xpMult(prof, prof.lvl)));
-  const [roll, setRoll] = useState(null); // { at, loot }
+  const [start] = useState(() => ({ prof, session: questSession(exercises, xpMult(prof, prof.lvl)), at: Date.now() }));
   const [cardOpen, setCardOpen] = useState(false);
   const [, tick] = useState(0);
-  useEffect(() => { if (workoutId) updProf((p) => commitQuest(p, workoutId, session)); }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!roll) return;
-    const id = setInterval(() => tick((n) => n + 1), 100);
-    return () => clearInterval(id);
-  }, [roll]);
+  useEffect(() => { updProf((p) => clearQuest(p, questKey, start.session)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 100); return () => clearInterval(id); }, []);
 
-  const banked = !!workoutId && prof.lastQuest === workoutId;
-  const opened = banked && prof.lastChest === workoutId;
-  const t = roll ? (Date.now() - roll.at) / 1000 : 0;
-  const rolling = roll && t < 2.4;
-  const luck = luckOf(session.crits), od = oddsOf(luck);
-  const open = () => {
-    if (!banked || opened || roll) return;
-    const loot = rollLoot(prof, session.crits);
-    setRoll({ at: Date.now(), loot });
-    setTimeout(() => updProf(() => ({ ...loot.prof, lastChest: workoutId })), 2400);
-  };
-  const reelI = Math.floor(Math.pow(t, 0.6) * 12);
-  const loot = roll?.loot;
-  const shown = roll && !rolling ? loot : null;
-  const border = shown ? shown.color : opened ? '#2a2a2a' : 'var(--color-accent)';
+  const t = (Date.now() - start.at) / 1000;
+  const loot = prof.lastChest === questKey ? prof.lastLoot : null;
+  const after = addXp(start.prof.lvl, start.prof.xp, start.session.xp);
+  const up = after.lvl > start.prof.lvl;
+  const reelT = t - 1.2, rolling = reelT >= 0 && (reelT < 2.4 || !loot), shown = reelT >= 2.4 && loot;
+  const reelI = Math.floor(Math.pow(Math.max(0, reelT), 0.6) * 12);
+  const k = Math.min(1, t / 1.0);
+  const xpNow = Math.round(start.session.xp * (1 - Math.pow(1 - k, 3)));
 
+  return portal(
+    <div className={`${LAYER} overflow-y-auto flex flex-col items-center justify-center text-center px-6 fx-fade`} style={{ background: '#050505' }}>
+      <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>QUEST CLEAR</div>
+      <div className="mt-2" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1 }}>+{xpNow.toLocaleString()} XP</div>
+      <div className="mt-2 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
+        {up ? `LV ${start.prof.lvl} → LV ${after.lvl} · ${lvTitle(after.lvl)}` : `LV ${after.lvl} · ${after.xp} / 1000`} · {start.session.crits} crit{start.session.crits === 1 ? '' : 's'} · +1 card pack
+      </div>
+      <div className="mt-8 flex flex-col items-center gap-3" style={{ minHeight: 230 }}>
+        {reelT < 0 && (
+          <div style={{ fontSize: 13, lineHeight: 1.15, whiteSpace: 'pre', color: '#fbbf24', fontFamily: MONO, animation: 'fx-pop .5s cubic-bezier(.2,1.4,.4,1) both' }}>{TROPHY}</div>
+        )}
+        {rolling && (
+          <>
+            <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: '#999' }}>OPENING CHEST · LUCK +{Math.round(luckOf(start.session.crits) * 100)}%</div>
+            <div style={{ minWidth: 240, padding: '18px 20px', borderRadius: 18, background: '#171717', boxShadow: `inset 0 0 0 2px ${RARITY[reelI % 4][1]}`, fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', transform: reelT < 2 ? `translateX(${reelI % 2 ? 2 : -2}px)` : 'none' }}>{REEL[reelI % REEL.length]}</div>
+          </>
+        )}
+        {shown && (
+          <div className="flex flex-col items-center gap-3" style={{ animation: 'fx-pop .5s cubic-bezier(.2,1.4,.4,1) both' }}>
+            <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.2em', padding: '4px 10px', borderRadius: 8, color: '#050505', background: loot.color }}>{loot.tier}</div>
+            {loot.pet && <img src={`${ASSET}sprites/pet_${loot.pet}_0.png`} alt="" style={{ height: (loot.h || 16) * 4, imageRendering: 'pixelated' }} />}
+            <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1, color: loot.color, textWrap: 'balance' }}>{loot.label}</div>
+            <div className="text-text-secondary" style={{ font: `400 11px ${MONO}` }}>{loot.sub} · saved to your hero card</div>
+          </div>
+        )}
+      </div>
+      <div className="w-full max-w-sm flex gap-2 mt-6" style={{ opacity: shown ? 1 : 0, transition: 'opacity .3s', pointerEvents: shown ? 'auto' : 'none' }}>
+        <button onClick={() => setCardOpen(true)} className="flex-1 h-[56px] rounded-[18px] bg-bg-2 font-bold text-sm">Hero card</button>
+        <button onClick={onDone} className="flex-[2] h-[56px] rounded-[18px] font-extrabold text-[15px]" style={{ background: '#ff2222', color: '#fff' }}>Continue</button>
+      </div>
+      {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
+    </div>
+  );
+}
+
+// The quest's line on the summary: what it banked and what the chest dropped.
+function QuestChest({ exercises, questKey }) {
+  const { prof } = useQuest();
+  const [session] = useState(() => questSession(exercises, xpMult(prof, prof.lvl)));
+  const [cardOpen, setCardOpen] = useState(false);
+  const loot = prof.lastChest === questKey ? prof.lastLoot : null;
   return (
     <>
       <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .45s both' }}>
@@ -381,32 +416,16 @@ function QuestChest({ exercises, workoutId }) {
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center gap-3 p-3.5 rounded-[18px] bg-bg-2" style={{ boxShadow: `inset 0 0 0 1.5px ${border}` }}>
-          <div className="flex-1 min-w-0">
-            <div className="g-label">LOOT CHEST</div>
-            {rolling ? (
-              <div className="mt-1" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: RARITY[reelI % 4][1], transform: t < 2 ? `translateX(${reelI % 2 ? 2 : -2}px)` : 'none' }}>{REEL[reelI % REEL.length]}</div>
-            ) : shown ? (
-              <>
-                <div className="mt-1 inline-block px-2 py-0.5 rounded-[8px]" style={{ font: `600 10px ${MONO}`, letterSpacing: '.2em', color: '#050505', background: shown.color }}>{shown.tier}</div>
-                <div className="mt-1.5" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: shown.color }}>{shown.label}</div>
-                <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}` }}>{shown.sub} · saved to your hero card</div>
-              </>
-            ) : (
-              <>
-                <div className="mt-1" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em' }}>{opened ? 'Opened' : banked ? '1 chest earned' : 'Saving your quest…'}</div>
-                <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}`, textWrap: 'pretty' }}>
-                  {session.crits} crit{session.crits === 1 ? '' : 's'} → luck +{Math.round(luck * 100)}% · Rare {Math.round(od.r * 100)}% · Epic {Math.round(od.e * 100)}% · Legendary {Math.round(od.l * 100)}%
-                </div>
-              </>
-            )}
+        {loot && (
+          <div className="mt-3 flex items-center gap-3 p-3.5 rounded-[18px] bg-bg-2" style={{ boxShadow: `inset 0 0 0 1.5px ${loot.color}` }}>
+            <div className="flex-1 min-w-0">
+              <div className="g-label">LOOT</div>
+              <div className="mt-1" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.03em', color: loot.color }}>{loot.label}</div>
+              <div className="mt-0.5 text-text-secondary" style={{ font: `400 10px ${MONO}` }}>{loot.tier} · {loot.sub}</div>
+            </div>
+            <button onClick={() => setCardOpen(true)} className="flex-shrink-0 h-12 px-4 rounded-[14px] bg-bg-3 font-extrabold text-sm">Hero card</button>
           </div>
-          <button onClick={shown || opened ? () => setCardOpen(true) : open} disabled={!banked || rolling}
-            className="flex-shrink-0 h-12 px-4 rounded-[14px] font-extrabold text-sm disabled:opacity-45"
-            style={{ background: shown || opened ? 'var(--color-bg-3)' : '#ff2222', color: '#fff' }}>
-            {shown || opened ? 'Hero card' : 'Open'}
-          </button>
-        </div>
+        )}
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
     </>

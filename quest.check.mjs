@@ -91,3 +91,26 @@ assert.equal(Q.tierOf(15)[1], 'SILVER');
 }
 
 console.log('quest checks passed');
+
+// Clearing a quest banks + rolls once per key, and remembers the drop.
+{
+  const p0 = { ...Q.defProf(), lvl: 5, xp: 0, packs: 0 };
+  const s = { xp: 500, vol: 2000, crits: 1 };
+  const p1 = Q.clearQuest(p0, 'k1', s, () => 0.99);
+  assert.equal(p1.lastQuest, 'k1'); assert.equal(p1.lastChest, 'k1');
+  assert.equal(p1.packs, 1);
+  assert.equal(p1.lastLoot.tier, 'COMMON');
+  assert.equal(Q.clearQuest(p1, 'k1', s, () => 0.0), p1);
+}
+console.log('clear checks passed');
+
+// Customising: one edit per copy owned; rarity gates what can change.
+{
+  const v = { owned: { 1: 2, 2: 1 }, edits: { 1: 1, 2: 1 } };
+  assert.equal(Q.editsLeft(v, 1), 1);
+  assert.equal(Q.editsLeft(v, 2), 0);
+  assert.equal(Q.editsLeft(v, 3), 0);
+  assert.deepEqual(Object.keys(Q.FORGE_RIGHTS.C).filter((k) => Q.FORGE_RIGHTS.C[k]), ['pal']);
+  assert.ok(Q.FORGE_RIGHTS.L.img && !Q.FORGE_RIGHTS.E.img);
+}
+console.log('forge checks passed');

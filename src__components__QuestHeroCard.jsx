@@ -21,7 +21,7 @@ export function useFrame(ms = 100) {
   return f;
 }
 
-/** The starred vault cards the hero card can feature (first = default). */
+/** The vault card chosen as the hero card (Use this card), if still owned. */
 export function featuredCards(vault) {
   return (vault.favs || []).filter((id) => vault.owned[id] && CARDS[id - 1]).map((id) => CARDS[id - 1]);
 }
@@ -42,11 +42,11 @@ export function MiniHeroCard({ onOpen }) {
       style={{ right: 14, top: 14, bottom: 100, aspectRatio: '5 / 7', padding: pad, borderRadius: 12 + pad, background: bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
       <div className="relative h-full overflow-hidden text-left" style={{ borderRadius: 12, background: '#0b0b0b' }}>
         {card ? <DitherCard card={card} img={art[feat.id]?.img} /> : (
-          <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px', padding: '16px 14px 60px', font: `400 10px ${MONO}`, color: '#999' }}>Star a card in your vault</div>
+          <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px', padding: '16px 14px 60px', font: `400 10px ${MONO}`, color: '#999' }}>Pick a card in your vault</div>
         )}
         <div className="absolute left-0 right-0 bottom-0" style={{ padding: '8px 10px 9px', background: 'rgba(5,5,5,.9)' }}>
           <div className="flex justify-between items-baseline gap-1.5">
-            <span className="truncate" style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f0f0' }}>{prof.hero.toUpperCase()}</span>
+            <span className="truncate" style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f0f0' }}>{card ? card.name : 'No card yet'}</span>
             <span className="flex-shrink-0" style={{ font: `500 10px ${MONO}`, color: '#f0f0f0' }}>LV {prof.lvl}</span>
           </div>
           <div style={{ marginTop: 6, height: 2, background: '#2a2a2a' }}><div className="h-full" style={{ width: `${prof.xp / 10}%`, background: card ? RAR[card.rarity].col : '#f0f0f0' }} /></div>
@@ -58,7 +58,7 @@ export function MiniHeroCard({ onOpen }) {
 
 /** Full-screen Hero Card: featured art in the equipped border, stats, pet/border/epithet/hero, vault. */
 export default function QuestHeroCard({ open, onClose }) {
-  const { prof, vault, updProf, updVault } = useQuest();
+  const { prof, vault, updProf } = useQuest();
   const { showToast } = useToast();
   const art = useQuestArt();
   const frame = useFrame();
@@ -72,9 +72,7 @@ export default function QuestHeroCard({ open, onClose }) {
 
   const lvl = prof.lvl;
   const favs = featuredCards(vault);
-  const feat = favs[0]; // the first starred card IS the hero card
-  // Choosing a card moves it to the front of the showcase, so the title screen shows it too.
-  const feature = (id) => updVault((v) => ({ ...v, favs: [id, ...v.favs.filter((x) => x !== id)] })).catch((e) => showToast('Not saved: ' + e.message, 'error'));
+  const feat = favs[0]; // the vault's chosen card (Use this card)
   const card = feat && effCard(feat, art[feat.id]);
   const bd = equippedBorder(prof, lvl), bc = borderCss(bd[0], frame);
   const title = lvTitle(lvl);
@@ -94,7 +92,7 @@ export default function QuestHeroCard({ open, onClose }) {
           <span style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: '#666' }}>HERO CARD</span>
           <button onClick={onClose} aria-label="Close" style={{ width: 44, height: 44, marginRight: -10, borderRadius: 14, color: '#999', font: `400 20px ${MONO}` }}>×</button>
         </div>
-        <div style={{ padding: bc[1], borderRadius: 18 + bc[1], background: bc[0], boxShadow: `0 0 40px ${bc[2]}` }}>
+        <button onClick={() => setVaultOpen(true)} aria-label="Change card" className="block w-full text-left" style={{ padding: bc[1], borderRadius: 18 + bc[1], background: bc[0], boxShadow: `0 0 40px ${bc[2]}` }}>
           <div className="relative overflow-hidden" style={{ aspectRatio: '5 / 7', borderRadius: 18, background: '#0b0b0b' }}>
             {card ? (
               <>
@@ -103,7 +101,7 @@ export default function QuestHeroCard({ open, onClose }) {
               </>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 8px 8px', padding: '32px 24px 120px' }}>
-                <div style={{ font: `400 11px ${MONO}`, color: '#999' }}>Star a card in your vault to feature it here.</div>
+                <div style={{ font: `400 11px ${MONO}`, color: '#999' }}>Tap here to pick a card from your vault.</div>
               </div>
             )}
             <div className="absolute left-0 right-0 bottom-0" style={{ padding: '14px 14px 16px', background: 'rgba(5,5,5,.9)' }}>
@@ -117,16 +115,8 @@ export default function QuestHeroCard({ open, onClose }) {
               </div>
             </div>
           </div>
-        </div>
-        {favs.length > 1 && (
-          <div className="flex justify-center gap-0.5" style={{ marginTop: -6 }}>
-            {favs.map((c, i) => (
-              <button key={c.id} onClick={() => feature(c.id)} aria-label={`Use ${c.name}`} className="flex items-center justify-center" style={{ width: 28, height: 28 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: c === feat ? RAR[c.rarity].col : '#3a3a3a' }} />
-              </button>
-            ))}
-          </div>
-        )}
+        </button>
+        <button onClick={() => setVaultOpen(true)} className="self-center" style={{ marginTop: -4, font: `500 11px ${MONO}`, letterSpacing: '.08em', color: '#ff9a3c' }}>Change card in the vault ›</button>
         <div className="text-center" style={{ font: `400 10px ${MONO}`, letterSpacing: '.1em', color: '#666' }}>
           {prof.quests} QUEST{prof.quests === 1 ? '' : 'S'} · {prof.vol.toLocaleString()} KG · {prof.crits} CRITS · +{Math.round((xpMult(prof, lvl) - 1) * 100)}% XP
         </div>
@@ -143,8 +133,20 @@ export default function QuestHeroCard({ open, onClose }) {
               {prof.epithet ? `Epithet · ${prof.epithet}` : 'Epithet · none'}
             </button>
           )}
-          <button className="min-w-0 truncate" style={btn} onClick={() => setVaultOpen(true)}>Vault{prof.packs ? ` · ${prof.packs} pack${prof.packs > 1 ? 's' : ''}` : ''} →</button>
         </div>
+        <button onClick={() => setVaultOpen(true)} className="flex items-center gap-3.5 text-left"
+          style={{ padding: 14, borderRadius: 20, background: prof.packs ? 'radial-gradient(ellipse at 15% 50%, rgba(255,34,34,.2), #0e0e0e 70%)' : '#0e0e0e', boxShadow: `inset 0 0 0 1.5px ${prof.packs ? '#ff2222' : '#2a2a2a'}` }}>
+          <span className="relative flex-shrink-0" style={{ width: 40, height: 52 }}>
+            {[-9, 7].map((r) => <span key={r} className="absolute inset-0" style={{ borderRadius: 7, background: '#141414', boxShadow: 'inset 0 0 0 1.5px #ff2222', transform: `rotate(${r}deg)` }} />)}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Card Vault</span>
+            <span className="block truncate" style={{ marginTop: 2, font: `400 11px ${MONO}`, color: '#999' }}>
+              {prof.packs ? `${prof.packs} pack${prof.packs > 1 ? 's' : ''} to open · ` : ''}{Object.keys(vault.owned).length} cards · change your card
+            </span>
+          </span>
+          <span style={{ font: `500 18px ${MONO}`, color: prof.packs ? '#ff2222' : '#666' }}>›</span>
+        </button>
 
         {panel === 'hero' && (
           <Picker title="HERO" count={`${Object.keys(HEROES).length}`}>
