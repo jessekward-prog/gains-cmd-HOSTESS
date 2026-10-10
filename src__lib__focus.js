@@ -211,5 +211,6 @@ export function summarize(workout, history = []) {
 
 /** Saved workout layout: focus (beta default), dense, classic or block-grid. */
 export function workoutLayout() {
-  try { return localStorage.getItem('gains-cmd-workout-layout') || 'focus'; } catch { return 'focus'; }
+  // 'quest' was briefly a layout; it's now chosen per workout on the home screen.
+  try { const v = localStorage.getItem('gains-cmd-workout-layout'); return !v || v === 'quest' ? 'focus' : v; } catch { return 'focus'; }
 }

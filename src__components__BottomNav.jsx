@@ -28,7 +28,8 @@ export default function BottomNav({ activeTab, onChange, hasActiveWorkout, onExp
     setExpanded(false);
   }, [onChange]);
 
-  const current = tabs.find((t) => t.id === activeTab);
+  // The Quest title screen belongs to Workout.
+  const current = tabs.find((t) => t.id === (activeTab === 'quest' ? 'workout' : activeTab));
 
   return (
     <>

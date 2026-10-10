@@ -1013,11 +1013,27 @@ export default function ProgramsPage({ onNavigate }) {
               <div className="mt-2" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{upNext.workout.name}</div>
               <div className="mt-1.5 g-meta">{workoutMeta(upNext.workout, true)}</div>
             </div>
-            <button onClick={() => (activeWorkout ? onNavigate('workout') : handleStartWorkout(upNext.index, upNext.program))}
-              className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
-              style={{ color: 'var(--color-on-accent)' }}>
-              {activeWorkout ? 'Workout in progress' : 'Start workout'} <span style={{ fontFamily: MONO }}>→</span>
-            </button>
+            {activeWorkout ? (
+              <button onClick={() => onNavigate('workout')}
+                className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
+                style={{ color: 'var(--color-on-accent)' }}>
+                {activeWorkout.quest ? 'Quest in progress' : 'Workout in progress'} <span style={{ fontFamily: MONO }}>→</span>
+              </button>
+            ) : (
+              // Chosen per gym visit: a normal workout, or the same session played as a quest.
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => handleStartWorkout(upNext.index, upNext.program)}
+                  className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
+                  style={{ color: 'var(--color-on-accent)' }}>
+                  Workout <span style={{ fontFamily: MONO }}>→</span>
+                </button>
+                <button onClick={() => onNavigate('quest')}
+                  className="h-14 rounded-[18px] bg-bg-2 text-text-primary font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
+                  style={{ boxShadow: 'inset 0 0 0 1.5px #ff9a3c' }}>
+                  Quest <span style={{ fontFamily: MONO, color: '#ff9a3c' }}>→</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 

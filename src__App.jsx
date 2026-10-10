@@ -11,6 +11,7 @@ import BottomNav from './components/BottomNav';
 import GlobalRestTimer from './components/GlobalRestTimer';
 import NavIcon from './components/NavIcon';
 import ExerciseNameOptions from './components/ExerciseNameOptions';
+import QuestTitle from './components/QuestTitle';
 import AppearanceSync from './components/AppearanceSync';
 import PinGate from './components/PinGate';
 import { workoutLayout } from './lib/focus';
@@ -78,6 +79,7 @@ function AppShell() {
               Pages still play their own entrance animation on mount. */}
             {tab === 'programs' && <ProgramsPage key="programs" onNavigate={navigate} />}
             {tab === 'workout' && <WorkoutPage key="workout" onNavigate={navigate} />}
+            {tab === 'quest' && <QuestTitle key="quest" onNavigate={navigate} />}
             {tab === 'history' && <HistoryPage key="history" />}
             {tab === 'coach' && <CoachPage key="coach" />}
             {tab === 'recommendations' && <RecommendationsPage key="recommendations" />}
@@ -101,7 +103,7 @@ function AppShell() {
 
       {/* Global rest timer — always mounted, survives page navigation. The
           Focus/Dense/Quest card shows rest in-card, so the circle only floats on other tabs. */}
-      <GlobalRestTimer hidden={tab === 'workout' && !!activeWorkout && ['focus', 'dense', 'quest'].includes(workoutLayout())} />
+      <GlobalRestTimer hidden={tab === 'workout' && !!activeWorkout && (activeWorkout?.quest || ['focus', 'dense'].includes(workoutLayout()))} />
     </div>
   );
 }

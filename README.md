@@ -18,8 +18,8 @@ a hand-off screen between exercises, and a summary with your PRs when you finish
   Settings → Exercise library matches them to the library (exact spellings match
   themselves, the local model suggests the rest, and you can change any match).
   Data, animation and body-map credits are in [THIRD_PARTY.md](THIRD_PARTY.md).
-- **Quest Mode (optional layout):** Settings → Workout layout → Quest turns the
-  workout into a pixel monster battler. Each exercise is a monster whose HP is the
+- **Quest Mode:** tap Quest instead of Workout on the home screen to play that
+  session as a pixel monster battler. Each exercise is a monster whose HP is the
   planned work, every set you log is an attack (kg × reps; bodyweight and assisted
   lifts hit for a flat 60 kg), rest is the monster catching its breath, and beating
   the top of your rep range is a crit. Clearing a quest banks XP toward levels,

@@ -11,8 +11,8 @@ import { lvTitle, tierOf } from '../lib/quest';
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
 
-// Quest Mode's title screen, in place of "No active workout": choose today's
-// quest from your program (defaulting to the one that's up next) and begin.
+// Quest Mode's title screen (home → Quest): choose today's quest from your
+// program (defaulting to the one that's up next) and begin.
 export default function QuestTitle({ onNavigate }) {
   const { programs, workoutHistory, startWorkout } = useWorkout();
   const { showToast } = useToast();
@@ -36,7 +36,7 @@ export default function QuestTitle({ onNavigate }) {
 
   const tier = tierOf(prof.lvl);
   const begin = async () => {
-    try { await startWorkout(program, index); } catch (e) { showToast('Error starting quest: ' + e.message, 'error'); }
+    try { await startWorkout(program, index, { quest: true }); onNavigate('workout'); } catch (e) { showToast('Error starting quest: ' + e.message, 'error'); }
   };
 
   return (

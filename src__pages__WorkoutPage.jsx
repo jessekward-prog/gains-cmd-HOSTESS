@@ -11,7 +11,6 @@ import BlockGridView from '../components/BlockGridView';
 import SupersetCard from '../components/SupersetCard';
 import CardioCard from '../components/CardioCard';
 import FocusWorkout from '../components/FocusWorkout';
-import QuestTitle from '../components/QuestTitle';
 import { Countdown, FinishFlow } from '../components/FocusTransitions';
 import { summarize, workoutLayout as readLayout } from '../lib/focus';
 import { moodState } from '../lib/mood';
@@ -80,7 +79,8 @@ export default function WorkoutPage({ onNavigate }) {
   const [variationData, setVariationData] = useState(null);
   const [reordering, setReordering] = useState(false);
   const [workoutLayout] = useState(readLayout);
-  const isQuest = workoutLayout === 'quest';
+  // Quest is chosen per workout (home screen), and plays on the Focus engine.
+  const isQuest = !!activeWorkout?.quest;
   const isFocus = workoutLayout === 'focus' || workoutLayout === 'dense' || isQuest;
   // A workout started a moment ago (from Programs) opens with the countdown.
   // Quest Mode has its own opening: the hero setting off across the meadow.
@@ -608,7 +608,7 @@ export default function WorkoutPage({ onNavigate }) {
   const runFinish = useCallback(async (afterSave) => {
     setCompleting(true);
     setFinishError(null);
-    if (isFocus) setFinishing({ summary: summarize(activeWorkout, workoutHistory) });
+    if (isFocus) setFinishing({ summary: summarize(activeWorkout, workoutHistory), quest: isQuest });
     try {
       const result = await finishWorkout(cardioStats);
       if (afterSave) await afterSave();
@@ -683,7 +683,7 @@ export default function WorkoutPage({ onNavigate }) {
     return (
       <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <FinishFlow
-        quest={isQuest}
+        quest={!!finishing.quest}
         summary={finishing.summary}
         result={completeResult}
         failed={finishError}
@@ -711,13 +711,6 @@ export default function WorkoutPage({ onNavigate }) {
     );
   }
 
-  if (!activeWorkout && isQuest) {
-    return (
-      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="h-full">
-        <QuestTitle onNavigate={onNavigate} />
-      </motion.div>
-    );
-  }
   if (!activeWorkout) {
     return (
       <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="g-root flex flex-col items-center justify-center gap-3 min-h-[60vh] text-center px-10">
@@ -734,7 +727,7 @@ export default function WorkoutPage({ onNavigate }) {
       {isFocus && (
         <FocusWorkout
           workout={activeWorkout}
-          layout={workoutLayout}
+          layout={isQuest ? 'quest' : workoutLayout}
           history={workoutHistory}
           elapsed={elapsed}
           handlers={cardHandlers}

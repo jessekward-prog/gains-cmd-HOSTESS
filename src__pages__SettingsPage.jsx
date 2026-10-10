@@ -30,7 +30,6 @@ const LAYOUTS = [
   { id: 'dense', name: 'Dense', desc: 'Classic-style · all sets listed' },
   { id: 'classic', name: 'Classic', desc: 'Stacked cards' },
   { id: 'block-grid', name: 'Block Grid', desc: '2-column blocks' },
-  { id: 'quest', name: 'Quest', desc: 'Pixel monster battler' },
 ];
 
 
@@ -110,7 +109,11 @@ export default function SettingsPage() {
               </div>
             </>
           )}
-          {workoutLayout === 'quest' && <QuestSettings />}
+        </Section>
+
+        <Section title="Quest">
+          <p className="mb-1 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>Pick Quest instead of Workout on the home screen to play a session as a pixel monster battler.</p>
+          <QuestSettings />
         </Section>
 
         <Section title="Theme">

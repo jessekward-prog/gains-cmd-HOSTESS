@@ -82,7 +82,7 @@ export function WorkoutProvider({ children }) {
     });
   }, [saveActiveToBackend]);
 
-  const startWorkout = useCallback(async (program, workoutIndex) => {
+  const startWorkout = useCallback(async (program, workoutIndex, { quest = false } = {}) => {
     const w = typeof program.workouts === 'string'
       ? JSON.parse(program.workouts)[workoutIndex]
       : program.workouts[workoutIndex];
@@ -99,6 +99,7 @@ export function WorkoutProvider({ children }) {
       programName: program.name,
       workoutName: w.name,
       startTime: new Date().toISOString(),
+      quest, // played as Quest Mode — chosen per visit on the home screen
       originalExercises: w.exercises.map((ex) => ({
         name: ex.name,
         sets: ex.sets || 4,
