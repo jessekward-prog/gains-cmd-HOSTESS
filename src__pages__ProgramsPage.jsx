@@ -14,7 +14,6 @@ import NavIcon from '../components/NavIcon';
 import * as api from '../lib/api';
 import WizardModal from '../components/WizardModal';
 import { EXERCISE_LIST_ID } from '../components/ExerciseNameOptions';
-import BossPanel from '../components/BossPanel';
 import { isMarker } from '../lib/history';
 import { supersetRows } from '../lib/supersets';
 import { estimateMinutes, daysAgo } from '../lib/focus';
@@ -1042,7 +1041,6 @@ export default function ProgramsPage({ onNavigate }) {
           </div>
         )}
 
-        <div className="mt-3"><BossPanel /></div>
 
         <div className="flex gap-2 mt-3">
           {[['+ Create', () => setShowCreate(true)], ['AI Wizard', () => setShowWizard(true)], ['Import', () => setShowImportModal(true)]].map(([label, fn]) => (
