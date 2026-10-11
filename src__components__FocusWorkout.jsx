@@ -32,6 +32,7 @@ const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
 const lowRep = (ex) => parseInt(String(ex.targetReps || ex.repRange || '').match(/\d+/)?.[0]) || 8;
 const DROP_REPS = [9, 7, 6, 5];
+const CARD_H_KEY = 'gains-cmd-focus-card-h';
 
 // What the reps panel shows before the lifter has touched it: last session's
 // reps (or the bottom of the range), "failure" for failure sets and for drops
@@ -43,6 +44,23 @@ function defaultReps(ex, s, stats) {
 }
 const shownReps = (ex, s, stats) => (s.reps !== '' && s.reps != null ? String(s.reps) : defaultReps(ex, s, stats));
 const roundW = (x) => String(Math.round(Math.max(0, x) * 100) / 100);
+
+// A working set and the drops hanging off it, done back-to-back with the phone
+// down — so Focus shows and logs the whole chain at once. null when no drops.
+function dropChain(sets, i) {
+  let a = i;
+  while (a > 0 && sets[a]?.type === 'drop') a--;
+  let b = a;
+  while (sets[b + 1]?.type === 'drop') b++;
+  return b > a ? Array.from({ length: b - a + 1 }, (_, k) => a + k) : null;
+}
+// A drop with no weight yet suggests ~80% of the step before it.
+function shownWeight(sets, j) {
+  const s = sets[j];
+  if (s?.type !== 'drop' || (s.weight !== '' && s.weight != null) || j === 0) return s?.weight ?? '';
+  const prev = num(shownWeight(sets, j - 1));
+  return prev > 0 ? roundW(Math.round(prev * 0.8 / 2.5) * 2.5) : '';
+}
 
 function useTick(active, ms = 250) {
   const [, set] = useState(0);
@@ -69,6 +87,34 @@ function Stepper({ label, value, onDec, onInc }) {
         <button onClick={onDec} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>−</button>
         <button onClick={onInc} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>+</button>
       </div>
+    </div>
+  );
+}
+
+// The whole drop chain, top set first, each step its own weight and reps.
+function DropChain({ sets, chain, reps, onStep }) {
+  const pill = (j, field, val) => (
+    <div className="flex items-center bg-bg-3 rounded-[12px] h-12 min-w-0">
+      <button onClick={() => onStep(j, field, field === 'weight' ? -2.5 : -1)} aria-label={`Less ${field}`} className="w-10 h-12 text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>−</button>
+      <span className="flex-1 text-center g-tab truncate" style={{ fontSize: val.length > 5 ? 15 : 24, fontWeight: 800, letterSpacing: '-0.03em' }}>{val}</span>
+      <button onClick={() => onStep(j, field, field === 'weight' ? 2.5 : 1)} aria-label={`More ${field}`} className="w-10 h-12 text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>+</button>
+    </div>
+  );
+  return (
+    <div className="bg-bg-2 rounded-[18px] p-2.5 flex-1 flex flex-col justify-center gap-1.5">
+      <div className="grid gap-2 text-center g-label" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr)' }}>
+        <span /><span>KG</span><span>REPS</span>
+      </div>
+      {chain.map((j) => {
+        const s = sets[j];
+        return (
+          <div key={j} className="grid gap-2 items-center" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr)', opacity: s.completed ? 0.55 : 1 }}>
+            <span className="text-center" style={{ font: `600 11px ${MONO}`, color: s.type === 'drop' ? 'var(--g-drop)' : 'var(--color-text-secondary)' }}>{setLabel(sets, j)}</span>
+            {pill(j, 'weight', fmtW(shownWeight(sets, j)))}
+            {pill(j, 'reps', reps(j))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -144,14 +190,15 @@ function QuestRest({ timer, next, onSkip, scroll }) {
   );
 }
 
-function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer, onSkip, onClaim }) {
+function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer, onSkip, onClaim, minH }) {
   const d = defeated >= 0 ? blocks[defeated] : null;
   const dSets = d ? d.indices.flatMap((i) => exercises[i].sets.filter((s) => s.completed)) : [];
   const dVol = dSets.reduce((a, s) => a + num(s.weight) * num(s.reps), 0);
   const n = next >= 0 ? blocks[next] : null, n0 = n && exercises[n.indices[0]];
   const left = intro ? Math.max(0, intro.left) : timer.remaining, total = intro ? intro.total : timer.total;
   return (
-    <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
+    <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5 flex flex-col" style={{ minHeight: minH || undefined }}>
+      <div className="flex-1">
       {d && (
         <>
           <div className="flex items-center gap-3">
@@ -176,6 +223,7 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
           </div>
         </>
       )}
+      </div>
       {onClaim && (
         <button onClick={onClaim} className="mt-1 w-full h-[62px] rounded-[20px] font-extrabold text-[17px]" style={{ background: '#ff2222', color: '#fff' }}>Quest clear · open the loot</button>
       )}
@@ -452,6 +500,20 @@ export default function FocusWorkout({
   const [cur, setCur] = useState(() => Math.max(0, blocks.findIndex((b) => !blockDone(exercises, b))));
   const [mem, setMem] = useState(0);
   const [fset, setFset] = useState(null);
+  // The battle card's height, so the walking card between encounters matches it
+  // (remembered, so the first walk of a session matches too).
+  const [cardH, setCardH] = useState(() => { try { return +localStorage.getItem(CARD_H_KEY) || 0; } catch { return 0; } });
+  const roRef = useRef(null);
+  const cardRef = useCallback((el) => {
+    roRef.current?.disconnect();
+    if (!el) return;
+    roRef.current = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      setCardH(h);
+      try { localStorage.setItem(CARD_H_KEY, String(h)); } catch { /* private mode */ }
+    });
+    roRef.current.observe(el);
+  }, []);
   const [handoff, setHandoff] = useState(null);
   const [toast, setToast] = useState(null);
   const [goAt, setGoAt] = useState(0);
@@ -628,7 +690,7 @@ export default function FocusWorkout({
 
   const step = (xi, si, field, d) => {
     const x = exercises[xi], s = x.sets[si];
-    if (field === 'weight') return patchSet(xi, si, { weight: roundW(num(s.weight) + d) });
+    if (field === 'weight') return patchSet(xi, si, { weight: roundW(num(shownWeight(x.sets, si)) + d) });
     const shown = shownReps(x, s, stats[x.name]);
     const base = shown === 'failure' ? (s.type === 'drop' ? DROP_REPS[s.dropIndex ?? 0] ?? 5 : stats[x.name]?.lr ?? lowRep(x)) : num(shown);
     patchSet(xi, si, { reps: String(Math.max(0, base + d)), ...(s.type === 'drop' ? { dropMode: 'fixed' } : {}) });
@@ -636,26 +698,30 @@ export default function FocusWorkout({
 
   // Completing a set: log it, check for a PR, then decide what happens next —
   // the partner (superset), the next drop, rest, or the handoff to a new block.
-  const complete = (xi, si) => {
+  // With a drop chain, every set in it is logged at once and si is its last drop.
+  const complete = (xi, si, chain = null) => {
     const x = exercises[xi], s = x.sets[si];
-    if (s.completed) { patchSet(xi, si, { completed: false }); setFset(si); return; }
+    if (s.completed) { (chain || [si]).forEach((j) => patchSet(xi, j, { completed: false })); setFset(chain ? chain[0] : si); return; }
+    const logged = (j) => { const sh = shownReps(x, x.sets[j], stats[x.name]); return sh === 'failure' ? x.sets[j].reps : sh; };
+    (chain || []).slice(0, -1).forEach((j) => patchSet(xi, j, { completed: true, reps: logged(j) ?? '', weight: shownWeight(x.sets, j) }));
+    const top = chain ? x.sets[chain[0]] : s, topReps = logged(chain ? chain[0] : si);
     const shown = shownReps(x, s, stats[x.name]);
     const reps = shown === 'failure' ? s.reps : shown;
     // An accepted event is judged here, and the verdict kept on the set (XP reads it back).
     const ev = s.qe?.st === 'accepted' ? s.qe : null;
     const evOk = ev ? eventDone(ev.k, x, { ...s, reps, completed: true }, stats[x.name] && { lw: stats[x.name].lw, lr: stats[x.name].lr }) : false;
-    patchSet(xi, si, { completed: true, reps: reps ?? '', ...(ev ? { qe: { ...ev, ok: evOk } } : {}) });
+    patchSet(xi, si, { completed: true, reps: reps ?? '', ...(chain ? { weight: shownWeight(x.sets, si) } : {}), ...(ev ? { qe: { ...ev, ok: evOk } } : {}) });
     moodState.pulse = Date.now();
     haptics.tap();
     setFset(null);
 
-    if (s.type !== 'drop' && reps !== 'failure' && isPR(stats[x.name], x.name, s.weight, reps)) {
+    if (top.type !== 'drop' && topReps !== 'failure' && isPR(stats[x.name], x.name, top.weight, topReps)) {
       haptics.success();
-      setToast({ text: `${x.name} ${fmtW(s.weight)} × ${reps}`, at: Date.now() });
+      setToast({ text: `${x.name} ${fmtW(top.weight)} × ${topReps}`, at: Date.now() });
       moodState.prUntil = Date.now() + 2400;
     }
 
-    const doneNow = (i, j) => (i === xi && j === si) || exercises[i].sets[j].completed;
+    const doneNow = (i, j) => (i === xi && (j === si || chain?.includes(j))) || exercises[i].sets[j].completed;
     const allDone = block.indices.every((i) => exercises[i].sets.every((_, j) => doneNow(i, j)));
     const nextIsDrop = x.sets[si + 1]?.type === 'drop' && !x.sets[si + 1].completed;
     const restMod = ev ? EVENTS[ev.k]?.rest || 0 : 0;
@@ -666,8 +732,10 @@ export default function FocusWorkout({
       const evLine = !ev ? '' : !evOk ? ' The event slips away.'
         : { shield: ' The shield shatters!', goblin: ' Goblin caught: +1 card pack!', mirror: ' You matched your past self!', weak: ' Critical hit!',
           enraged: ' You out-paced it!', slow: ' The curse breaks.', paused: ' Rock steady.', spring: '', ambush: ' Ambush repelled!', blessing: ' Blessed strike!' }[ev.k] || '';
-      setQHit({ at: Date.now(), bi: ci, dmg: setDamage(x, hitSet, kind), crit,
-        msg: `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${evLine}${allDone ? ' Finishing blow!' : ''}` });
+      const dmg = chain ? chain.reduce((a, j) => a + setDamage(x, { ...x.sets[j], weight: shownWeight(x.sets, j), reps: logged(j) }, kind), 0) : setDamage(x, hitSet, kind);
+      setQHit({ at: Date.now(), bi: ci, dmg, crit,
+        msg: chain ? `HERO chains ${chain.map((j) => fmtW(shownWeight(x.sets, j))).join(' → ')} kg without stopping!${crit ? " It's super effective!" : ''}${allDone ? ' Finishing blow!' : ''}`
+        : `HERO lifts ${num(s.weight) > 0 ? `${fmtW(s.weight)} kg` : 'bodyweight'} × ${reps}!${crit ? " It's super effective!" : ''}${evLine}${allDone ? ' Finishing blow!' : ''}` });
     }
     if (allDone) {
       if (quest) return; // the victory effect below takes it from here
@@ -742,13 +810,16 @@ export default function FocusWorkout({
   const nx = nextOpenBlock(exercises, blocks, ci);
   const label = setLabel(ex.sets, fi);
   const round = roundOfSet(ex, fi);
+  const chain = !dense && (kind === 'normal' || kind === 'drop') ? dropChain(ex.sets, fi) : null;
+  const chainEnd = chain ? chain[chain.length - 1] : fi;
   let completeLabel = `Complete set ${label}`;
-  if (fs?.type === 'drop') completeLabel = `Complete drop ${(fs.dropIndex ?? 0) + 1}${ex.sets[fi + 1]?.type === 'drop' ? ' — no rest' : ''}`;
+  if (chain) completeLabel = `Complete set ${setLabel(ex.sets, chain[0])} + ${chain.length - 1} drop${chain.length > 2 ? 's' : ''}`;
+  else if (fs?.type === 'drop') completeLabel = `Complete drop ${(fs.dropIndex ?? 0) + 1}${ex.sets[fi + 1]?.type === 'drop' ? ' — no rest' : ''}`;
   if (kind === 'superset' && round >= 0) {
     const partner = block.indices.find((i) => i !== ei && !exercises[i].sets.filter((s) => s.type !== 'drop')[round]?.completed);
     completeLabel = `Complete ${letter(m)} · round ${round + 1}${partner !== undefined && m < block.indices.length - 1 ? ` → ${letter(m + 1)}` : ''}`;
   }
-  if (fs?.completed) completeLabel = `${label} done · tap to undo`;
+  if (chain ? ex.sets[chainEnd].completed : fs?.completed) completeLabel = `${chain ? setLabel(ex.sets, chain[0]) : label}${chain ? ' + drops' : ''} done · tap to undo`;
   const restNext = fs && {
     tag: kind === 'superset' ? letter(m) : fs.type === 'drop' ? setLabel(ex.sets, fi) : `SET ${label}`,
     name: ex.name,
@@ -837,7 +908,7 @@ export default function FocusWorkout({
   if (quest && bossAsk) { qPhase = 'walk'; qMsg = wBoss?.cry ? `${wBoss.name}: “${wBoss.cry}”` : `A shadow falls across the path. ${wBoss?.name || 'The boss'} appears!`; }
   const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory');
   const qReps = fs ? shownReps(ex, fs, st) : '';
-  const qPreview = fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
+  const qPreview = fs && chain ? `${chain.map((j) => fmtW(shownWeight(ex.sets, j))).join(' → ')} kg · ${chain.length} hits back to back` : fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
 
   return (
     <div className="g-root flex flex-col min-h-full">
@@ -882,7 +953,7 @@ export default function FocusWorkout({
             intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4, label: 'SETTING OFF' }
               : qPhase === 'victory' && !resting && qWin ? { left: (qWin.at + 3800 - Date.now()) / 1000, total: 3.8, label: 'ONWARD' } : null}
             timer={timer} onSkip={introOn ? () => setIntroOff(true) : qPhase === 'victory' ? skipVictory : skipRest}
-            onClaim={qClear ? onQuestClear : null} />
+            onClaim={qClear ? onQuestClear : null} minH={cardH} />
         ) : kind === 'cardio' ? (
           // Same swipe handling as the other cards, so cardio blocks cycle too.
           <div
@@ -901,7 +972,7 @@ export default function FocusWorkout({
         ) : (
           <div
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
-            className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
+            ref={cardRef} className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
             style={{
               padding: dense ? 16 : 20,
               touchAction: swipeExercises ? 'pan-y' : 'none',
@@ -946,7 +1017,7 @@ export default function FocusWorkout({
             {!dense && kind !== 'interval' && (
               <div className="flex gap-[5px] mt-4 items-center">
                 {ex.sets.map((s, i) => {
-                  const on = i === fi, small = s.type === 'drop';
+                  const on = chain ? chain.includes(i) : i === fi, small = s.type === 'drop';
                   return (
                     <button key={i} onClick={() => setFset(i)}
                       style={{
@@ -1009,10 +1080,14 @@ export default function FocusWorkout({
                     : <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
                 </div>
                 <div key={`set-${resting}`} aria-hidden={resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
-                  <div className="grid grid-cols-2 gap-2.5 flex-1">
-                    <Stepper label={quest ? 'KG · POWER' : 'KG'} value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
-                    <Stepper label={quest ? 'REPS · HITS' : 'REPS'} value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
-                  </div>
+                  {chain ? (
+                    <DropChain sets={ex.sets} chain={chain} reps={(j) => shownReps(ex, ex.sets[j], st)} onStep={(j, f, d) => step(ei, j, f, d)} />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2.5 flex-1">
+                      <Stepper label={quest ? 'KG · POWER' : 'KG'} value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
+                      <Stepper label={quest ? 'REPS · HITS' : 'REPS'} value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
+                    </div>
+                  )}
                   {kind === 'bfr' && !fs.completed && (
                     <BFRBlock set={fs}
                       onStart={() => patchSet(ei, fi, { bfrStartMs: Date.now() })}
@@ -1020,9 +1095,9 @@ export default function FocusWorkout({
                       onDone={() => complete(ei, fi)} />
                   )}
                   {(!isTimed || (kind === 'bfr' && fs.completed)) && (
-                    <button onClick={() => complete(ei, fi)}
+                    <button onClick={() => complete(ei, chainEnd, chain)}
                       className="mt-3.5 w-full h-[62px] rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
-                      style={{ background: fs.completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: fs.completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
+                      style={{ background: ex.sets[chainEnd].completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: ex.sets[chainEnd].completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
                       {completeLabel}
                     </button>
                   )}
