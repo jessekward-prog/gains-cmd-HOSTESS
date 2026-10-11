@@ -749,44 +749,41 @@ html.theme-bit64 [style*="inset 0 0 0 1.5px var(--color-accent)"]::after {
 }
 
 /* ============================================
-   PlayStation (dark) — shelf-cmd's lessons: a restrained grayscale base cooled
-   toward PS5 blue-black, and the four face buttons doing real jobs instead of
-   decorating: ✕ blue = the accent (✕ confirms), △ green = success, ○ red =
-   error/cancel (○ goes back), □ pink = specials. The four special-set types get
-   one face button each. Selected tiles take the PS5 focus look: a white
-   hairline with a soft blue glow, instead of a coloured border.
+   PlayStation (dark) — shelf-cmd's take: CMD Mono (pure black, white accent,
+   #111/#1e1e1e/#333 greys) with the four face-button colours only as the
+   scattered accents — the wave background (WaveBackground cycles them), done
+   △ green, cancel ○ red, and one per special-set tag. Nothing else is coloured.
    ============================================ */
 html.theme-playstation {
-  --color-bg-0: #0a0c11;
-  --color-bg-1: #11141b;
-  --color-bg-2: #181c25;
-  --color-bg-3: #222734;
-  --color-bg-4: #2b3141;
-  --color-surface: #151922;
-  --color-surface-hover: #1c212c;
-  --color-surface-active: #242a37;
-  --color-border: #262b36;
-  --color-border-strong: #343a48;
-  --color-text-primary: #eef1f7;
-  --color-text-secondary: #9ba4b5;
-  --color-text-tertiary: #636c7e;
-  --color-text-muted: #3d4453;
-  --color-accent: #4f8fe0;
-  --color-accent-hover: #6aa2ea;
-  --color-accent-muted: rgba(79, 143, 224, 0.15);
-  --color-accent-glow: rgba(79, 143, 224, 0.38);
+  --color-bg-0: #000000;
+  --color-bg-1: #111111;
+  --color-bg-2: #1e1e1e;
+  --color-bg-3: #262626;
+  --color-bg-4: #333333;
+  --color-surface: #111111;
+  --color-surface-hover: #1a1a1a;
+  --color-surface-active: #222222;
+  --color-border: #333333;
+  --color-border-strong: #444444;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b0b0b0;
+  --color-text-tertiary: #666666;
+  --color-text-muted: #444444;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e6e6e6;
+  --color-accent-muted: rgba(255, 255, 255, 0.1);
+  --color-accent-glow: rgba(255, 255, 255, 0.22);
+  --color-on-accent: #000000;
   --color-success: #3fb37f;
   --color-success-muted: rgba(63, 179, 127, 0.15);
   --color-error: #e0564f;
-  --color-on-accent: #ffffff;
   --g-ss: #e0559c;   /* □ superset */
   --g-drop: #e0564f; /* ○ drop set */
   --g-bfr: #4f8fe0;  /* ✕ BFR */
   --g-int: #3fb37f;  /* △ interval */
 }
-html.theme-playstation [style*="inset 0 0 0 1.5px var(--color-accent)"] {
-  box-shadow: inset 0 0 0 1.5px #ffffff, 0 0 0 1px rgba(79, 143, 224, 0.55), 0 0 18px rgba(79, 143, 224, 0.35) !important;
-}
+/* The accent is white here, so the older bg-accent + text-white buttons need dark text. */
+html.theme-playstation .bg-accent.text-white { color: #000; }
 
 /* ============================================
    Coach markdown prose

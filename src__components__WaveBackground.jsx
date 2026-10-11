@@ -13,6 +13,9 @@ export const readWaveStyle = () => {
 
 const reduceMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// PlayStation theme: the lines and dots cycle ✕ ○ △ □ instead of one tint (as shelf-cmd's waves do).
+const PS = ['79,143,224', '224,86,79', '63,179,127', '224,85,156'];
+
 // Any CSS colour → [r,g,b] through the canvas parser (handles #hex and rgba()).
 function rgb(ctx, css, fallback) {
   ctx.fillStyle = fallback;
@@ -39,12 +42,13 @@ export default function WaveBackground() {
     const g = cv.getContext('2d');
 
     // Theme tokens, re-read twice a second (accent override changes don't reload).
-    let tok = {}, light = false, lastTok = -1;
+    let tok = {}, light = false, ps = false, lastTok = -1;
     const readTokens = () => {
       const cs = getComputedStyle(document.documentElement);
       const v = (n, f) => rgb(g, cs.getPropertyValue(n).trim(), f);
       tok = { accent: v('--color-accent', '#ff2222'), success: v('--color-success', '#22c55e'), error: v('--color-error', '#ef4444'), t3: v('--color-text-tertiary', '#6b6b6b') };
       light = document.documentElement.classList.contains('mode-light');
+      ps = document.documentElement.classList.contains('theme-playstation');
     };
     readTokens();
     const colour = (c) => tok[c] || rgb(g, c, '#ffffff');
@@ -133,15 +137,16 @@ export default function WaveBackground() {
         const fn = curve(i * 7 - 18, amp * (0.6 + i / 14), (0.0068 + i * 0.0002) * sx, 0.8 + i * 0.03);
         g.beginPath();
         for (let x = -4; x <= W + 4; x += 5) g.lineTo(x, fn(x));
-        g.strokeStyle = tcol((0.06 + 0.14 * k) * (1 - Math.abs(i - 2.5) / 4.5));
+        const la = (0.06 + 0.14 * k) * (1 - Math.abs(i - 2.5) / 4.5);
+        g.strokeStyle = ps ? `rgba(${PS[i % 4]},${la * 1.8})` : tcol(la);
         g.stroke();
       }
 
-      for (const d of dots) {
+      for (const [di, d] of dots.entries()) {
         if (!reduceMotion) d.x = (d.x + d.v * dt * (1 + sp)) % 1;
         const x = d.x * W, yy = cy + (d.y - 0.5) * 260 + Math.sin(t + d.ph) * 18;
         const a = (0.15 + 0.3 * k) * (0.5 + 0.5 * Math.sin(t * 2 + d.ph));
-        g.beginPath(); g.arc(x, yy, d.r + swell * 1.5, 0, 6.29); g.fillStyle = tcol(a); g.fill();
+        g.beginPath(); g.arc(x, yy, d.r + swell * 1.5, 0, 6.29); g.fillStyle = ps ? `rgba(${PS[di % 4]},${a})` : tcol(a); g.fill();
       }
       g.globalCompositeOperation = 'source-over';
     };
