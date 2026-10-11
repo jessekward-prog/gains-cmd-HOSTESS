@@ -32,7 +32,6 @@ const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
 const lowRep = (ex) => parseInt(String(ex.targetReps || ex.repRange || '').match(/\d+/)?.[0]) || 8;
 const DROP_REPS = [9, 7, 6, 5];
-const CARD_H_KEY = 'gains-cmd-focus-card-h';
 
 // What the reps panel shows before the lifter has touched it: last session's
 // reps (or the bottom of the range), "failure" for failure sets and for drops
@@ -80,12 +79,12 @@ function Tag({ kind }) {
 function Stepper({ label, value, onDec, onInc }) {
   const small = value.length > 5;
   return (
-    <div className="bg-bg-2 rounded-[18px] px-2.5 py-3 text-center flex flex-col">
+    <div className="bg-bg-2 rounded-[18px] px-2.5 py-3 text-center flex flex-col min-h-0 overflow-hidden">
       <div className="g-label">{label}</div>
-      <div className="flex-1 flex items-center justify-center g-tab" style={{ fontSize: small ? 30 : 64, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1, margin: '6px 0 10px' }}>{value}</div>
+      <div className="flex-1 min-h-0 flex items-center justify-center g-tab" style={{ fontSize: small ? 'clamp(18px, 16cqh, 30px)' : 'clamp(26px, 34cqh, 64px)', fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1, margin: 'clamp(2px, 2cqh, 6px) 0 clamp(4px, 3cqh, 10px)' }}>{value}</div>
       <div className="flex gap-1.5">
-        <button onClick={onDec} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>−</button>
-        <button onClick={onInc} className="flex-1 h-14 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 20px ${MONO}` }}>+</button>
+        <button onClick={onDec} className="flex-1 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ height: 'clamp(34px, 20cqh, 56px)', font: `500 20px ${MONO}` }}>−</button>
+        <button onClick={onInc} className="flex-1 rounded-[12px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ height: 'clamp(34px, 20cqh, 56px)', font: `500 20px ${MONO}` }}>+</button>
       </div>
     </div>
   );
@@ -94,21 +93,21 @@ function Stepper({ label, value, onDec, onInc }) {
 // The whole drop chain, top set first, each step its own weight and reps.
 function DropChain({ sets, chain, reps, onStep }) {
   const pill = (j, field, val) => (
-    <div className="flex items-center bg-bg-3 rounded-[12px] h-12 min-w-0">
-      <button onClick={() => onStep(j, field, field === 'weight' ? -2.5 : -1)} aria-label={`Less ${field}`} className="w-10 h-12 text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>−</button>
-      <span className="flex-1 text-center g-tab truncate" style={{ fontSize: val.length > 5 ? 15 : 24, fontWeight: 800, letterSpacing: '-0.03em' }}>{val}</span>
-      <button onClick={() => onStep(j, field, field === 'weight' ? 2.5 : 1)} aria-label={`More ${field}`} className="w-10 h-12 text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>+</button>
+    <div className="flex items-center bg-bg-3 rounded-[12px] h-full max-h-12 min-w-0">
+      <button onClick={() => onStep(j, field, field === 'weight' ? -2.5 : -1)} aria-label={`Less ${field}`} className="w-8 flex-shrink-0 h-full text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>−</button>
+      <span className="flex-1 text-center g-tab truncate" style={{ fontSize: val.length > 5 ? 15 : 22, fontWeight: 800, letterSpacing: '-0.03em' }}>{val}</span>
+      <button onClick={() => onStep(j, field, field === 'weight' ? 2.5 : 1)} aria-label={`More ${field}`} className="w-8 flex-shrink-0 h-full text-text-tertiary active:scale-90 transition-transform" style={{ font: `500 18px ${MONO}` }}>+</button>
     </div>
   );
   return (
-    <div className="bg-bg-2 rounded-[18px] p-2.5 flex-1 flex flex-col justify-center gap-1.5">
+    <div className="bg-bg-2 rounded-[18px] p-2.5 flex-1 min-h-0 flex flex-col justify-center gap-1.5">
       <div className="grid gap-2 text-center g-label" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr)' }}>
         <span /><span>KG</span><span>REPS</span>
       </div>
       {chain.map((j) => {
         const s = sets[j];
         return (
-          <div key={j} className="grid gap-2 items-center" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr)', opacity: s.completed ? 0.55 : 1 }}>
+          <div key={j} className="grid gap-2 items-center flex-1 min-h-[34px] max-h-12" style={{ gridTemplateColumns: '30px minmax(0,1fr) minmax(0,1fr)', opacity: s.completed ? 0.55 : 1 }}>
             <span className="text-center" style={{ font: `600 11px ${MONO}`, color: s.type === 'drop' ? 'var(--g-drop)' : 'var(--color-text-secondary)' }}>{setLabel(sets, j)}</span>
             {pill(j, 'weight', fmtW(shownWeight(sets, j)))}
             {pill(j, 'reps', reps(j))}
@@ -145,7 +144,7 @@ function RestRing({ timer, next, onSkip }) {
       {next && (
         <div className="mt-4 text-center">
           <div className="g-label">NEXT{next.tag ? ` · ${next.tag}` : ''}</div>
-          <div className="mt-1.5" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
+          <div className="mt-1.5 max-w-[300px] truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
           <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
         </div>
       )}
@@ -172,15 +171,14 @@ function QuestRest({ timer, next, onSkip, scroll }) {
         {next && (
           <>
             <div className="mt-4 g-label">NEXT · {next.tag}</div>
-            <div className="mt-1.5 text-center" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
+            <div className="mt-1.5 text-center w-full truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{next.name}</div>
             <div className="mt-1 g-tab text-text-secondary" style={{ font: `500 18px ${MONO}` }}>{next.load}</div>
           </>
         )}
-        {scroll && (
-          <div className="mt-4 px-3.5 py-2.5 rounded-[14px] text-center text-text-secondary fx-in" style={{ background: 'var(--color-bg-2)', font: `400 12px/1.5 ${MONO}`, textWrap: 'pretty' }}>
-            {scroll}
-          </div>
-        )}
+        {/* Always takes its two lines, so the rest view is one fixed size. */}
+        <div className="mt-4 px-3.5 py-2.5 rounded-[14px] text-center text-text-secondary fx-in w-full flex items-center justify-center" style={{ background: 'var(--color-bg-2)', font: `400 12px/1.5 ${MONO}`, height: 56, ...(scroll ? {} : { visibility: 'hidden' }) }}>
+          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textWrap: 'pretty' }}>{scroll}</span>
+        </div>
       </div>
       <div className="flex gap-2 w-full mt-3.5">
         <button onClick={() => timer.extend(15)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px]">+15s</button>
@@ -190,14 +188,14 @@ function QuestRest({ timer, next, onSkip, scroll }) {
   );
 }
 
-function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer, onSkip, onClaim, minH }) {
+function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer, onSkip, onClaim }) {
   const d = defeated >= 0 ? blocks[defeated] : null;
   const dSets = d ? d.indices.flatMap((i) => exercises[i].sets.filter((s) => s.completed)) : [];
   const dVol = dSets.reduce((a, s) => a + num(s.weight) * num(s.reps), 0);
   const n = next >= 0 ? blocks[next] : null, n0 = n && exercises[n.indices[0]];
   const left = intro ? Math.max(0, intro.left) : timer.remaining, total = intro ? intro.total : timer.total;
   return (
-    <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5 flex flex-col" style={{ minHeight: minH || undefined }}>
+    <div className="flex-1 bg-bg-1 rounded-[28px] p-5 flex flex-col">
       <div className="flex-1">
       {d && (
         <>
@@ -244,7 +242,7 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
 function BossAsk({ boss, onFight, onSkip }) {
   const n = (boss.fights?.length || 0) + 1;
   return (
-    <div className="flex-shrink-0 rounded-[28px] p-5 fx-in" style={{ background: 'radial-gradient(ellipse at 20% 0%, rgba(251,191,36,.16), var(--color-bg-1) 65%)', boxShadow: 'inset 0 0 0 1.5px #fbbf24' }}>
+    <div className="flex-1 flex flex-col rounded-[28px] p-5 fx-in" style={{ background: 'radial-gradient(ellipse at 20% 0%, rgba(251,191,36,.16), var(--color-bg-1) 65%)', boxShadow: 'inset 0 0 0 1.5px #fbbf24' }}>
       <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em', color: '#fbbf24' }}>WEEKLY BOSS APPEARS</div>
       <div className="mt-2" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{boss.name}</div>
       {boss.cry && <div className="mt-1.5 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>“{boss.cry}”</div>}
@@ -255,6 +253,7 @@ function BossAsk({ boss, onFight, onSkip }) {
           A bonus round at a weight that feels good today. {n === BOSS_GROUPS ? 'Beat it for a card pack.' : 'The next fight opens in 48 hours.'}
         </div>
       </div>
+      <div className="flex-1" />
       <div className="flex gap-2 mt-4">
         <button onClick={onSkip} className="flex-1 h-[56px] rounded-[18px] bg-bg-2 text-text-primary font-bold text-[14px]">Not today</button>
         <button onClick={onFight} className="flex-[2] h-[56px] rounded-[18px] font-extrabold text-[16px]" style={{ background: '#fbbf24', color: '#050505' }}>Fight</button>
@@ -500,20 +499,6 @@ export default function FocusWorkout({
   const [cur, setCur] = useState(() => Math.max(0, blocks.findIndex((b) => !blockDone(exercises, b))));
   const [mem, setMem] = useState(0);
   const [fset, setFset] = useState(null);
-  // The battle card's height, so the walking card between encounters matches it
-  // (remembered, so the first walk of a session matches too).
-  const [cardH, setCardH] = useState(() => { try { return +localStorage.getItem(CARD_H_KEY) || 0; } catch { return 0; } });
-  const roRef = useRef(null);
-  const cardRef = useCallback((el) => {
-    roRef.current?.disconnect();
-    if (!el) return;
-    roRef.current = new ResizeObserver(() => {
-      const h = el.offsetHeight;
-      setCardH(h);
-      try { localStorage.setItem(CARD_H_KEY, String(h)); } catch { /* private mode */ }
-    });
-    roRef.current.observe(el);
-  }, []);
   const [handoff, setHandoff] = useState(null);
   const [toast, setToast] = useState(null);
   const [goAt, setGoAt] = useState(0);
@@ -907,8 +892,25 @@ export default function FocusWorkout({
   // The encounter only plays on the stage — the controls are usable straight away.
   if (quest && bossAsk) { qPhase = 'walk'; qMsg = wBoss?.cry ? `${wBoss.name}: “${wBoss.cry}”` : `A shadow falls across the path. ${wBoss?.name || 'The boss'} appears!`; }
   const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory');
+  const shownBlock = qPhase === 'victory' && qTravel ? nextOpenBlock(exercises, blocks, ci) : ci;
+  const upNext = shownBlock < 0 ? -1 : (() => { const n = nextOpenBlock(exercises, blocks, shownBlock); return n === shownBlock ? -1 : n; })();
   const qReps = fs ? shownReps(ex, fs, st) : '';
   const qPreview = fs && chain ? `${chain.map((j) => fmtW(shownWeight(ex.sets, j))).join(' → ')} kg · ${chain.length} hits back to back` : fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
+
+  // The walk and the boss offer sit over the battle card, which stays laid out
+  // underneath, so the lower half is the same size in every state.
+  const overlay = bossAsk && wBoss ? (
+          <BossAsk boss={wBoss} onFight={fightBoss} onSkip={skipBoss} />
+  ) : qTravel ? (
+          <QuestTravel exercises={exercises} blocks={blocks}
+            defeated={qPhase === 'victory' || qClear ? ci : ci > 0 && blockDone(exercises, blocks[ci - 1]) ? ci - 1 : -1}
+            next={qClear ? -1 : qPhase === 'victory' ? nextOpenBlock(exercises, blocks, ci) : ci}
+            walking={qPhase === 'walk' || qPhase === 'victory'}
+            intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4, label: 'SETTING OFF' }
+              : qPhase === 'victory' && !resting && qWin ? { left: (qWin.at + 3800 - Date.now()) / 1000, total: 3.8, label: 'ONWARD' } : null}
+            timer={timer} onSkip={introOn ? () => setIntroOff(true) : qPhase === 'victory' ? skipVictory : skipRest}
+            onClaim={qClear ? onQuestClear : null} />
+  ) : null;
 
   return (
     <div className="g-root flex flex-col min-h-full">
@@ -943,18 +945,10 @@ export default function FocusWorkout({
             tint={readTint()} scanlines={readScanlines()} msg={qMsg} goFlash={goFlash}
             aura={(qPhase === 'battle' || qPhase === 'encounter') ? (isBossBlock ? '#fbbf24' : evKey ? EVENTS[evKey].color : null) : null} />
         )}
-        {bossAsk && wBoss ? (
-          <BossAsk boss={wBoss} onFight={fightBoss} onSkip={skipBoss} />
-        ) : qTravel ? (
-          <QuestTravel exercises={exercises} blocks={blocks}
-            defeated={qPhase === 'victory' || qClear ? ci : ci > 0 && blockDone(exercises, blocks[ci - 1]) ? ci - 1 : -1}
-            next={qClear ? -1 : qPhase === 'victory' ? nextOpenBlock(exercises, blocks, ci) : ci}
-            walking={qPhase === 'walk' || qPhase === 'victory'}
-            intro={introOn ? { left: (introEnd - Date.now()) / 1000, total: 4, label: 'SETTING OFF' }
-              : qPhase === 'victory' && !resting && qWin ? { left: (qWin.at + 3800 - Date.now()) / 1000, total: 3.8, label: 'ONWARD' } : null}
-            timer={timer} onSkip={introOn ? () => setIntroOff(true) : qPhase === 'victory' ? skipVictory : skipRest}
-            onClaim={qClear ? onQuestClear : null} minH={cardH} />
-        ) : kind === 'cardio' ? (
+        <div className="grid grid-cols-[minmax(0,1fr)] flex-shrink-0">
+          {overlay && <div className="flex flex-col" style={{ gridArea: '1 / 1', zIndex: 1 }}>{overlay}</div>}
+          <div className="flex flex-col" aria-hidden={!!overlay} style={{ gridArea: '1 / 1', ...(overlay ? { opacity: 0, pointerEvents: 'none' } : {}) }}>
+        {kind === 'cardio' ? (
           // Same swipe handling as the other cards, so cardio blocks cycle too.
           <div
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
@@ -972,7 +966,7 @@ export default function FocusWorkout({
         ) : (
           <div
             onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu} onClickCapture={swallowClick}
-            ref={cardRef} className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
+            className="relative flex-shrink-0 bg-bg-1 rounded-[28px] select-none"
             style={{
               padding: dense ? 16 : 20,
               touchAction: swipeExercises ? 'pan-y' : 'none',
@@ -980,7 +974,7 @@ export default function FocusWorkout({
               transition: drag.anim ? 'transform .3s cubic-bezier(.2,1.2,.3,1)' : 'none',
               opacity: cardMoved ? Math.max(0.4, 1 - cardMoved / 600) : 1,
             }}>
-            {kind === 'superset' && (
+            {kind === 'superset' && dense && (
               <div className="flex gap-1 p-1 rounded-2xl bg-bg-2 mb-3.5">
                 {block.indices.map((xi, k) => {
                   const x = exercises[xi], on = k === m;
@@ -1007,7 +1001,7 @@ export default function FocusWorkout({
               </span>
             </div>
             {!quest && (
-              <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02 }}>
+              <div style={{ marginTop: 10, fontSize: dense ? 24 : 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.02, ...(dense ? {} : { height: '2.04em', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>
                 {ex.substituted && <span className="text-text-tertiary line-through mr-2" style={{ fontSize: '0.6em' }}>{ex.substituted.original}</span>}
                 <TypewriterName text={ex.name} />
               </div>
@@ -1035,55 +1029,72 @@ export default function FocusWorkout({
               </div>
             )}
 
-            {evKey && !resting && (
-              <div className="mt-3.5 rounded-[18px] p-3.5 fx-in" style={{ background: `color-mix(in srgb, ${EVENTS[evKey].color} 13%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${EVENTS[evKey].color}` }}>
-                <div className="flex justify-between items-center gap-2">
-                  <span style={{ font: `700 11px ${MONO}`, letterSpacing: '.16em', color: EVENTS[evKey].color }}>{EVENTS[evKey].title}</span>
-                  <span className="text-text-tertiary" style={{ font: `500 9px ${MONO}`, letterSpacing: '.12em' }}>{evActive ? 'ACCEPTED' : 'RANDOM EVENT'}</span>
-                </div>
-                <div className="mt-1.5 text-[14px] font-bold" style={{ lineHeight: 1.35 }}>{evText(evKey)}</div>
-                <div className="mt-1 text-text-secondary" style={{ font: `400 11px/1.5 ${MONO}` }}>
-                  {evAct(evKey)}
-                  {EVENTS[evKey].xp > 1 ? ` · ${EVENTS[evKey].xp}× XP` : ''}{EVENTS[evKey].crit ? ' · crit' : ''}{EVENTS[evKey].pack ? ' · +1 card pack' : ''}
-                </div>
-                {evActive && EVENTS[evActive].timed && (
-                  timedLeft === null ? (
-                    <button onClick={() => patchSet(ei, fi, { qe: { ...fs.qe, at: Date.now() } })} className="w-full mt-3 h-11 rounded-[14px] font-extrabold text-[14px]"
-                      style={{ background: EVENTS[evActive].color, color: '#050505' }}>Start {EVENTS[evActive].timed} s</button>
-                  ) : (
-                    <div className="mt-3 flex items-center gap-3">
-                      <span className="g-tab" style={{ font: `500 26px ${MONO}`, color: timedLeft > 0 ? 'var(--color-text-primary)' : EVENTS[evActive].color }}>{mmss(timedLeft + (timedLeft > 0 ? 0.999 : 0))}</span>
-                      <div className="flex-1 h-1.5 rounded-[3px] bg-bg-3 overflow-hidden">
-                        <div className="h-full" style={{ width: `${(1 - timedLeft / EVENTS[evActive].timed) * 100}%`, background: EVENTS[evActive].color, transition: 'width .25s linear' }} />
-                      </div>
-                      <span className="text-text-secondary" style={{ font: `500 11px ${MONO}` }}>{timedLeft > 0 ? 'keep going' : 'time! log your reps'}</span>
-                    </div>
-                  )
-                )}
-                {evOffered && (
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={declineEvent} className="flex-1 h-11 rounded-[14px] bg-bg-2 text-text-secondary font-bold text-[13px]">Not today</button>
-                    <button onClick={acceptEvent} className="flex-[2] h-11 rounded-[14px] font-extrabold text-[14px]" style={{ background: EVENTS[evKey].color, color: '#050505' }}>Accept</button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Focus: rest and the steppers share one grid cell, both always
-                laid out, so the card is the same size in either state and the
-                bottom button lands in the same place. Only one is visible. */}
+            {/* Focus: the rest view is always laid out and sets the size; the
+                set controls float inside that same box and shrink to fit (with
+                the superset tabs and any event), so the card never changes size
+                between rest, sets, drop chains or events. Only one is visible. */}
             {!dense && kind !== 'interval' && fs && (
-              <div className="grid mt-4">
-                <div key={`rest-${resting}`} aria-hidden={!resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'visible' : 'hidden', animation: resting ? 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' : 'none' }}>
+              <div className="relative mt-4">
+                <div key={`rest-${resting}`} aria-hidden={!resting} className="flex flex-col" style={{ visibility: resting ? 'visible' : 'hidden', animation: resting ? 'fx-pop .4s cubic-bezier(.2,1.4,.4,1) both' : 'none' }}>
                   {quest ? <QuestRest timer={timer} next={restNext} onSkip={skipRest}
                     scroll={readScrolls() ? ((l) => l[Math.floor(seeded(`${qKey}|${ci}|${fi}|rest`) * l.length)])(script?.rest?.[ex.name]?.length ? script.rest[ex.name] : REST_LINES) : null} />
                     : <RestRing timer={timer} next={restNext} onSkip={skipRest} />}
                 </div>
-                <div key={`set-${resting}`} aria-hidden={resting} className="flex flex-col" style={{ gridArea: '1 / 1', visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
-                  {chain ? (
+                <div key={`set-${resting}`} aria-hidden={resting} className="absolute inset-0 flex flex-col min-h-0" style={{ visibility: resting ? 'hidden' : 'visible', animation: resting ? 'none' : 'fx-fade .25s both' }}>
+                  {kind === 'superset' && (
+                    <div className="flex gap-1 p-1 rounded-2xl bg-bg-2 mb-2.5 flex-shrink-0">
+                      {block.indices.map((xi, k) => {
+                        const x = exercises[xi], on = k === m;
+                        return (
+                          <button key={xi} onClick={() => { setMem(k); setFset(null); }}
+                            className="flex-1 min-w-0 flex flex-col items-start gap-0.5 px-2.5 py-2 rounded-[12px] text-left transition-colors"
+                            style={{ background: on ? 'var(--color-bg-0)' : 'transparent', color: on ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', boxShadow: on ? 'inset 0 0 0 1.5px var(--g-ss)' : 'none' }}>
+                            <span style={{ font: `500 10px ${MONO}`, opacity: 0.7 }}>{letter(k)}</span>
+                            <span className="w-full text-[13px] font-bold truncate">{x.name}</span>
+                            <span style={{ font: `400 10px ${MONO}`, opacity: 0.7 }}>{x.sets.filter((s) => s.completed).length}/{x.sets.length}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {evKey && !resting && (
+                    <div className={`rounded-[18px] p-3.5 fx-in flex-shrink-0 ${evOffered ? '' : 'mb-2.5'}`} style={{ background: `color-mix(in srgb, ${EVENTS[evKey].color} 13%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${EVENTS[evKey].color}` }}>
+                      <div className="flex justify-between items-center gap-2">
+                        <span style={{ font: `700 11px ${MONO}`, letterSpacing: '.16em', color: EVENTS[evKey].color }}>{EVENTS[evKey].title}</span>
+                        <span className="text-text-tertiary" style={{ font: `500 9px ${MONO}`, letterSpacing: '.12em' }}>{evActive ? 'ACCEPTED' : 'RANDOM EVENT'}</span>
+                      </div>
+                      {evOffered && <div className="mt-1.5 text-[14px] font-bold" style={{ lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{evText(evKey)}</div>}
+                      <div className="mt-1 text-text-secondary" style={{ font: `400 11px/1.5 ${MONO}`, ...(evOffered ? {} : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>
+                        {evAct(evKey)}
+                        {EVENTS[evKey].xp > 1 ? ` · ${EVENTS[evKey].xp}× XP` : ''}{EVENTS[evKey].crit ? ' · crit' : ''}{EVENTS[evKey].pack ? ' · +1 card pack' : ''}
+                      </div>
+                      {evActive && EVENTS[evActive].timed && (
+                        timedLeft === null ? (
+                          <button onClick={() => patchSet(ei, fi, { qe: { ...fs.qe, at: Date.now() } })} className="w-full mt-2.5 h-10 rounded-[14px] font-extrabold text-[14px]"
+                            style={{ background: EVENTS[evActive].color, color: '#050505' }}>Start {EVENTS[evActive].timed} s</button>
+                        ) : (
+                          <div className="mt-3 flex items-center gap-3">
+                            <span className="g-tab" style={{ font: `500 26px ${MONO}`, color: timedLeft > 0 ? 'var(--color-text-primary)' : EVENTS[evActive].color }}>{mmss(timedLeft + (timedLeft > 0 ? 0.999 : 0))}</span>
+                            <div className="flex-1 h-1.5 rounded-[3px] bg-bg-3 overflow-hidden">
+                              <div className="h-full" style={{ width: `${(1 - timedLeft / EVENTS[evActive].timed) * 100}%`, background: EVENTS[evActive].color, transition: 'width .25s linear' }} />
+                            </div>
+                            <span className="text-text-secondary" style={{ font: `500 11px ${MONO}` }}>{timedLeft > 0 ? 'keep going' : 'time! log your reps'}</span>
+                          </div>
+                        )
+                      )}
+                      {evOffered && (
+                        <div className="flex gap-2 mt-3">
+                          <button onClick={declineEvent} className="flex-1 h-11 rounded-[14px] bg-bg-2 text-text-secondary font-bold text-[13px]">Not today</button>
+                          <button onClick={acceptEvent} className="flex-[2] h-11 rounded-[14px] font-extrabold text-[14px]" style={{ background: EVENTS[evKey].color, color: '#050505' }}>Accept</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* An event on offer takes the space until it's answered. */}
+                  {evOffered && !resting ? <div className="flex-1" /> : chain ? (
                     <DropChain sets={ex.sets} chain={chain} reps={(j) => shownReps(ex, ex.sets[j], st)} onStep={(j, f, d) => step(ei, j, f, d)} />
                   ) : (
-                    <div className="grid grid-cols-2 gap-2.5 flex-1">
+                    <div className="grid grid-cols-2 gap-2.5 flex-1 min-h-0" style={{ containerType: 'size' }}>
                       <Stepper label={quest ? 'KG · POWER' : 'KG'} value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)} />
                       <Stepper label={quest ? 'REPS · HITS' : 'REPS'} value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)} />
                     </div>
@@ -1096,7 +1107,7 @@ export default function FocusWorkout({
                   )}
                   {(!isTimed || (kind === 'bfr' && fs.completed)) && (
                     <button onClick={() => complete(ei, chainEnd, chain)}
-                      className="mt-3.5 w-full h-[62px] rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
+                      className="mt-3.5 w-full h-[62px] flex-shrink-0 rounded-[20px] font-extrabold text-[17px] transition-colors active:scale-[.98]"
                       style={{ background: ex.sets[chainEnd].completed ? 'var(--g-ok-soft)' : 'var(--color-accent)', color: ex.sets[chainEnd].completed ? 'var(--color-success)' : 'var(--color-on-accent)' }}>
                       {completeLabel}
                     </button>
@@ -1168,7 +1179,7 @@ export default function FocusWorkout({
               </>
             )}
 
-            <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
+            <div className="mt-3 text-center text-text-tertiary truncate" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>
               {quest && qPreview && kind !== 'interval' ? `${qPreview} · ← → exercises` : dense ? '← → exercises' : '← → sets · ↑ ↓ exercises'}
             </div>
 
@@ -1185,16 +1196,21 @@ export default function FocusWorkout({
             )}
           </div>
         )}
+          </div>
+        </div>
 
-        {!dense && !qTravel && nx >= 0 && nx !== ci && (
-          <button onClick={() => openBlock(nx)} className="flex-shrink-0 flex items-center gap-3 px-[18px] py-4 rounded-[22px] bg-bg-1 text-left opacity-85">
+        {/* Always present (it says so when there's nothing after), so the footprint never changes. */}
+        {!dense && (
+          <button onClick={() => upNext >= 0 && openBlock(upNext)} className="flex-shrink-0 flex items-center gap-3 px-[18px] py-4 rounded-[22px] bg-bg-1 text-left opacity-85">
             <div className="flex-1 min-w-0">
-              <div className="g-label">UP NEXT</div>
-              <div className="mt-1 text-base font-bold truncate">{blockName(exercises, blocks[nx])}</div>
+              <div className="g-label">{upNext >= 0 ? 'UP NEXT' : 'AFTER THIS'}</div>
+              <div className="mt-1 text-base font-bold truncate">{upNext >= 0 ? blockName(exercises, blocks[upNext]) : quest ? 'Last one, then the loot' : "Last one, then you're done"}</div>
             </div>
-            <span className="text-text-tertiary flex-shrink-0" style={{ font: `400 11px ${MONO}` }}>
-              {TAGS[blocks[nx].kind] ? TAGS[blocks[nx].kind][0].toLowerCase() : `${exercises[blocks[nx].indices[0]].sets.length} × ${exercises[blocks[nx].indices[0]].targetReps}`}
-            </span>
+            {upNext >= 0 && (
+              <span className="text-text-tertiary flex-shrink-0" style={{ font: `400 11px ${MONO}` }}>
+                {TAGS[blocks[upNext].kind] ? TAGS[blocks[upNext].kind][0].toLowerCase() : `${exercises[blocks[upNext].indices[0]].sets.length} × ${exercises[blocks[upNext].indices[0]].targetReps}`}
+              </span>
+            )}
           </button>
         )}
         {dense && blocks.length > 1 && (
