@@ -752,7 +752,7 @@ html.theme-bit64 [style*="inset 0 0 0 1.5px var(--color-accent)"]::after {
    PlayStation (dark) — shelf-cmd's take: CMD Mono (pure black, white accent,
    #111/#1e1e1e/#333 greys) with the four face-button colours only as the
    scattered accents — the wave background (WaveBackground cycles them), done
-   △ green, cancel ○ red, and one per special-set tag. Nothing else is coloured.
+   △ green, cancel ○ red, and a colour per special-set tag. Nothing else is coloured.
    ============================================ */
 html.theme-playstation {
   --color-bg-0: #000000;
@@ -778,7 +778,7 @@ html.theme-playstation {
   --color-success-muted: rgba(63, 179, 127, 0.15);
   --color-error: #e0564f;
   --g-ss: #e0559c;   /* □ superset */
-  --g-drop: #e0564f; /* ○ drop set */
+  --g-drop: #a07ae6; /* purple: red is already cancel/BATTLE, so drops get their own */
   --g-bfr: #4f8fe0;  /* ✕ BFR */
   --g-int: #3fb37f;  /* △ interval */
 }
