@@ -48,7 +48,7 @@ export default function QuestTitle({ onNavigate }) {
   return (
     <div className="g-root flex flex-col min-h-full">
       <div className="px-5 pt-3 pb-3">
-        <div className="g-label truncate">{program ? `${program.name} · QUEST` : 'QUEST'}</div>
+        <div className="g-label truncate ps-x">{program ? `${program.name} · QUEST` : 'QUEST'}</div>
         <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>
           {/* Retypes with the cursor whenever you pick a different quest (and now and then on its own). */}
           <TypewriterName text={ws.find(([, i]) => i === index)?.[0].name || 'Gains Quest'} />
@@ -63,11 +63,11 @@ export default function QuestTitle({ onNavigate }) {
         <BossPanel />
 
         <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
-          <div className="text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>
+          <div className="text-accent ps-t" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>
           {!program && (
             <div className="mt-3 text-sm text-text-secondary">No program yet. Make one in Programs and it becomes your quest list.</div>
           )}
-          {groups.map((pg) => {
+          {groups.map((pg, gi) => {
             const open = openIds ? openIds.includes(pg.id) : pg === program;
             const toggle = () => setOpenIds((ids) => {
               const cur = ids || (program ? [program.id] : []);
@@ -79,7 +79,7 @@ export default function QuestTitle({ onNavigate }) {
               {groups.length > 1 && (
                 <button onClick={toggle} className="w-full flex items-center gap-2 px-1 py-2.5 text-left">
                   <span className="flex-1 min-w-0 truncate" style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: pg === program ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>{pg.name}</span>
-                  <span className="text-text-tertiary flex-shrink-0" style={{ font: `400 10px ${MONO}` }}>{n} workout{n === 1 ? '' : 's'}</span>
+                  <span className={`text-text-tertiary flex-shrink-0 ${['ps-s', 'ps-x', 'ps-o', 'ps-t'][gi % 4]}`} style={{ font: `400 10px ${MONO}` }}>{n} workout{n === 1 ? '' : 's'}</span>
                   <span className="text-text-tertiary inline-block transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none', font: `500 14px ${MONO}` }}>›</span>
                 </button>
               )}

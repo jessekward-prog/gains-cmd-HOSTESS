@@ -999,7 +999,7 @@ export default function ProgramsPage({ onNavigate }) {
     >
       <div className="g-root px-5 pt-2.5 pb-7 fx-rise">
         <div className="flex justify-between items-center">
-          <span className="text-accent" style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em' }}>GAINS_CMD</span>
+          <span className="text-accent ps-x" style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em' }}>GAINS_CMD</span>
           <span className="text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{today}</span>
         </div>
         <h1 className="mt-[22px] mb-1" style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>
@@ -1010,7 +1010,7 @@ export default function ProgramsPage({ onNavigate }) {
         {upNext.workout && (
           <div className="mt-[22px] p-5 rounded-[26px] bg-bg-1 flex flex-col gap-4">
             <div>
-              <div className="g-label truncate">UP NEXT · {upNext.program.name.toUpperCase()}</div>
+              <div className="g-label truncate ps-t">UP NEXT · {upNext.program.name.toUpperCase()}</div>
               <div className="mt-2" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{upNext.workout.name}</div>
               <div className="mt-1.5 g-meta">{workoutMeta(upNext.workout, true)}</div>
             </div>
@@ -1050,12 +1050,12 @@ export default function ProgramsPage({ onNavigate }) {
           ))}
         </div>
 
-        <div className="mt-7 mb-2.5 g-label">PROGRAMS</div>
+        <div className="mt-7 mb-2.5 g-label ps-s">PROGRAMS</div>
         {programs.length === 0 && (
           <div className="text-center py-8 text-text-tertiary" style={{ font: `400 12px ${MONO}` }}>No programs yet. Create one to get started.</div>
         )}
         <div className="flex flex-col gap-2">
-          {programs.map((program) => {
+          {programs.map((program, pi) => {
             const workouts = parseWorkouts(program);
             const open = openProgram === program.id;
             return (
@@ -1064,7 +1064,7 @@ export default function ProgramsPage({ onNavigate }) {
                   className="w-full flex items-center justify-between gap-3 px-[18px] py-4 text-left">
                   <div className="min-w-0">
                     <div className="text-[17px] font-bold truncate" style={{ letterSpacing: '-0.02em' }}>{program.name}</div>
-                    <div className="mt-[3px] text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{workouts.length} workout{workouts.length !== 1 ? 's' : ''}</div>
+                    <div className={`mt-[3px] text-text-tertiary ${['ps-x', 'ps-o', 'ps-t', 'ps-s'][pi % 4]}`} style={{ font: `400 11px ${MONO}` }}>{workouts.length} workout{workouts.length !== 1 ? 's' : ''}</div>
                   </div>
                   <span className="text-text-tertiary text-[22px]" style={{ transition: 'transform .25s cubic-bezier(.2,1.4,.4,1)', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
                 </button>

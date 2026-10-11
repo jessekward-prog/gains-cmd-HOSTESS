@@ -784,6 +784,12 @@ html.theme-playstation {
 }
 /* The accent is white here, so the older bg-accent + text-white buttons need dark text. */
 html.theme-playstation .bg-accent.text-white { color: #000; }
+/* Scattered face-button touches: small labels and counts carry ps-x/o/t/s
+   (lists cycle them per row, like shelf's member colours). Inert elsewhere. */
+html.theme-playstation .ps-x { color: #4f8fe0 !important; }
+html.theme-playstation .ps-o { color: #e0564f !important; }
+html.theme-playstation .ps-t { color: #3fb37f !important; }
+html.theme-playstation .ps-s { color: #e0559c !important; }
 
 /* ============================================
    Coach markdown prose

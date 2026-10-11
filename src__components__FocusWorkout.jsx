@@ -918,12 +918,12 @@ export default function FocusWorkout({
       <div className="px-5 pt-3 pb-3">
         <div className="flex justify-between items-end gap-3">
           <div className="min-w-0">
-            <div className="g-label truncate">{workout.programName}{quest ? ' · QUEST' : ''}</div>
+            <div className="g-label truncate ps-x">{workout.programName}{quest ? ' · QUEST' : ''}</div>
             <div className="mt-1 truncate" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{workout.workoutName}</div>
           </div>
           <div className="text-right flex-shrink-0">
             <div className="g-tab" style={{ font: `500 24px ${MONO}`, lineHeight: 1 }}>{elapsed}</div>
-            <div className="mt-1 g-label" style={{ letterSpacing: '.12em', fontWeight: 400 }}>{setsLeft} SETS LEFT</div>
+            <div className="mt-1 g-label ps-s" style={{ letterSpacing: '.12em', fontWeight: 400 }}>{setsLeft} SETS LEFT</div>
           </div>
         </div>
         <div className="flex gap-1 mt-3">
@@ -1203,7 +1203,7 @@ export default function FocusWorkout({
         {!dense && (
           <button onClick={() => upNext >= 0 && openBlock(upNext)} className="flex-shrink-0 flex items-center gap-3 px-[18px] py-4 rounded-[22px] bg-bg-1 text-left opacity-85">
             <div className="flex-1 min-w-0">
-              <div className="g-label">{upNext >= 0 ? 'UP NEXT' : 'AFTER THIS'}</div>
+              <div className="g-label ps-t">{upNext >= 0 ? 'UP NEXT' : 'AFTER THIS'}</div>
               <div className="mt-1 text-base font-bold truncate">{upNext >= 0 ? blockName(exercises, blocks[upNext]) : quest ? 'Last one, then the loot' : "Last one, then you're done"}</div>
             </div>
             {upNext >= 0 && (
