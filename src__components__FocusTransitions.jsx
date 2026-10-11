@@ -11,8 +11,7 @@ import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
 import BodyMap from './BodyMap';
 import QuestHeroCard from './QuestHeroCard';
 import useQuest from '../hooks/useQuest';
-import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET, EVENTS, weekKey, daysThisWeek, BOSS_SETS } from '../lib/quest';
-import { muscleSets as weekSets } from '../lib/catalog';
+import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET, EVENTS, weekKey } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -348,35 +347,14 @@ function Strength({ rows }) {
 // play it out — trophy → reel → reveal — while the save runs behind it.
 function QuestLoot({ exercises, questKey, onDone }) {
   const { prof, updProf } = useQuest();
-  const { workoutHistory, settings } = useWorkout();
-  const cat = useCatalog();
   const [start] = useState(() => ({ prof, session: questSession(exercises, xpMult(prof, prof.lvl)), at: Date.now() }));
   const [cardOpen, setCardOpen] = useState(false);
   const [skipped, setSkipped] = useState(false); // tap anywhere: straight to the reveal
-  const [bossWon, setBossWon] = useState(false);
   const [, tick] = useState(0);
-  // Bank once the library is in (it is by now — the quest screen loaded it) so the
-  // weekly boss can be judged; give up waiting after 2s and bank without it.
-  const banked = useRef(false);
-  useEffect(() => {
-    const bank = (withCat) => {
-      if (banked.current) return;
-      banked.current = true;
-      const wk = weekKey(), b = prof.boss;
-      let won = false;
-      if (withCat && b?.week === wk && prof.bossBeat !== wk) {
-        const before = weekSets(workoutHistory, settings?.exerciseLinks, withCat, daysThisWeek())[b.region] || 0;
-        const now = sessionMuscles(exercises, settings?.exerciseLinks, withCat).sets[b.region] || 0;
-        won = before + now >= BOSS_SETS; // beaten and not yet claimed this week (however it got there)
-      }
-      setBossWon(won);
-      const session = won ? { ...start.session, packs: (start.session.packs || 0) + 1 } : start.session;
-      updProf((p) => { const c = clearQuest(p, questKey, session); return c === p || !won ? c : { ...c, bossBeat: wk }; }).catch(() => {});
-    };
-    if (cat) bank(cat);
-    const t = setTimeout(() => bank(null), 2000);
-    return () => clearTimeout(t);
-  }, [cat]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Bank the quest's XP + pack and roll the chest (one keyed step).
+  useEffect(() => { updProf((p) => clearQuest(p, questKey, start.session)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The weekly boss pays its own pack when its last fight is won; say so if that fight was this workout.
+  const bossWon = prof.bossBeat === weekKey() && prof.boss?.fights?.at(-1)?.key === questKey;
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 100); return () => clearInterval(id); }, []);
 
   const t = skipped ? 9 : (Date.now() - start.at) / 1000;

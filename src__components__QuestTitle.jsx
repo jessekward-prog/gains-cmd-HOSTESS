@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
 import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
@@ -6,10 +6,8 @@ import QuestStage from './QuestStage';
 import QuestHeroCard, { MiniHeroCard } from './QuestHeroCard';
 import { isMarker } from '../lib/history';
 import { buildBlocks } from '../lib/focus';
-import { lvTitle, tierOf, weekKey, pickBossRegion, daysThisWeek, BOSS_SETS, BOSS_WORDS, BOSS_NAMES } from '../lib/quest';
-import useCatalog from '../hooks/useCatalog';
-import { muscleSets } from '../lib/catalog';
-import BodyMap from './BodyMap';
+import { lvTitle, tierOf } from '../lib/quest';
+import BossPanel from './BossPanel';
 import TypewriterName from './TypewriterName';
 
 const MONO = 'var(--font-mono)';
@@ -18,27 +16,10 @@ const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : 
 // Quest Mode's title screen (home → Quest): choose today's quest from your
 // program (defaulting to the one that's up next) and begin.
 export default function QuestTitle({ onNavigate }) {
-  const { programs, workoutHistory, startWorkout, settings } = useWorkout();
+  const { programs, workoutHistory, startWorkout } = useWorkout();
   const { showToast } = useToast();
-  const { prof, updProf } = useQuest();
-  const cat = useCatalog();
+  const { prof } = useQuest();
 
-  // Weekly boss: the muscle you've trained least over the last 14 days, fixed
-  // for the week once chosen. Beaten at BOSS_SETS sets on it this week.
-  const wk = weekKey();
-  const boss = useMemo(() => {
-    if (!cat) return null;
-    const links = settings?.exerciseLinks;
-    const region = prof.boss?.week === wk ? prof.boss.region : pickBossRegion(muscleSets(workoutHistory, links, cat, 14));
-    return { region, sets: Math.round((muscleSets(workoutHistory, links, cat, daysThisWeek())[region] || 0) * 2) / 2 };
-  }, [cat, workoutHistory, settings?.exerciseLinks, prof.boss, wk]);
-  useEffect(() => {
-    if (boss && prof.boss?.week !== wk) {
-      updProf((p) => (p.boss?.week === wk ? p : { ...p, boss: { week: wk, region: boss.region, label: BOSS_WORDS[boss.region], name: BOSS_NAMES[boss.region], cry: '' } })).catch(() => {});
-    }
-  }, [boss?.region, wk]); // eslint-disable-line react-hooks/exhaustive-deps
-  const bossBeat = prof.bossBeat === wk;
-  const bossReady = !bossBeat && boss && boss.sets >= BOSS_SETS; // beaten, claimed at the next quest's loot
   const [cardOpen, setCardOpen] = useState(false);
 
   const upNext = useMemo(() => {
@@ -79,24 +60,7 @@ export default function QuestTitle({ onNavigate }) {
           title={{ line: `LV ${prof.lvl} · ${lvTitle(prof.lvl).toUpperCase()}`, color: tier[2] }}
           card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} />
 
-        {boss && prof.boss?.week === wk && (
-          <div className="flex-shrink-0 flex items-center gap-3.5 bg-bg-1 rounded-[22px] p-3.5" style={{ boxShadow: `inset 0 0 0 1.5px ${bossBeat || bossReady ? 'var(--color-success)' : '#ff2222'}` }}>
-            <div className="flex-shrink-0" style={{ width: 92 }}><BodyMap heat={{ [boss.region]: 1 }} height={92} /></div>
-            <div className="flex-1 min-w-0">
-              <div style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em', color: bossBeat || bossReady ? 'var(--color-success)' : '#ff2222' }}>WEEKLY BOSS{bossBeat || bossReady ? ' · DEFEATED' : ''}</div>
-              <div className="truncate" style={{ marginTop: 2, fontSize: 17, fontWeight: 800, letterSpacing: '-0.02em' }}>{prof.boss.name}</div>
-              {prof.boss.cry && <div className="truncate text-text-secondary" style={{ font: `400 11px ${MONO}` }}>“{prof.boss.cry}”</div>}
-              <div className="mt-2 h-1 rounded-[2px] bg-bg-3 overflow-hidden">
-                <div className="h-full" style={{ width: `${Math.min(1, boss.sets / BOSS_SETS) * 100}%`, background: bossBeat || bossReady ? 'var(--color-success)' : '#ff2222' }} />
-              </div>
-              <div className="mt-1 text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>
-                {bossBeat ? 'Beaten this week · +1 card pack claimed'
-                  : bossReady ? 'Beaten · finish a quest to claim +1 card pack'
-                  : `Train ${BOSS_WORDS[boss.region]} · ${boss.sets}/${BOSS_SETS} sets this week · +1 card pack`}
-              </div>
-            </div>
-          </div>
-        )}
+        <BossPanel />
 
         <div className="flex-shrink-0 bg-bg-1 rounded-[28px] p-5">
           <div className="text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>

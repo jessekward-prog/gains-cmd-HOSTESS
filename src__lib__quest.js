@@ -387,7 +387,6 @@ export const fillLine = (tpl, v) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => 
 
 // ── Weekly boss: your most-neglected muscle ─────────────────────────
 export const BOSS_REGIONS = ['chest', 'upperBack', 'deltoids', 'quadriceps', 'hamstring', 'gluteal', 'biceps', 'triceps', 'abs'];
-export const BOSS_SETS = 8;
 /** Monday-based week key, e.g. '2026-10-05'. */
 export function weekKey(now = new Date()) {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -403,5 +402,36 @@ export const BOSS_WORDS = { chest: 'chest', upperBack: 'upper back and lats', de
   gluteal: 'glutes', biceps: 'biceps', triceps: 'triceps', abs: 'abs' };
 export const BOSS_NAMES = { chest: 'The Breastplate Golem', upperBack: 'The Lat Wraith', deltoids: 'The Shoulder Harpy', quadriceps: 'The Thigh Titan',
   hamstring: 'The Hamstring Hydra', gluteal: 'The Glute Colossus', biceps: 'The Curl Kraken', triceps: 'The Tricep Troll', abs: 'The Core Basilisk' };
-/** Days from this week's Monday through today, for muscleSets(…, days). */
-export const daysThisWeek = (now = new Date()) => ((now.getDay() + 6) % 7) + 1;
+
+// ── Weekly boss fights ──────────────────────────────────────────────
+// The boss is beaten in BOSS_GROUPS fights of BOSS_GROUP_SETS sets, offered as
+// an optional finale at the end of any workout — never two fights within 48 h.
+export const BOSS_GROUPS = 2;
+export const BOSS_GROUP_SETS = 4;
+export const BOSS_GAP_MS = 48 * 3600 * 1000;
+// When you've no history for the boss muscle: a simple, safe pick from the library.
+export const BOSS_DEFAULT_EXERCISE = { chest: 'Dumbbell Bench Press', upperBack: 'Cable Seated Row', deltoids: 'Dumbbell Lateral Raise',
+  quadriceps: 'Lever Leg Extension', hamstring: 'Lever Lying Leg Curl', gluteal: 'Barbell Glute Bridge', biceps: 'Dumbbell Biceps Curl',
+  triceps: 'Cable Pushdown', abs: 'Cable Kneeling Crunch' };
+const fightsOf = (boss) => boss?.fights || [];
+/** When the next fight may be offered (ms epoch), or null if the boss is done. */
+export function bossNextAt(boss) {
+  const f = fightsOf(boss);
+  if (f.length >= BOSS_GROUPS) return null;
+  const last = f.length ? Math.max(...f.map((x) => Date.parse(x.at))) : 0;
+  return last ? last + BOSS_GAP_MS : 0;
+}
+/** Can this week's boss be offered right now? */
+export function bossOfferable(boss, wk, now = Date.now()) {
+  if (!boss || boss.week !== wk || !boss.exercise) return false;
+  const next = bossNextAt(boss);
+  return next !== null && now >= next;
+}
+/** Record a won fight — once per workout `key`. The last fight beats the boss: +1 pack. */
+export function recordBossFight(prof, wk, key, at = new Date().toISOString()) {
+  const b = prof.boss;
+  if (!b || b.week !== wk || fightsOf(b).some((x) => x.key === key) || fightsOf(b).length >= BOSS_GROUPS) return prof;
+  const fights = [...fightsOf(b), { key, at }];
+  const beaten = fights.length >= BOSS_GROUPS;
+  return { ...prof, boss: { ...b, fights }, ...(beaten ? { bossBeat: wk, packs: (prof.packs || 0) + 1 } : {}) };
+}

@@ -115,3 +115,17 @@ export function muscleSets(history, links, cat, days = 7, now = Date.now()) {
   });
   return out;
 }
+
+/** The exercise you've done the most sets of with `region` as its main target (or null).
+ *  `only` (a Set of names) limits it — e.g. to exercises still in your programs. */
+export function topExerciseFor(history, links, cat, region, only = null) {
+  const counts = {};
+  (history || []).forEach((w) => {
+    const exs = typeof w.exercises === 'string' ? JSON.parse(w.exercises) : w.exercises;
+    (exs || []).forEach((e) => {
+      const done = (e?.sets || []).filter((s) => s.completed).length;
+      if (done && (!only || only.has(e.name)) && regionsOf(resolve(e.name, links, cat))[region] === 1) counts[e.name] = (counts[e.name] || 0) + done;
+    });
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}

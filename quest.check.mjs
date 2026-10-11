@@ -157,3 +157,22 @@ assert.equal(Q.weekKey(new Date(2026, 9, 11)), '2026-10-05'); // a Sunday → it
 assert.equal(Q.pickBossRegion({ chest: 9, upperBack: 4, deltoids: 0 }), 'deltoids'); // fewest; ties go to list order
 assert.equal(Q.pickBossRegion({ chest: 9, upperBack: 4, deltoids: 3, quadriceps: 2, hamstring: 2, gluteal: 5, biceps: 6, triceps: 7, abs: 8 }), 'quadriceps');
 console.log('event checks passed');
+
+// Weekly boss: offered only when due (48 h apart), two fights beat it, once per workout.
+{
+  const wk = '2026-10-05', t0 = Date.parse('2026-10-06T08:00:00Z');
+  const p0 = { ...Q.defProf(), packs: 0, boss: { week: wk, region: 'chest', exercise: 'Dumbbell Bench Press', fights: [] } };
+  assert.ok(Q.bossOfferable(p0.boss, wk, t0));
+  assert.ok(!Q.bossOfferable(p0.boss, '2026-10-12', t0));                  // last week's boss
+  assert.ok(!Q.bossOfferable({ ...p0.boss, exercise: null }, wk, t0));
+  const p1 = Q.recordBossFight(p0, wk, 'w1', new Date(t0).toISOString());
+  assert.equal(p1.boss.fights.length, 1); assert.equal(p1.packs, 0); assert.ok(!p1.bossBeat);
+  assert.equal(Q.recordBossFight(p1, wk, 'w1'), p1);                          // same workout: no double count
+  assert.ok(!Q.bossOfferable(p1.boss, wk, t0 + 47 * 3600e3));                 // not within 48 h
+  assert.ok(Q.bossOfferable(p1.boss, wk, t0 + 48 * 3600e3));
+  const p2 = Q.recordBossFight(p1, wk, 'w2', new Date(t0 + 50 * 3600e3).toISOString());
+  assert.equal(p2.bossBeat, wk); assert.equal(p2.packs, 1);
+  assert.equal(Q.bossNextAt(p2.boss), null); assert.ok(!Q.bossOfferable(p2.boss, wk, t0 + 200 * 3600e3));
+  assert.equal(Q.recordBossFight(p2, wk, 'w3'), p2);                          // already beaten
+}
+console.log('boss checks passed');

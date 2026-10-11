@@ -497,7 +497,9 @@ export default function WorkoutPage({ onNavigate }) {
   const detectChanges = useCallback(() => {
     if (!activeWorkout?.originalExercises) return null;
     const originals = activeWorkout.originalExercises;
-    const current = activeWorkout.exercises;
+    // Quest extras aren't program changes: the weekly boss fight and Ambush bonus sets.
+    const current = activeWorkout.exercises.filter((e) => !e.boss)
+      .map((e) => ({ ...e, sets: (e.sets || []).filter((x) => !(x.qe?.k === 'ambush' && x.qe.st === 'accepted')) }));
     const changes = [];
     if (current.length !== originals.length) changes.push(current.length > originals.length ? 'Added exercises' : 'Removed exercises');
     const origNames = originals.map((e) => e.name);

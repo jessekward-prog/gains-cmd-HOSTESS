@@ -23,7 +23,9 @@ import useQuest, { readTint, readScanlines, readScrolls } from '../hooks/useQues
 import {
   monsterOf, questSession, blockXp, addXp, unlocks, xpMult, setDamage, isCrit, topRep, loadOf, LANDS,
   EVENTS, EVENT_LINES, VICTORY_LINES, REST_LINES, planEvents, eventLoad, eventDone, seeded, fillLine, weekKey,
+  recordBossFight, BOSS_GROUPS, BOSS_GROUP_SETS,
 } from '../lib/quest';
+import useWeeklyBoss from '../hooks/useWeeklyBoss';
 import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
@@ -186,6 +188,29 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
           <button onClick={onSkip} className="relative h-[34px] px-3 rounded-[10px] bg-accent font-bold text-xs" style={{ color: 'var(--color-on-accent)' }}>Sprint</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// The weekly boss finale, offered when a workout's done and a fight is due.
+function BossAsk({ boss, onFight, onSkip }) {
+  const n = (boss.fights?.length || 0) + 1;
+  return (
+    <div className="flex-shrink-0 rounded-[28px] p-5 fx-in" style={{ background: 'radial-gradient(ellipse at 20% 0%, rgba(251,191,36,.16), var(--color-bg-1) 65%)', boxShadow: 'inset 0 0 0 1.5px #fbbf24' }}>
+      <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em', color: '#fbbf24' }}>WEEKLY BOSS APPEARS</div>
+      <div className="mt-2" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{boss.name}</div>
+      {boss.cry && <div className="mt-1.5 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>“{boss.cry}”</div>}
+      <div className="mt-4 p-3.5 rounded-[18px] bg-bg-2">
+        <div className="g-label">FIGHT {n} OF {BOSS_GROUPS}</div>
+        <div className="mt-1 text-[16px] font-extrabold">{BOSS_GROUP_SETS} sets of {boss.exercise}</div>
+        <div className="mt-1 text-text-secondary" style={{ font: `400 11px/1.5 ${MONO}` }}>
+          A bonus round at a weight that feels good today. {n === BOSS_GROUPS ? 'Beat it for a card pack.' : 'The next fight opens in 48 hours.'}
+        </div>
+      </div>
+      <div className="flex gap-2 mt-4">
+        <button onClick={onSkip} className="flex-1 h-[56px] rounded-[18px] bg-bg-2 text-text-primary font-bold text-[14px]">Not today</button>
+        <button onClick={onFight} className="flex-[2] h-[56px] rounded-[18px] font-extrabold text-[16px]" style={{ background: '#fbbf24', color: '#050505' }}>Fight</button>
+      </div>
     </div>
   );
 }
@@ -457,6 +482,43 @@ export default function FocusWorkout({
   const mult = xpMult(prof, prof.lvl);
   const qKey = workout.startTime;
 
+  // ── Weekly boss finale (normal and quest workouts) ──────────────
+  // When everything's done and a fight is due, offer it before finishing.
+  const { boss: wBoss, offerable: bossDue, wk: bossWk } = useWeeklyBoss();
+  const [bossAsk, setBossAsk] = useState(false);
+  const canBoss = !!wBoss && bossDue && !workout.bossFight;
+  const canBossRef = useRef(canBoss);
+  canBossRef.current = canBoss;
+  const fightBoss = () => {
+    const name = wBoss.exercise;
+    let last = null; // prefill from your last time on it
+    for (const w of history) {
+      let exs = w.exercises; if (typeof exs === 'string') { try { exs = JSON.parse(exs); } catch { exs = []; } }
+      const e = (exs || []).find((x) => x?.name === name);
+      if (e) { last = e; break; }
+    }
+    const lastSets = (last?.sets || []).filter((x) => x.type !== 'drop');
+    const sets = Array.from({ length: BOSS_GROUP_SETS }, (_, i) => ({ reps: '', weight: String(num(lastSets[i]?.weight ?? lastSets[0]?.weight) || ''), completed: false }));
+    updateWorkout((prev) => (prev ? {
+      ...prev,
+      exercises: [...prev.exercises, { name, targetSets: BOSS_GROUP_SETS, targetReps: '8-12', repRange: '8-12', restSeconds: 90, sets, notes: [], boss: true }],
+      bossFight: { key: qKey, done: false },
+    } : prev));
+    setBossAsk(false);
+    openBlock(blocks.length);
+  };
+  const skipBoss = () => { setBossAsk(false); if (quest) clearRef.current?.(); else onFinish(); };
+  // The boss block done → the fight counts (once per workout); the second one beats it.
+  const bossIdx = exercises.findIndex((e) => e.boss);
+  const bossBlockDone = bossIdx >= 0 && exercises[bossIdx].sets.every((x) => x.completed);
+  useEffect(() => {
+    if (!bossBlockDone || !workout.bossFight || workout.bossFight.done) return;
+    const beatNow = (wBoss?.fights?.length || 0) + 1 >= BOSS_GROUPS;
+    updProf((p) => recordBossFight(p, bossWk, workout.bossFight.key)).catch(() => {});
+    updateWorkout((prev) => (prev ? { ...prev, bossFight: { ...prev.bossFight, done: true } } : prev));
+    if (beatNow) setToast({ text: `Weekly boss defeated · +1 card pack`, at: Date.now() });
+  }, [bossBlockDone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Random events: planned once per quest and stored on the workout, so a reload
   // (or a bonus set changing which set is "last") can't move them.
   // localStorage 'gains-cmd-quest-force' = an event key forces one (testing).
@@ -518,7 +580,7 @@ export default function FocusWorkout({
     // The last monster goes straight to the loot (which shows the XP) once it falls.
     const t = setTimeout(() => {
       winRef.current = null;
-      if (nx < 0) { timer.stop(); clearRef.current?.(); } else openBlock(nx);
+      if (nx < 0) { timer.stop(); if (canBossRef.current) setBossAsk(true); else clearRef.current?.(); } else openBlock(nx);
     }, hitAt - Date.now() + (nx < 0 ? 1400 : 3800));
     winRef.current = { t, nx };
     return () => clearTimeout(t);
@@ -528,7 +590,7 @@ export default function FocusWorkout({
     const w = winRef.current;
     if (!w) return;
     clearTimeout(w.t); winRef.current = null; setQWin(null);
-    if (w.nx < 0) { timer.stop(); clearRef.current?.(); } else { timer.stop(); openBlock(w.nx); }
+    if (w.nx < 0) { timer.stop(); if (canBossRef.current) setBossAsk(true); else clearRef.current?.(); } else { timer.stop(); openBlock(w.nx); }
   };
 
   // Re-render at each phase boundary; the scene animates itself in between.
@@ -611,7 +673,7 @@ export default function FocusWorkout({
       if (quest) return; // the victory effect below takes it from here
       const after = exercises.map((e, i) => (i === xi ? { ...e, sets: e.sets.map((ss, j) => (j === si ? { ...ss, completed: true } : ss)) } : e));
       const nx = nextOpenBlock(after, blocks, ci);
-      setTimeout(() => { if (nx < 0) onFinish(); else setHandoff({ from: ci, to: nx }); }, 600);
+      setTimeout(() => { if (nx < 0) { if (canBossRef.current) setBossAsk(true); else onFinish(); } else setHandoff({ from: ci, to: nx }); }, 600);
       return;
     }
     if (block.kind === 'superset' && roundOfSet(x, si) >= 0) {
@@ -741,7 +803,9 @@ export default function FocusWorkout({
 
   // Quest phase: victory → hit → setting off → rest/walk → encounter → battle.
   let qPhase = 'battle', qT = 0, qStart = 0, qMsg = '';
-  const mon = quest ? monsterOf(exercises, block, ci) : null;
+  const mon0 = quest ? monsterOf(exercises, block, ci) : null;
+  const isBossBlock = !!ex.boss;
+  const mon = mon0 && isBossBlock ? { ...mon0, name: (wBoss?.name || 'The Boss').toUpperCase(), species: 'WEEKLY BOSS' } : mon0;
   if (quest) {
     const now = Date.now(), since = (t) => (now - t) / 1000;
     if (qWin && since(qWin.at) >= 0 && since(qWin.at) < 3.8) { qPhase = 'victory'; qStart = qWin.at; }
@@ -770,6 +834,7 @@ export default function FocusWorkout({
   const qClear = quest && allClear && qPhase !== 'victory';
   if (qClear) { qPhase = 'walk'; qMsg = 'Quest clear! The last monster dropped a loot chest.'; }
   // The encounter only plays on the stage — the controls are usable straight away.
+  if (quest && bossAsk) { qPhase = 'walk'; qMsg = wBoss?.cry ? `${wBoss.name}: “${wBoss.cry}”` : `A shadow falls across the path. ${wBoss?.name || 'The boss'} appears!`; }
   const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory');
   const qReps = fs ? shownReps(ex, fs, st) : '';
   const qPreview = fs && `${fmtW(fs.weight)} kg × ${qReps} reps = ${(kind === 'bfr' ? 1 : Math.round(loadOf(ex.name, fs.weight) * num(qReps))).toLocaleString()} damage${num(qReps) > topRep(ex) ? ' · beat target for a crit' : ''}`;
@@ -805,9 +870,11 @@ export default function FocusWorkout({
           <QuestStage phase={qPhase} start={qStart} monster={mon} hit={qHit} area={Math.min(ci, LANDS.length - 1)}
             heroName={prof.hero} petKey={prof.pet} lvl={qShown.lvl} xp={qShown.xp}
             tint={readTint()} scanlines={readScanlines()} msg={qMsg} goFlash={goFlash}
-            aura={evKey && (qPhase === 'battle' || qPhase === 'encounter') ? EVENTS[evKey].color : null} />
+            aura={(qPhase === 'battle' || qPhase === 'encounter') ? (isBossBlock ? '#fbbf24' : evKey ? EVENTS[evKey].color : null) : null} />
         )}
-        {qTravel ? (
+        {bossAsk && wBoss ? (
+          <BossAsk boss={wBoss} onFight={fightBoss} onSkip={skipBoss} />
+        ) : qTravel ? (
           <QuestTravel exercises={exercises} blocks={blocks}
             defeated={qPhase === 'victory' || qClear ? ci : ci > 0 && blockDone(exercises, blocks[ci - 1]) ? ci - 1 : -1}
             next={qClear ? -1 : qPhase === 'victory' ? nextOpenBlock(exercises, blocks, ci) : ci}

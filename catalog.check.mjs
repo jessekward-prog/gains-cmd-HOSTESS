@@ -1,7 +1,7 @@
 // Self-check for exercise-library matching + muscle heat — `node catalog.check.mjs`.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { norm, indexCatalog, resolve, candidates, regionsOf, muscleSets, sessionMuscles } from './src__lib__catalog.js';
+import { norm, indexCatalog, resolve, candidates, regionsOf, muscleSets, sessionMuscles, topExerciseFor } from './src__lib__catalog.js';
 
 const cat = indexCatalog(JSON.parse(readFileSync('src__lib__catalog.json', 'utf8')));
 assert.equal(cat.list.length, 1324);
@@ -53,5 +53,12 @@ assert.deepEqual(one.unmatched, ['Mystery Move']);
 {
   const morning = Date.parse('2026-10-09T08:00:00');
   assert.equal(muscleSets([{ date: '2026-10-09', exercises: [{ name: 'Barbell Bench Press', sets: sets(2, 2) }] }], {}, cat, 7, morning).chest, 2);
+}
+// Boss exercise: the most-trained one whose MAIN target is that muscle.
+{
+  const h = [{ exercises: [{ name: 'Barbell Bench Press', sets: sets(3, 3) }, { name: 'Dumbbell Fly', sets: sets(5, 5) }, { name: 'Triceps Dip', sets: sets(9, 9) }] }];
+  assert.equal(topExerciseFor(h, {}, cat, 'chest'), 'Dumbbell Fly');
+  assert.equal(topExerciseFor(h, {}, cat, 'hamstring'), null);
+  assert.equal(topExerciseFor(h, {}, cat, 'chest', new Set(['Barbell Bench Press'])), 'Barbell Bench Press');
 }
 console.log('catalog.check: ok');
