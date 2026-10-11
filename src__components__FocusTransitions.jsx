@@ -46,7 +46,7 @@ export function Countdown({ workout, onDone }) {
         <div className="relative w-[260px] h-[260px] flex items-center justify-center">
           <svg key={`r${n}`} width="260" height="260" viewBox="0 0 260 260" className="absolute inset-0 -rotate-90">
             <circle cx="130" cy="130" r="120" fill="none" stroke="var(--color-bg-3)" strokeWidth="8" />
-            <circle cx="130" cy="130" r="120" fill="none" stroke="var(--color-accent)" strokeWidth="8" strokeLinecap="round" strokeDasharray="754"
+            <circle cx="130" cy="130" r="120" fill="none" stroke="var(--g-timer)" strokeWidth="8" strokeLinecap="round" strokeDasharray="754"
               style={{ animation: 'fx-ring .85s linear both' }} />
           </svg>
           {/* paddingRight hands back the trailing negative letter-spacing, which

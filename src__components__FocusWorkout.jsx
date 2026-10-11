@@ -132,7 +132,7 @@ function RestRing({ timer, next, onSkip }) {
           </mask>
           <g mask="url(#rest-ticks)">
             <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-bg-3)" strokeWidth="10" />
-            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-accent)" strokeWidth="10"
+            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--g-timer)" strokeWidth="10"
               strokeDasharray="565.5" strokeDashoffset={565.5 * (1 - left)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
           </g>
         </svg>
@@ -166,7 +166,7 @@ function QuestRest({ timer, next, onSkip, scroll }) {
         <span className="g-label" style={{ letterSpacing: '.16em' }}>REST</span>
         <span className="g-tab" style={{ fontSize: 52, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05 }}>{mmss(timer.remaining)}</span>
         <div className="w-full h-1 rounded-[2px] bg-bg-3 mt-3.5 overflow-hidden">
-          <div className="h-full bg-accent" style={{ width: `${done * 100}%`, transition: 'width 1s linear' }} />
+          <div className="h-full" style={{ background: 'var(--g-timer)', width: `${done * 100}%`, transition: 'width 1s linear' }} />
         </div>
         {next && (
           <>
@@ -227,7 +227,7 @@ function QuestTravel({ exercises, blocks, defeated, next, walking, intro, timer,
       )}
       {walking && !onClaim && (
         <div className="mt-[18px] relative overflow-hidden flex items-center gap-2.5 py-2.5 pr-2.5 pl-3.5 rounded-[14px] bg-bg-2">
-          <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-acc-soft)', width: `${total ? (1 - left / total) * 100 : 0}%`, transition: 'width 1s linear' }} />
+          <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-timer-soft)', width: `${total ? (1 - left / total) * 100 : 0}%`, transition: 'width 1s linear' }} />
           <span className="relative g-label">{intro ? intro.label : 'REST · WALKING'}</span>
           <span className="relative flex-1 g-tab" style={{ font: `500 20px ${MONO}` }}>{mmss(left)}</span>
           {!intro && <button onClick={() => timer.extend(15)} className="relative h-[34px] px-2.5 rounded-[10px] bg-bg-3 text-text-primary" style={{ font: `500 11px ${MONO}` }}>+15s</button>}
@@ -265,7 +265,7 @@ function BossAsk({ boss, onFight, onSkip }) {
 function RestStrip({ timer, onSkip }) {
   return (
     <div className="mt-3 relative overflow-hidden flex items-center gap-2.5 py-2.5 pr-2.5 pl-3.5 rounded-[14px] bg-bg-2 fx-in">
-      <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-acc-soft)', width: `${timer.progress * 100}%`, transition: 'width 1s linear' }} />
+      <div className="absolute left-0 top-0 bottom-0" style={{ background: 'var(--g-timer-soft)', width: `${timer.progress * 100}%`, transition: 'width 1s linear' }} />
       <span className="relative g-label">REST</span>
       <span className="relative flex-1 g-tab" style={{ font: `500 20px ${MONO}` }}>{mmss(timer.remaining)}</span>
       <button onClick={() => timer.extend(15)} className="relative h-[34px] px-2.5 rounded-[10px] bg-bg-3 text-text-primary" style={{ font: `500 11px ${MONO}` }}>+15s</button>
