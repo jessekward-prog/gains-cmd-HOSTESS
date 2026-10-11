@@ -782,6 +782,7 @@ html.theme-playstation {
   --g-bfr: #4f8fe0;  /* ✕ BFR */
   --g-int: #3fb37f;  /* △ interval */
   --g-timer: #f59e0b; /* countdowns stay amber against the white accent */
+  --g-timer-soft: rgba(245, 158, 11, 0.22);
 }
 /* The accent is white here, so the older bg-accent + text-white buttons need dark text. */
 html.theme-playstation .bg-accent.text-white { color: #000; }
@@ -978,7 +979,7 @@ html.text-size-large {
   --g-acc-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);
   /* Countdowns (rest, walk, count-in): the accent, unless a theme gives timers their own colour. */
   --g-timer: var(--color-accent);
-  --g-timer-soft: color-mix(in srgb, var(--g-timer) 18%, transparent);
+  --g-timer-soft: color-mix(in srgb, var(--g-timer) 14%, transparent);
   --g-sheet-shadow: 0 20px 50px rgba(0,0,0,.35);
 }
 html.mode-light { --g-pr-ink: #8a5a00; --g-near: #a16207; }
