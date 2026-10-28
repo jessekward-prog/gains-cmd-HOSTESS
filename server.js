@@ -180,6 +180,7 @@ app.get('/sw.js', (req, res) => {
 });
 app.use('/manifest.json', express.static(path.join(__dirname, 'manifest.json')));
 app.use('/icons', express.static(path.join(__dirname, 'icons')));
+app.use('/favicon.ico', express.static(path.join(__dirname, 'icons/favicon.ico')));
 app.use('/quest', express.static(path.join(__dirname, 'quest'), { maxAge: '30d' }));
 app.set('trust proxy', 1); // behind a reverse proxy (Hostess/Tailscale serve)
 // Built in start() once the secret is known; requests only arrive after listen().
