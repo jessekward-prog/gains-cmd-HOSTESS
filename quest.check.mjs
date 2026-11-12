@@ -176,3 +176,103 @@ console.log('event checks passed');
   assert.equal(Q.recordBossFight(p2, wk, 'w3'), p2);                          // already beaten
 }
 console.log('boss checks passed');
+
+// Combo XP: ×2 → 4, capped at ×5 → 10 per set; nothing below ×2.
+{
+  assert.equal(Q.comboXp(undefined), 0);
+  assert.equal(Q.comboXp(1), 0);
+  assert.equal(Q.comboXp(2), 4);
+  assert.equal(Q.comboXp(9), 10);
+  console.log('combo checks passed');
+}
+
+// The GO card's image flash: every frame it names is on disk, and the card's
+// window is still derived from the run + hold rather than typed out again.
+{
+  const { readFileSync, existsSync } = await import('node:fs');
+  const src = readFileSync('src__components__FocusWorkout.jsx', 'utf8');
+  const seq = [...src.matchAll(/\['(\d\d-[a-z]+)', '[\d% ]+'\]/g)].map((m) => m[1]);
+  assert.equal(seq.length, 10);
+  for (const n of seq) assert.ok(existsSync(`quest/goflash/${n}.webp`), `missing frame ${n}`);
+  // A literal here instead of GO_MS is how the frames and the card's lifetime
+  // drift apart; GO_STEP and the window must both come off GO_RUN/GO_HOLD.
+  assert.match(src, /goAt < GO_MS &&/);
+  assert.match(src, /const GO_STEP = GO_RUN \/ GO_SEQ\.length;/);
+  console.log('go-flash checks passed');
+}
+
+// Quest skins: the generated CSS in index.css still matches the token module.
+// `node quest.check.mjs --write-skin-css` rewrites it. The variable blocks are
+// what carries a skin into the app chrome, so a skin added without them looks
+// like Phosphor everywhere but the stage — silently.
+{
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  copyFileSync(resolve('src__lib__questSkins.js'), join(dir, 'questSkins.js'));
+  const K = await import(join(dir, 'questSkins.js'));
+  const { skinCss } = await import(resolve('questSkinsCss.mjs'));
+  const want = skinCss(K);
+  const path = 'src__index.css';
+  const css = readFileSync(path, 'utf8');
+  const re = /\/\* QUEST-SKINS:BEGIN \*\/\n[\s\S]*?\/\* QUEST-SKINS:END \*\//;
+  assert.ok(re.test(css), 'index.css is missing the QUEST-SKINS markers');
+  const bodyOf = (t) => re.exec(t)[0].split('\n').slice(1, -1).join('\n');
+  if (process.argv.includes('--write-skin-css')) {
+    writeFileSync(path, css.replace(re, `/* QUEST-SKINS:BEGIN */\n${want}\n/* QUEST-SKINS:END */`));
+    console.log('skin css written');
+  } else {
+    assert.equal(bodyOf(css), want, 'index.css skin CSS is stale — run `node quest.check.mjs --write-skin-css`');
+  }
+  // Every skin the picker can reach has to be namespaced, or it collides with
+  // an app theme id in ThemeContext.
+  for (const s of K.SKINS) assert.ok(K.isSkin(s.id), `skin id ${s.id} is not namespaced`);
+  assert.equal(new Set(K.SKINS.map((s) => s.id)).size, K.SKINS.length, 'duplicate skin id');
+  // BASE is what the stage draws with no skin picked, so it has to stay equal
+  // to the values QuestStage used to carry inline.
+  assert.equal(K.BASE.st.bg, '#0e0e0e');
+  assert.equal(K.BASE.st.sky, '#050505');
+  assert.equal(K.BASE.st.ground, '#070604');
+  assert.equal(K.BASE.st.rad, 28);
+  assert.equal(K.BASE.st.scan, 0.28);
+  assert.equal(K.BASE.hp, 'classic');
+  assert.deepEqual(K.BASE.pre, ['>', '#ff2222', 0.7]);
+  const f = K.colourFns({ ...K.BASE, tint: '#ff9a3c' });
+  assert.deepEqual(f.spr(0.5).map(Math.round), [181, 109, 42]); // the old tint ramp, unchanged
+  console.log('quest skin checks passed');
+}
+
+// ── Rep tracker opt-in ────────────────────────────────────────────
+// The gate that silently recorded nothing on 2026-11-05: a quest ran with the
+// sensor paired, and because the prompt had never been answered in that page
+// life nothing was armed. A linked sensor now records.
+{
+  const arm = (o) => Q.repArm({ stored: null, questKey: '100', alpha: false, answered: false, linked: false, ...o });
+  // Never asked: a linked sensor records, an unlinked one has nothing to record.
+  assert.deepEqual(arm({ linked: true }), { arm: true });
+  assert.deepEqual(arm({}), {});
+  // Armed earlier, then the page reloaded — the answer outlives the BLE link.
+  assert.deepEqual(arm({ stored: '100' }), { arm: true });
+  assert.deepEqual(arm({ stored: '100', linked: true }), { arm: true });
+  // Declined at the prompt, or paused: auto-arm must never overturn either.
+  assert.deepEqual(arm({ stored: '!100', linked: true }), {});
+  assert.deepEqual(arm({ stored: '~100', linked: true }), {});
+  // Recording on: remember it against the quest.
+  assert.deepEqual(arm({ alpha: true }), { store: '100' });
+  // Switching recording off in a quest that had it keeps the tracker in play;
+  // saying no at the prompt (nothing stored for this quest) takes it out.
+  assert.deepEqual(arm({ answered: true, stored: '100' }), { store: '~100' });
+  assert.deepEqual(arm({ answered: true }), { store: '!100' });
+  assert.deepEqual(arm({ answered: true, stored: '!99' }), { store: '!100' });
+  // Another quest's answer says nothing about this one.
+  assert.deepEqual(arm({ stored: '99', linked: true }), { arm: true });
+  assert.deepEqual(arm({ stored: '~99', linked: true }), { arm: true });
+  assert.deepEqual(arm({ stored: '!99' }), {});
+  // In play — what keeps the control on screen — covers armed and paused, and
+  // outlives a reload. A decline does not, so the quest keeps its BATTLE tag.
+  assert.equal(Q.repAnswered('100', '100'), true);
+  assert.equal(Q.repAnswered('~100', '100'), true);
+  assert.equal(Q.repAnswered('!100', '100'), false);
+  assert.equal(Q.repAnswered('~99', '100'), false);
+  assert.equal(Q.repAnswered(null, '100'), false);
+  assert.equal(Q.repAnswered('100', null), false);
+  console.log('rep tracker opt-in checks passed');
+}

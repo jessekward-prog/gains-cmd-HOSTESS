@@ -1,9 +1,9 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const passport = require('passport');
-const cors = require('cors');
 const bcrypt = require('bcrypt');
 const db = require('./db');
 
@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3001;
 // app_settings without a restart -- same pattern as macro-cmd's Local AI panel.
 const ENV_LM_URL = (process.env.LM_STUDIO_URL || 'http://localhost:1235').replace(/\/+$/, '');
 const ENV_LM_KEY = process.env.LM_STUDIO_API_KEY || '';
-const ENV_LM_MODEL = process.env.LM_STUDIO_MODEL || ''; // unset = whatever the endpoint has loaded
+const ENV_LM_MODEL = process.env.LM_STUDIO_MODEL || 'google/gemma-4-e4b';
 const SYNC_SECRET = process.env.SYNC_SECRET || '';
 let LM_URL = ENV_LM_URL;
 let LM_KEY = ENV_LM_KEY;
@@ -38,20 +38,29 @@ async function loadLmSettings() {
   LM_MODEL = (await getSetting('lm_model')) || ENV_LM_MODEL;
 }
 // The AI link: Hostess (sync secret) or the unlocked owner may read or change it.
+function hasSyncSecret(req) {
+  const got = req.headers['x-sync-secret'];
+  if (!SYNC_SECRET || typeof got !== 'string') return false;
+  const a = Buffer.from(got), b = Buffer.from(SYNC_SECRET);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 function adminOrSync(req, res, next) {
-  if (SYNC_SECRET && req.headers['x-sync-secret'] === SYNC_SECRET) return next();
+  if (hasSyncSecret(req)) return next();
   if (req.isAuthenticated()) return next();
   res.status(403).json({ success: false, error: 'Admin only' });
 }
 
-// ponytail: in-memory, per process — resets on restart and the map only grows
-// with distinct IPs, which is fine at family scale. Swap for a shared store if
-// this ever runs as more than one instance.
+// ponytail: in-memory, per process — resets on restart, fine at family scale.
 const attempts = new Map();
 function rateLimit(max, windowMs) {
   return (req, res, next) => {
     const key = req.path + '|' + req.ip;
     const now = Date.now();
+    if (attempts.size > 500) {
+      for (const [k, ts] of attempts) {
+        if (!ts.some(t => now - t < windowMs)) attempts.delete(k);
+      }
+    }
     const recent = (attempts.get(key) || []).filter(t => now - t < windowMs);
     if (recent.length >= max) {
       return res.status(429).json({ success: false, error: 'Too many attempts — try again in a few minutes' });
@@ -75,7 +84,6 @@ async function sessionSecret() {
   return secret;
 }
 
-
 // LM Studio (OpenAI-compatible) — replaces Anthropic. `messages` items may use
 // text content OR OpenAI parts (array of {type:'text'|'image_url'}) — see cardio-stats.
 async function llmOnce(openaiMessages, maxTokens, temperature, timeoutMs, responseFormat) {
@@ -88,7 +96,7 @@ async function llmOnce(openaiMessages, maxTokens, temperature, timeoutMs, respon
         'Content-Type': 'application/json',
         ...(LM_KEY ? { Authorization: 'Bearer ' + LM_KEY } : {})
       },
-      body: JSON.stringify({ ...(LM_MODEL && { model: LM_MODEL }), max_tokens: maxTokens, temperature, messages: openaiMessages, ...(responseFormat && { response_format: responseFormat }) }),
+      body: JSON.stringify({ model: LM_MODEL, max_tokens: maxTokens, temperature, messages: openaiMessages, ...(responseFormat && { response_format: responseFormat }) }),
       signal: ctrl.signal
     });
     if (!r.ok) {
@@ -168,7 +176,6 @@ async function coachTone(userId) {
 
 const badRequest = (res, error) => res.status(400).json({ success: false, error });
 
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 // Serve React frontend build (must come before root static)
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -181,7 +188,7 @@ app.get('/sw.js', (req, res) => {
 app.use('/manifest.json', express.static(path.join(__dirname, 'manifest.json')));
 app.use('/icons', express.static(path.join(__dirname, 'icons')));
 app.use('/favicon.ico', express.static(path.join(__dirname, 'icons/favicon.ico')));
-app.use('/quest', express.static(path.join(__dirname, 'quest'), { maxAge: '30d' }));
+app.use('/quest', express.static(path.join(__dirname, 'quest'), { maxAge: '30d' })); // Quest Mode sprites + vault art
 app.set('trust proxy', 1); // behind a reverse proxy (Hostess/Tailscale serve)
 // Built in start() once the secret is known; requests only arrive after listen().
 let sessionMiddleware;
@@ -194,9 +201,9 @@ app.use(passport.session());
 // with APP_PIN. Unlocking signs the session in as the one owner account — the
 // oldest user, so an install that predates this keeps its data — created on
 // first unlock if the database is empty. Every /api and /auth route needs it.
-const pinDigest = (pin) => require('crypto').createHash('sha256').update(String(pin)).digest();
+const pinDigest = (pin) => crypto.createHash('sha256').update(String(pin)).digest();
 async function pinMatches(pin) {
-  if (process.env.APP_PIN) return require('crypto').timingSafeEqual(pinDigest(pin), pinDigest(process.env.APP_PIN));
+  if (process.env.APP_PIN) return crypto.timingSafeEqual(pinDigest(pin), pinDigest(process.env.APP_PIN));
   const hash = await getSetting('pin_hash');
   return !!hash && bcrypt.compare(String(pin), hash);
 }
@@ -229,7 +236,7 @@ app.post('/api/pin/unlock', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/') && !req.path.startsWith('/auth/')) return next();
   if (req.isAuthenticated()) return next();
-  if (SYNC_SECRET && req.headers['x-sync-secret'] === SYNC_SECRET) return next();
+  if (hasSyncSecret(req)) return next();
   res.status(401).json({ success: false, error: 'PIN required', pinRequired: true });
 });
 
@@ -304,7 +311,7 @@ app.put('/api/lm', adminOrSync, async (req, res) => {
 app.get('/api/settings', requireAuth, async (req, res) => {
   try {
     const settings = await db.getSettings(req.user.id);
-    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null, exerciseLinks: settings.exercise_links || {}, quest: settings.quest || null });
+    res.json({ success: true, theme: { appName: settings.app_name, icon: settings.icon, mode: settings.theme_mode, color: settings.theme_color }, aggressionSettings: settings.aggression_settings, appearance: settings.appearance || null, appearanceBeta: settings.appearance_beta || null, exerciseLinks: settings.exercise_links || {}, quest: settings.quest || null });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -322,6 +329,19 @@ app.post('/api/appearance', requireAuth, async (req, res) => {
   }
 });
 
+// Beta Mode's own appearance (it has its own themes and settings), kept apart
+// so switching between the classic app and the beta never overwrites either.
+app.post('/api/appearance-beta', requireAuth, async (req, res) => {
+  try {
+    const { appearance } = req.body || {};
+    if (!appearance || typeof appearance.values !== 'object' || !Number.isFinite(appearance.at)) return badRequest(res, 'appearance {at, values} required');
+    await db.updateAppearanceBeta(req.user.id, appearance);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Quest Mode: { profile, vault } — the client holds the whole object and saves it back.
 app.post('/api/quest', requireAuth, async (req, res) => {
   try {
@@ -331,6 +351,66 @@ app.post('/api/quest', requireAuth, async (req, res) => {
     }
     await db.updateQuest(req.user.id, quest);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Alpha rep-tracker traces. A set's motion, labelled with the reps the user
+// typed. Kept to the most recent TRACE_KEEP per user so a few months of alpha
+// testing can't quietly fill the database.
+const TRACE_KEEP = 600;
+const TRACE_MAX_CHARS = 400000; // ~2 min at 50 Hz, base64
+
+app.post('/api/rep-traces', requireAuth, async (req, res) => {
+  try {
+    const { exercise, setIndex, reps, weight, mount, hz, n, samples, setStartMs, kind, setType, guided, predicted } = req.body || {};
+    if (typeof samples !== 'string' || !samples || samples.length > TRACE_MAX_CHARS || !/^[A-Za-z0-9+/=]+$/.test(samples)) {
+      return badRequest(res, 'samples must be a base64 string under 400k chars');
+    }
+    await db.pool.query(
+      `INSERT INTO rep_traces (user_id, exercise, set_index, reps, weight, mount, hz, n, samples, set_start_ms, kind, set_type, guided, predicted)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [req.user.id, String(exercise || ''), Number(setIndex) || 0, String(reps ?? ''),
+        String(weight ?? ''), String(mount || ''), Number(hz) || 0, Number(n) || 0, samples,
+        Number.isFinite(setStartMs) ? Math.round(setStartMs) : null,
+        kind ? String(kind).slice(0, 32) : null, setType ? String(setType).slice(0, 32) : null,
+        guided === true, Number.isFinite(predicted) ? Math.round(predicted) : null]
+    );
+    await db.pool.query(
+      `DELETE FROM rep_traces WHERE user_id = $1 AND id NOT IN (
+         SELECT id FROM rep_traces WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2)`,
+      [req.user.id, TRACE_KEEP]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Metadata only — enough for the probe to say how much has been collected.
+app.get('/api/rep-traces', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await db.pool.query(
+      `SELECT id, created_at, exercise, set_index, reps, weight, hz, n, set_start_ms, kind, set_type, guided, predicted
+       FROM rep_traces WHERE user_id = $1 ORDER BY created_at DESC LIMIT 600`,
+      [req.user.id]
+    );
+    res.json({ success: true, traces: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// The whole corpus, samples included, as one download for offline tuning.
+app.get('/api/rep-traces/export', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await db.pool.query(
+      'SELECT * FROM rep_traces WHERE user_id = $1 ORDER BY created_at',
+      [req.user.id]
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="rep-traces.json"');
+    res.json({ exportedAt: new Date().toISOString(), count: rows.length, traces: rows });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -352,12 +432,12 @@ app.post('/api/quest/script', requireAuth, async (req, res) => {
     const schema = obj({
       events: obj(Object.fromEntries(keys.map((k) => [k, arr]))),
       victory: arr,
-      rest: { type: 'array', items: obj({ n: int, lines: arr }) },
+      rest: { type: 'array', items: obj({ n: int, tip: str }) },
       boss: obj({ name: str, cry: str }),
     });
     const reply = await llm({
       system: 'You write short, punchy fantasy-RPG flavour text for a gym workout game where each exercise is a monster. '
-        + 'Every line under 90 characters, no emojis, no hashtags. Never give numbers, weights or instructions: the app adds those.',
+        + 'Every line under 90 characters, no emojis, no hashtags. Never give numbers or weights: the app adds those.',
       messages: [{ role: 'user', content: [
         `Exercises (numbered): ${names.map((n, i) => `${i + 1}. ${n}`).join('; ')}`,
         keys.length ? `events: for each key give 3 different one-line narrations of it happening to the monster. Keys and meaning: ${keys.map((k) => ({
@@ -366,7 +446,8 @@ app.post('/api/quest/script', requireAuth, async (req, res) => {
           goblin: 'a treasure goblin appears', weak: 'a weak point the hero peppers with many light blows', spring: 'a healing spring appears',
           ambush: 'a small weak foe ambushes', blessing: 'the gods bless the hero' }[k])).join('; ')}` : 'events: return an empty object.',
         'victory: 6 one-line victory templates. Use {name} for the monster and {kg} for the kilograms moved; you may use {sets} for sets. No other braces.',
-        'rest: for each numbered exercise, n = its number and 2 lines: one practical form cue for that exercise from a wise mentor, one taunt from the monster.',
+        'rest: for each numbered exercise, n = its number and tip = one real, specific form tip for that exact exercise, written as a short lowercase phrase starting with an -ing verb, 3 to 8 words, no full stop. '
+          + 'It will be shown as "Even <tip> won\'t help you now." Examples: "keeping your elbows tucked", "driving through your heels", "pausing at the top of the squeeze". Plain gym language, no fantasy words.',
         boss ? `boss: this week's boss embodies the neglected muscle group "${boss}". Give it a two-to-four word name and a one-line battle cry.` : 'boss: name "" and cry "".',
       ].join('\n') }],
       maxTokens: 1500, temperature: 0.9, timeoutMs: 90000, schema,
@@ -376,9 +457,14 @@ app.post('/api/quest/script', requireAuth, async (req, res) => {
     for (const k of keys) out.events[k] = (raw.events?.[k] || []).map(cleanLine).filter((t) => okLine(t)).slice(0, 3);
     out.victory = (raw.victory || []).map(cleanLine)
       .filter((t) => okLine(t) && t.includes('{name}') && !/\{(?!name\}|kg\}|sets\})/.test(t)).slice(0, 6);
+    // The monster's rest taunt wraps a real form tip for the exercise. Only the
+    // tip comes from the model, so a tip that isn't "doing X" is dropped.
     for (const r of raw.rest || []) {
       const name = names[(r.n | 0) - 1];
-      if (name) out.rest[name] = (r.lines || []).map(cleanLine).filter((t) => okLine(t, 120)).slice(0, 2);
+      const tip = cleanLine(r.tip).replace(/[.!?,;:]+$/, '').replace(/^even\s+/i, '').replace(/\s+now$/i, '');
+      if (!name || !/^[a-z]+ing\b/i.test(tip) || tip.length > 60 || tip.split(' ').length < 2) continue;
+      const t = tip[0].toLowerCase() + tip.slice(1);
+      out.rest[name] = [`Even ${t} won't help you now.`, `Even ${t} won't save you from me.`];
     }
     if (boss && okLine(cleanLine(raw.boss?.name), 40)) out.boss = { name: cleanLine(raw.boss.name), cry: okLine(cleanLine(raw.boss?.cry)) ? cleanLine(raw.boss.cry) : '' };
     res.json({ success: true, script: out });
@@ -764,7 +850,7 @@ app.post('/api/generate-recommendations', requireAuth, async (req, res) => {
     workoutData.forEach(w => {
       if (!w.exercises) return;
       w.exercises.forEach(ex => {
-        if (!ex || !ex.name) return;
+        if (!ex || !ex.name || ex.boss) return; // a Quest weekly-boss set to failure isn't a training session
         if (exerciseCurrentWeight[ex.name] !== undefined) return; // already found most recent
         // Use the first non-drop set's weight as the working weight for progression tracking
         const workingSet = (ex.sets || []).find(s => s && s.type !== 'drop') || (ex.sets && ex.sets[0]);
@@ -810,7 +896,7 @@ app.post('/api/generate-recommendations', requireAuth, async (req, res) => {
       if (!workout.exercises) return;
       
       workout.exercises.forEach(ex => {
-        if (!ex || !ex.name) return;
+        if (!ex || !ex.name || ex.boss) return;
         
         const currentWeight = exerciseCurrentWeight[ex.name];
         if (currentWeight === undefined) return;
@@ -1125,7 +1211,8 @@ app.post('/api/extract-cardio-stats', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'No image data provided' });
     }
 
-    const dataUrl = 'data:' + (mediaType || 'image/png') + ';base64,' + imageData;
+    const safeMime = /^image\/(png|jpeg|jpg|webp|gif)$/i.test(mediaType || '') ? mediaType : 'image/png';
+    const dataUrl = 'data:' + safeMime + ';base64,' + imageData;
     const raw = await llm({
       messages: [{
         role: 'user',
@@ -1240,16 +1327,6 @@ app.post('/api/exercise-notes', requireAuth, async (req, res) => {
 app.get('/api/recovery-notes', requireAuth, async (req, res) => {
   try {
     res.json({ success: true, notes: await db.getActiveRecoveryNotes(req.user.id) });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get recovery status for an exercise
-app.get('/api/recovery-status/:exerciseName', requireAuth, async (req, res) => {
-  try {
-    const status = await db.getRecoveryStatus(req.user.id, decodeURIComponent(req.params.exerciseName));
-    res.json({ success: true, status });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1528,6 +1605,7 @@ app.post('/api/remix-workout', requireAuth, async (req, res) => {
       const special = [];
       if (ex.hasDrops) special.push(`drop sets (${ex.numDrops || 1} per set)`);
       if (ex.isBFR) special.push(`BFR ${ex.bfrSeconds || 45}s`);
+      if (ex.isTimed) special.push(`timed sets, ${ex.timedSec || 60}s each — no reps`);
       if (ex.supersetWith) special.push(`superset with ${ex.supersetWith}`);
       return `${i + 1}. ${ex.name} — ${ex.sets} sets × ${ex.repRange} reps, ${ex.restSeconds}s rest${special.length ? ' [' + special.join(', ') + ']' : ''}`;
     }).join('\n');
@@ -1643,6 +1721,8 @@ Return the remixed workout JSON now.`;
       if (ex.isInterval && orig) {
         return { ...ex, sets: orig.sets, repRange: orig.repRange, intervalWork: orig.intervalWork, intervalRest: orig.intervalRest, intervalTotal: orig.intervalTotal };
       }
+      // Timed sets aren't in the response schema, so carry them over from the original.
+      if (orig?.isTimed) return { ...ex, isTimed: true, timedSec: orig.timedSec || 60 };
       return ex;
     });
 
@@ -1669,7 +1749,7 @@ app.post('/api/workouts/share', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/share/:code', async (req, res) => {
+app.get('/api/share/:code', requireAuth, rateLimit(20, 15 * 60 * 1000), async (req, res) => {
   try {
     const share = await db.getWorkoutShare(req.params.code);
     if (!share) return res.status(404).json({ success: false, error: 'Share code not found or expired' });

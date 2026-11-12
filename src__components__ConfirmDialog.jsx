@@ -4,9 +4,12 @@ import Button from './Button';
 import { overlayVariants, modalVariants } from '../lib/variants';
 import useBackHandler from '../hooks/useBackHandler';
 
-export default function ConfirmDialog({ open, title, message, onConfirm, onCancel, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false }) {
+export default function ConfirmDialog({ open, title, message, onConfirm, onCancel, onDismiss, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false }) {
   // Android back gesture dismisses (treats as Cancel — never auto-confirms).
-  useBackHandler(open, onCancel);
+  // Where the cancel button *does* something (rather than just backing out),
+  // onDismiss separates "no thanks" from "I didn't mean to open this".
+  const dismiss = onDismiss || onCancel;
+  useBackHandler(open, dismiss);
 
   return createPortal(
     <AnimatePresence>
@@ -17,7 +20,7 @@ export default function ConfirmDialog({ open, title, message, onConfirm, onCance
           animate="animate"
           exit="exit"
           className="fixed inset-0 z-[150] flex items-center justify-center p-4"
-          onClick={onCancel}
+          onClick={dismiss}
         >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <motion.div

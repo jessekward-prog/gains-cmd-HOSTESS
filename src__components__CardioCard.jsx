@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { bloom } from '../../lib/bloom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { staggerItem } from '../lib/variants';
 import * as api from '../lib/api';
 import { useToast } from '../context/ToastContext';
 import { PickerWheel } from './RestPickerModal';
 import Modal from './Modal';
+import SubstituteModal from './SubstituteModal';
 import TypewriterName from './TypewriterName';
 import { moodState } from '../lib/mood';
 
@@ -47,7 +49,7 @@ function formatMMSS(totalSec) {
 
 // `focus` (Focus layout only): { label } — renders the Focus-style card; Classic
 // keeps the original look. All timer/photo logic below is shared.
-export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpdateExercise, onTimerActiveChange, focus }) {
+export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpdateExercise, onSubstitute, onTimerActiveChange, focus }) {
   const { showToast } = useToast();
   const [expanded, setExpanded] = useState(true);
   const [running, setRunning] = useState(false);
@@ -55,6 +57,7 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
   const [countInRemaining, setCountInRemaining] = useState(0);
   const [extracting, setExtracting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSubstitute, setShowSubstitute] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(exercise.name);
 
@@ -97,6 +100,10 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
   const countInSec = exercise.countInSec || 0;
   const isActive = running || countingIn;
   const intervals = exercise.intervals || null;
+  // Focus/Quest only: the timer hitting its target no longer marks the block done —
+  // it waits on this card for a machine-display photo (or an explicit Mark done).
+  const requirePhoto = !!focus;
+  const reachedTarget = hasTarget && elapsedSec >= targetSec && !completed;
 
   const isPushPhase = (() => {
     if (!running || !intervals || !hasTarget) return false;
@@ -107,7 +114,11 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     return cycleLen > 0 && (elapsedSec % cycleLen) >= restSec;
   })();
 
-  useEffect(() => { onTimerActiveChange?.(exerciseIndex, isActive); }, [isActive, exerciseIndex, onTimerActiveChange]);
+  // Also says whether an interval session is in its push or its rest (Quest's gauntlet follows it).
+  const phase = isActive && intervals && hasTarget ? (isPushPhase ? 'push' : 'rest') : null;
+  // …and how far through the target it is (0–1, null with no target), for the quest chase.
+  const prog = hasTarget ? Math.round(progress * 100) / 100 : null;
+  useEffect(() => { onTimerActiveChange?.(exerciseIndex, isActive, phase, prog); }, [isActive, phase, prog, exerciseIndex, onTimerActiveChange]);
 
   // ── Wake lock ──────────────────────────────────────────────────────────────
   const acquireWakeLock = useCallback(async () => {
@@ -169,14 +180,15 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     }
   }, [isPushPhase, running, intervals]);
 
-  // Completion check
+  // Completion check. In Focus/Quest the target only stops the clock — the block
+  // stays put until a photo lands (or Mark done), so it can't auto-advance mid-shot.
   useEffect(() => {
     if (running && hasTarget && elapsedSec >= targetSec) {
       setRunning(false);
-      onUpdateSet(exerciseIndex, 0, { ...set, completed: true, elapsedSec: targetSec });
+      onUpdateSet(exerciseIndex, 0, { ...set, elapsedSec: targetSec, ...(requirePhoto ? {} : { completed: true }) });
       onUpdateExercise?.(exerciseIndex, { timerRunning: false, timerStartMs: null });
       try { navigator.vibrate?.([200, 100, 200]); } catch {}
-      showToast(`${exercise.name} target reached!`, 'success');
+      showToast(requirePhoto ? `${exercise.name} target reached — capture the image to finish` : `${exercise.name} target reached!`, 'success');
     }
   }, [elapsedSec, targetSec, running]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -237,8 +249,11 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
   const toggleComplete = useCallback(() => {
     setRunning(false);
     setCountingIn(false);
-    onUpdateSet(exerciseIndex, 0, { ...set, completed: !completed });
-  }, [set, completed, exerciseIndex, onUpdateSet]);
+    // Ticking it off by hand (timer never started) counts as the full target time
+    const filled = !completed && hasTarget ? { elapsedSec: Math.max(elapsedSec, targetSec) } : {};
+    if (!completed) bloom();
+    onUpdateSet(exerciseIndex, 0, { ...set, ...filled, completed: !completed });
+  }, [set, completed, hasTarget, elapsedSec, targetSec, exerciseIndex, onUpdateSet]);
 
   const handleSaveName = useCallback(() => {
     if (nameValue.trim() && nameValue.trim() !== exercise.name) onUpdateExercise?.(exerciseIndex, { name: nameValue.trim() });
@@ -257,12 +272,11 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     onUpdateExercise?.(exerciseIndex, { intervals: newIntervals });
   }, [exerciseIndex, onUpdateExercise]);
 
-  const handleImageCapture = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processImage = useCallback(async (fileOrBlob) => {
+    if (!fileOrBlob) return;
     setExtracting(true);
     try {
-      const { base64, mediaType } = await compressImage(file);
+      const { base64, mediaType } = await compressImage(fileOrBlob);
       const data = await api.extractCardioStats(base64, mediaType);
       if (data.success && data.stats) {
         onUpdateSet(exerciseIndex, 0, { ...set, cardioStats: data.stats, completed: true });
@@ -273,6 +287,86 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     } catch (err) { console.error('Cardio stat extraction failed:', err); showToast('Failed to process image', 'error'); }
     finally { setExtracting(false); if (cameraInputRef.current) cameraInputRef.current.value = ''; if (galleryInputRef.current) galleryInputRef.current.value = ''; }
   }, [set, exerciseIndex, onUpdateSet, showToast]);
+
+  const handleImageCapture = useCallback((e) => { processImage(e.target.files?.[0]); }, [processImage]);
+
+  // ── Inline viewfinder (Focus/Quest) — keeps capture inside the card ─────────
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const imageCaptureRef = useRef(null);
+
+  const closeCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    imageCaptureRef.current = null;
+    setCameraOpen(false);
+  }, []);
+
+  // The widest view the device will give us. A machine display is wide and the
+  // card's frame is small, so a tight lens means framing retakes: zoom out to
+  // the track's minimum (the real wide-angle control on Android), and move to an
+  // ultra-wide back camera when the phone exposes one as its own device.
+  const widen = useCallback(async (stream) => {
+    const track = stream.getVideoTracks()[0];
+    try {
+      const zoom = track.getCapabilities?.().zoom;
+      if (zoom?.min != null) await track.applyConstraints({ advanced: [{ zoom: zoom.min }] });
+    } catch { /* no zoom control on this camera */ }
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const wide = devs.find((d) => d.kind === 'videoinput' && /ultra|wide/i.test(d.label) && !/front|user/i.test(d.label));
+      if (wide && wide.deviceId && wide.deviceId !== track.getSettings().deviceId) {
+        const wider = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: wide.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        });
+        stream.getTracks().forEach((t) => t.stop());
+        return wider;
+      }
+    } catch { /* keep the stream we already have */ }
+    return stream;
+  }, []);
+
+  const openCamera = useCallback(async () => {
+    try {
+      const stream = await widen(await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      }));
+      streamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      try { if ('ImageCapture' in window) imageCaptureRef.current = new ImageCapture(track); } catch { imageCaptureRef.current = null; }
+      setCameraOpen(true);
+    } catch (err) {
+      console.error('Camera open failed:', err);
+      // No camera/permission — fall back to the OS camera picker so the shot still happens.
+      cameraInputRef.current?.click();
+    }
+  }, [widen]);
+
+  // Bind the live stream once the <video> is mounted; stop tracks on unmount.
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play?.().catch(() => {});
+    }
+  }, [cameraOpen]);
+  useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
+
+  const shoot = useCallback(async () => {
+    let blob = null;
+    const ic = imageCaptureRef.current;
+    if (ic?.takePhoto) { try { blob = await ic.takePhoto(); } catch { blob = null; } }
+    if (!blob) {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth) { showToast('Camera not ready yet', 'error'); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+      canvas.getContext('2d').drawImage(v, 0, 0);
+      blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
+    }
+    closeCamera();
+    processImage(blob);
+  }, [closeCamera, processImage, showToast]);
 
   const clearStats = useCallback(() => { onUpdateSet(exerciseIndex, 0, { ...set, cardioStats: null }); }, [set, exerciseIndex, onUpdateSet]);
 
@@ -297,6 +391,14 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
                         </motion.button>
                       )}
                     </div>
+
+                    {/* Swap exercise / change set type */}
+                    {onSubstitute && (
+                      <motion.button whileTap={{ scale: 0.98 }} onClick={() => { setShowSettings(false); setShowSubstitute(true); }}
+                        className="w-full text-left bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm font-display font-semibold text-text-primary hover:border-orange-400/30 transition-colors">
+                        Swap exercise / set type <span className="text-[10px] text-text-muted ml-2">cardio ⇄ strength</span>
+                      </motion.button>
+                    )}
 
                     {/* Timer duration */}
                     <div>
@@ -384,6 +486,11 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
 
   const borderClass = completed ? 'border-success/40 bg-success-muted' : isPushPhase ? 'border-red-500/70 bg-red-500/5' : isActive ? 'border-orange-400/50 bg-orange-400/5' : 'border-orange-400/20 bg-bg-2';
 
+  const swapModal = onSubstitute && (
+    <SubstituteModal open={showSubstitute} onClose={() => setShowSubstitute(false)} exerciseName={exercise.name} isCardio
+      onSelect={(name, type) => onSubstitute(exerciseIndex, name, type)} />
+  );
+
   const fileInputs = (
     <>
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageCapture} />
@@ -395,11 +502,55 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
     // Same ring as the rest timer (60 ticks cut by a mask). Orange in a push phase.
     const ringColor = completed ? 'var(--color-success)' : isPushPhase ? 'var(--g-int)' : 'var(--color-accent)';
     const shown = countingIn ? 1 - countInRemaining / Math.max(1, countInSec) : completed ? 1 : progress;
-    const status = countingIn ? 'GET READY' : isPushPhase ? 'PUSH' : running ? 'RUNNING' : completed ? 'DONE' : hasTarget ? 'PAUSED' : 'NO TIMER';
+    const status = countingIn ? 'GET READY' : isPushPhase ? 'PUSH' : running ? 'RUNNING' : completed ? 'DONE' : reachedTarget ? 'TIME UP' : hasTarget ? 'PAUSED' : 'NO TIMER';
     const partial = hasStats && set.cardioStats.totalCalories == null && set.cardioStats.duration == null;
     const tile = 'flex-1 h-[62px] rounded-[20px] bg-bg-2 text-text-primary font-bold text-[15px] flex items-center justify-center gap-2 active:scale-[.98] transition-transform';
+    // The viewfinder IS the card: full bleed, no header, controls over the
+    // picture. Nothing to aim through a letterboxed window a third of the size.
+    if (cameraOpen) return (
+      <div className="relative bg-black rounded-[28px] overflow-hidden select-none"
+        style={{ height: focus.h || undefined, aspectRatio: focus.h ? undefined : '4 / 5' }}>
+        {fileInputs}
+        <button onClick={shoot} aria-label="Capture photo" className="absolute inset-0 w-full h-full">
+          <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" />
+        </button>
+        <div aria-hidden className="absolute inset-x-0 top-0 h-24 pointer-events-none"
+          style={{ background: 'linear-gradient(rgba(0,0,0,.6), transparent)' }} />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
+          style={{ background: 'linear-gradient(transparent, rgba(0,0,0,.72))' }} />
+        <div className="absolute inset-x-5 top-4 pointer-events-none flex justify-between items-center gap-3">
+          <span className="truncate" style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: 'rgba(255,255,255,.72)' }}>
+            {exercise.name.toUpperCase()}
+          </span>
+          <span className="flex-shrink-0" style={{ font: `400 10px ${MONO}`, color: 'rgba(255,255,255,.55)' }}>TAP TO CAPTURE</span>
+        </div>
+        {/* The display sits in here — a guide only; the shot keeps the whole frame. */}
+        <div aria-hidden className="absolute rounded-[16px] pointer-events-none"
+          style={{ left: 20, right: 20, top: '26%', bottom: '34%', border: '1.5px solid rgba(255,255,255,.45)' }} />
+        <div className="absolute inset-x-5 flex items-center gap-3" style={{ bottom: 'calc(18px + env(safe-area-inset-bottom, 0px))' }}>
+          <button onClick={closeCamera} aria-label="Cancel"
+            className="w-[52px] h-[52px] rounded-[18px] text-white text-xl active:scale-95 transition-transform"
+            style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>✕</button>
+          <button onClick={shoot} aria-label="Capture photo"
+            className="mx-auto w-[72px] h-[72px] rounded-full flex items-center justify-center active:scale-95 transition-transform"
+            style={{ background: 'rgba(255,255,255,.22)', border: '3px solid rgba(255,255,255,.9)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
+            <span className="rounded-full" style={{ width: 54, height: 54, background: 'var(--color-accent)' }} />
+          </button>
+          <button onClick={() => { closeCamera(); galleryInputRef.current?.click(); }} aria-label="Upload from gallery"
+            className="w-[52px] h-[52px] rounded-[18px] text-white flex items-center justify-center active:scale-95 transition-transform"
+            style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22 }}>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="9" cy="9" r="2" />
+              <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+
     return (
-      <div className="bg-bg-1 rounded-[28px] p-5">
+      <div className="bg-bg-1 rounded-[28px] p-5 flex flex-col overflow-hidden" style={{ height: focus.h || undefined }}>
         <div className="flex justify-between items-center gap-2">
           <span className="g-label truncate">{focus.label} · {hasTarget ? `${Math.round(targetSec / 60)} MIN` : 'NO TIMER'}{intervals ? ' · INTERVALS' : ''}</span>
           <span className="flex items-center gap-2 flex-shrink-0">
@@ -411,13 +562,17 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
           <TypewriterName text={exercise.name} />
         </div>
         <div className="mt-1.5 g-meta">
-          {hasTarget ? (completed ? `Target ${formatMMSS(targetSec)} reached` : `${formatMMSS(remainingSec)} to go`) : 'Mark it done when you finish'}
-          {countInSec > 0 && !completed ? ` · ${countInSec}s count-in` : ''}
+          {reachedTarget ? 'Time up — capture the image to finish'
+            : hasTarget ? (completed ? `Target ${formatMMSS(targetSec)} reached` : `${formatMMSS(remainingSec)} to go`)
+            : 'Mark it done when you finish'}
+          {countInSec > 0 && !completed && !reachedTarget ? ` · ${countInSec}s count-in` : ''}
         </div>
 
-        <div className="flex justify-center mt-5">
-          <div className="relative w-[200px] h-[200px]">
-            <svg width="200" height="200" viewBox="0 0 200 200" className="absolute inset-0 -rotate-90">
+        {fileInputs}
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ containerType: 'size' }}>
+        <div className="flex justify-center mt-4">
+          <div className="relative" style={{ width: 'clamp(88px, 50cqh, 176px)', aspectRatio: '1' }}>
+            <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full -rotate-90">
               <mask id="cardio-ticks">
                 <circle cx="100" cy="100" r="90" fill="none" stroke="#fff" strokeWidth="12" strokeDasharray="6.42 3" />
               </mask>
@@ -430,7 +585,7 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className={`g-label ${isPushPhase ? 'animate-pulse' : ''}`} style={{ letterSpacing: '.16em', color: isPushPhase ? 'var(--g-int)' : undefined }}>{status}</span>
               <span key={countingIn ? `c${countInRemaining}` : 't'} className="g-tab"
-                style={{ fontSize: countingIn ? 80 : 52, fontWeight: 800, letterSpacing: '-0.04em', paddingRight: '0.04em', lineHeight: 1.05,
+                style={{ fontSize: countingIn ? 'clamp(40px, 22cqh, 80px)' : 'clamp(26px, 14cqh, 52px)', fontWeight: 800, letterSpacing: '-0.04em', paddingRight: '0.04em', lineHeight: 1.05,
                   color: completed ? 'var(--color-success)' : isPushPhase ? 'var(--g-int)' : 'var(--color-text-primary)',
                   animation: countingIn ? 'fx-pop .45s cubic-bezier(.2,1.6,.4,1) both' : 'none' }}>
                 {countingIn ? countInRemaining : hasTarget ? formatMMSS(elapsedSec) : completed ? '✓' : '—'}
@@ -439,11 +594,16 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
           </div>
         </div>
 
-        <div className="flex gap-2 w-full mt-5">
+        <div className="flex gap-2 w-full" style={{ marginTop: 'clamp(10px, 7cqh, 20px)' }}>
           {hasTarget && (
             <button onClick={resetTimer} aria-label="Reset timer" className="w-[62px] h-[62px] rounded-[20px] bg-bg-2 text-text-secondary text-xl active:scale-95 transition-transform">↻</button>
           )}
-          {hasTarget && !completed ? (
+          {reachedTarget ? (
+            <button onClick={openCamera} className="flex-1 h-[62px] rounded-[20px] font-extrabold text-[17px] active:scale-[.98] transition-transform"
+              style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}>
+              Capture image
+            </button>
+          ) : hasTarget && !completed ? (
             <button onClick={handleStartButton} className="flex-1 h-[62px] rounded-[20px] font-extrabold text-[17px] active:scale-[.98] transition-transform"
               style={running || countingIn ? { background: 'var(--color-bg-2)', color: 'var(--color-text-primary)' } : { background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}>
               {countingIn ? 'Cancel' : running ? 'Pause' : elapsedSec > 0 ? 'Resume' : 'Start'}
@@ -455,12 +615,11 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
             </button>
           )}
           {hasTarget && !completed && (
-            <button onClick={toggleComplete} aria-label="Mark done" className="w-[62px] h-[62px] rounded-[20px] bg-bg-2 text-text-secondary text-xl active:scale-95 transition-transform">✓</button>
+            <button onClick={toggleComplete} aria-label={reachedTarget ? 'Finish without photo' : 'Mark done'} className="w-[62px] h-[62px] rounded-[20px] bg-bg-2 text-text-secondary text-xl active:scale-95 transition-transform">✓</button>
           )}
         </div>
 
-        <div className="mt-5 g-label">MACHINE / WATCH STATS</div>
-        {fileInputs}
+        <div className="g-label" style={{ marginTop: 'clamp(10px, 7cqh, 20px)' }}>MACHINE / WATCH STATS</div>
         {extracting ? (
           <div className="mt-2.5 h-[62px] rounded-[20px] bg-bg-2 flex items-center justify-center gap-2.5 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
             <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />Reading the display…
@@ -483,7 +642,7 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
               })}
             </div>
             <div className="mt-3 flex gap-2">
-              <button onClick={() => cameraInputRef.current?.click()} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold">Retake</button>
+              <button onClick={openCamera} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold">Retake</button>
               <button onClick={() => galleryInputRef.current?.click()} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold">Upload</button>
               <button onClick={clearStats} className="flex-1 h-10 rounded-[12px] bg-bg-3 text-[13px] font-semibold text-error">Clear</button>
             </div>
@@ -491,27 +650,28 @@ export default function CardioCard({ exercise, exerciseIndex, onUpdateSet, onUpd
         ) : (
           <>
             <div className="mt-2.5 flex gap-2">
-              <button onClick={() => cameraInputRef.current?.click()} className={tile}>Take photo</button>
+              <button onClick={openCamera} className={tile}>Take photo</button>
               <button onClick={() => galleryInputRef.current?.click()} className={tile}>Upload</button>
             </div>
             <p className="mt-2 text-text-tertiary" style={{ font: `400 10px ${MONO}`, lineHeight: 1.5 }}>The AI reads the display. Only the numbers are kept.</p>
           </>
         )}
-
-        <div className="mt-3 text-center text-text-tertiary" style={{ font: `400 10px ${MONO}`, letterSpacing: '.06em' }}>↑ ↓ exercises</div>
+        </div>
 
         <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Cardio settings">{settingsBody}</Modal>
+        {swapModal}
       </div>
     );
   }
 
   return (
     <motion.div layout variants={staggerItem} className={`rounded-xl overflow-hidden border transition-colors w-full max-w-full ${borderClass}`}>
+      {swapModal}
       {/* Header */}
       <motion.button whileTap={{ scale: 0.98 }} onClick={() => setExpanded(p => !p)} className="w-full flex items-center justify-between gap-3 p-3 text-left">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="font-display font-semibold text-sm text-text-primary truncate">{exercise.name}</div>
+            <div className="font-display font-semibold text-lg text-text-primary truncate">{exercise.name}</div>
             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/10 text-orange-400 border border-orange-400/20">CARDIO</span>
             {hasStats && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20">STATS</span>}
           </div>

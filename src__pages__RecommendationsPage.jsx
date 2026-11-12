@@ -1,119 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import useBackHandler from '../hooks/useBackHandler';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
 import ThinkingDots from '../components/ThinkingDots';
 import * as api from '../lib/api';
-import { isMarker, localDate as toLocalDate } from '../lib/history';
+import { aggressionOf, acceptLevelUp, snoozeLevelUp } from '../lib/levelup';
 import { moodState } from '../lib/mood';
 
 const MONO = 'var(--font-mono)';
 import { useHaptics } from '../hooks/useHaptics';
-
-// Parse a program's workouts whether it arrived as a JSON string or array.
-function parseWorkouts(workouts) {
-  if (!workouts) return [];
-  if (typeof workouts === 'string') {
-    try { return JSON.parse(workouts) || []; } catch { return []; }
-  }
-  return Array.isArray(workouts) ? workouts : [];
-}
-
-// Compare two weight values (which may be strings, numbers, or floats with
-// trailing zeros) with a small tolerance. Returns true if they match.
-function weightsMatch(a, b) {
-  const fa = parseFloat(a);
-  const fb = parseFloat(b);
-  if (isNaN(fa) || isNaN(fb)) return false;
-  return Math.abs(fa - fb) < 0.01;
-}
-
-// Find the user's most recent real (non-milestone) entry for an exercise
-// in workoutHistory. Returns the exercise object with its sets, or null.
-function findLatestRealExercise(history, exerciseName) {
-  if (!history) return null;
-  for (const h of history) {
-    if (isMarker(h)) continue;
-    let exs = [];
-    try {
-      exs = typeof h.exercises === 'string' ? JSON.parse(h.exercises) : h.exercises;
-    } catch {
-      continue;
-    }
-    const found = (exs || []).find(e => e && e.name === exerciseName);
-    if (found) return found;
-  }
-  return null;
-}
-
-// Build the milestone sets array. We copy the structure of the user's most
-// recent real session so the next workout's prefill looks natural:
-//   - same number of main (non-drop) sets
-//   - same reps per set (so prefill populates both reps and weight)
-//   - new weight
-//   - completed: true (so the prefill considers it a valid session)
-// Drop sets from history are intentionally NOT preserved here — the
-// milestone is only a weight checkpoint, not a full workout replay.
-function buildMilestoneSets(latestRealEx, newWeight) {
-  const weightStr = String(parseFloat(newWeight));
-  if (!latestRealEx || !Array.isArray(latestRealEx.sets) || latestRealEx.sets.length === 0) {
-    // Fallback: single set, no reps known.
-    return [{ reps: '', weight: weightStr, completed: true }];
-  }
-  const mainSets = latestRealEx.sets.filter(s => s && s.type !== 'drop');
-  const source = mainSets.length > 0 ? mainSets : latestRealEx.sets;
-  return source.map(s => ({
-    reps: String(s?.reps ?? ''),
-    weight: weightStr,
-    completed: true,
-  }));
-}
-
-// Walk every program and apply the Level Up delta to every instance of the
-// target exercise:
-//   - delta = newWeight - oldWeight (negative for assisted exercises).
-//   - Every matching instance shifts by delta, floored at 0. This preserves
-//     intentional variation (Monday=80, Friday=70 both shift by the same
-//     step) while guaranteeing the update is applied somewhere.
-//   - Uninitialized instances (weight == 0 or missing) jump straight to
-//     newWeight so fresh templates pick up the Level Up.
-// Returns a list of { id, name, workouts } to PUT back to the server.
-function computeProgramUpdates(programs, exerciseName, oldWeight, newWeight) {
-  const updates = [];
-  const newWeightNum = parseFloat(newWeight);
-  const oldWeightNum = parseFloat(oldWeight);
-  if (!programs || isNaN(newWeightNum) || isNaN(oldWeightNum)) return updates;
-  const delta = newWeightNum - oldWeightNum;
-
-  for (const prog of programs) {
-    const workouts = parseWorkouts(prog.workouts);
-    let changed = false;
-
-    const nextWorkouts = workouts.map(w => {
-      if (!w || !Array.isArray(w.exercises)) return w;
-      const nextExercises = w.exercises.map(ex => {
-        if (!ex || ex.name !== exerciseName) return ex;
-        const exWeight = parseFloat(ex.weight);
-        const uninitialized = !ex.weight || isNaN(exWeight) || exWeight === 0;
-        if (uninitialized) {
-          changed = true;
-          return { ...ex, weight: newWeightNum };
-        }
-        const shifted = Math.max(0, exWeight + delta);
-        if (Math.abs(shifted - exWeight) < 0.01) return ex;
-        changed = true;
-        return { ...ex, weight: shifted };
-      });
-      return { ...w, exercises: nextExercises };
-    });
-
-    if (changed) {
-      updates.push({ id: prog.id, name: prog.name, workouts: nextWorkouts });
-    }
-  }
-
-  return updates;
-}
 
 export default function RecommendationsPage() {
   const { settings, programs, workoutHistory, reloadHistory, reloadPrograms } = useWorkout();
@@ -124,6 +20,8 @@ export default function RecommendationsPage() {
     const t = setTimeout(() => setLevelUp(null), 1800);
     return () => clearTimeout(t);
   }, [levelUp]);
+  // Back clears the pop instead of leaving the page.
+  useBackHandler(!!levelUp, () => setLevelUp(null));
   const haptics = useHaptics();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -131,26 +29,7 @@ export default function RecommendationsPage() {
   // Per-exercise custom weight overrides for the "Level Up" input
   const [customWeights, setCustomWeights] = useState({});
 
-  const getAggression = useCallback(() => {
-    if (!settings?.aggressionSettings) {
-      return {
-        progressionSpeed: 12,
-        upperCompoundIncrement: 5, upperIsolatedIncrement: 2.5,
-        lowerCompoundIncrement: 5, lowerIsolatedIncrement: 5,
-        coachingTone: 'encouraging',
-      };
-    }
-    const a = typeof settings.aggressionSettings === 'string'
-      ? JSON.parse(settings.aggressionSettings) : settings.aggressionSettings;
-    return {
-      progressionSpeed: a.progressionSpeed ?? 12,
-      upperCompoundIncrement: a.upperCompoundIncrement ?? a.upperIncrement ?? 5,
-      upperIsolatedIncrement: a.upperIsolatedIncrement ?? a.upperIncrement ?? 2.5,
-      lowerCompoundIncrement: a.lowerCompoundIncrement ?? a.lowerIncrement ?? 5,
-      lowerIsolatedIncrement: a.lowerIsolatedIncrement ?? a.lowerIncrement ?? 5,
-      coachingTone: a.coachingTone ?? 'encouraging',
-    };
-  }, [settings]);
+  const getAggression = useCallback(() => aggressionOf(settings), [settings]);
 
   const handleGenerate = useCallback(async () => {
     setLoading(true);
@@ -184,46 +63,8 @@ export default function RecommendationsPage() {
         ? String(parseFloat(customVal))
         : String(parseFloat(serverSuggested));
 
-      // ── 2. Write the milestone history entry ─────────────────────────
-      // Copy the structure of the user's most recent real session so the
-      // next workout's prefill gets proper reps + new weight.
-      const latestRealEx = findLatestRealExercise(workoutHistory, rec.exercise);
-      const milestoneSets = buildMilestoneSets(latestRealEx, newWeight);
-
-      const localDate = toLocalDate();
-      await api.saveWorkout({
-        programName: 'LEVEL_UP_MILESTONE',
-        workoutName: 'Level Up',
-        date: localDate,
-        duration: 0,
-        notes: `LEVEL_UP:${rec.exercise}:${oldWeight}:${newWeight}`,
-        exercises: [{
-          name: rec.exercise,
-          sets: milestoneSets,
-          // Preserve rep range + rest so a subsequent workout's prefill
-          // doesn't lose these metadata fields when treating the milestone
-          // as history.
-          ...(latestRealEx?.repRange ? { repRange: latestRealEx.repRange } : {}),
-          ...(latestRealEx?.targetReps ? { targetReps: latestRealEx.targetReps } : {}),
-          ...(latestRealEx?.restSeconds ? { restSeconds: latestRealEx.restSeconds } : {}),
-        }],
-      });
-
-      // ── 3. Update every program that contains this exercise ──────────
-      // Every matching instance shifts by (newWeight - oldWeight), so
-      // intentional variation (Mon 80 / Fri 70) is preserved as the same
-      // relative spread.
-      const programUpdates = computeProgramUpdates(
-        programs, rec.exercise, oldWeight, newWeight
-      );
-
-      await Promise.all(
-        programUpdates.map(u =>
-          api.updateProgram(u.id, u.name, u.workouts).catch(err => {
-            console.error(`Failed to update program ${u.name}:`, err);
-          })
-        )
-      );
+      // ── 2–3. Milestone record + every program updated (shared with the in-workout prompt)
+      const updatedCount = await acceptLevelUp({ exercise: rec.exercise, currentWeight: oldWeight, newWeight, history: workoutHistory, programs });
 
       // ── 4. Refresh local state ───────────────────────────────────────
       await Promise.all([reloadHistory(), reloadPrograms()]);
@@ -231,7 +72,6 @@ export default function RecommendationsPage() {
       // Hide this card from the current generation — the user has acted on it.
       setDismissed(prev => new Set([...prev, index]));
 
-      const updatedCount = programUpdates.length;
       const weightBody = updatedCount === 0
         ? `${rec.exercise} → ${newWeight}kg (no programs updated)`
         : updatedCount === 1
@@ -247,15 +87,7 @@ export default function RecommendationsPage() {
 
   const handleSnooze = useCallback(async (rec, index) => {
     try {
-      const localDate = toLocalDate();
-      await api.saveWorkout({
-        programName: 'SNOOZE_MILESTONE',
-        workoutName: 'Snooze',
-        date: localDate,
-        duration: 0,
-        notes: `SNOOZE:${rec.exercise}:${rec.currentWeight}:3`,
-        exercises: [{ name: rec.exercise, sets: [{ weight: String(rec.currentWeight), reps: '', completed: true }] }],
-      });
+      await snoozeLevelUp({ exercise: rec.exercise, currentWeight: rec.currentWeight });
       await reloadHistory();
       setDismissed(prev => new Set([...prev, index]));
       showCenterModal('Got it', "I'll check again after 3 more sessions.", 'info');

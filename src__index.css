@@ -291,34 +291,54 @@ html.theme-phosphor {
   --color-error: #ff5a6a;
   --font-display: 'IBM Plex Mono', ui-monospace, monospace;
 }
-html.theme-phosphor body::after {
-  content: '';
+/* Phosphor's CRT look now lives in the screen effects below (scr-crt / scr-roll),
+   which any theme can switch on; Phosphor turns them on unless set otherwise. */
+
+/* ============================================
+   Screen effects, on any theme (Settings → Theme, and Quest → Look)
+   ============================================ */
+/* CRT scanlines and the edge vignette, each its own setting and its own layer
+   (.scr-lines / .scr-vig-layer, portalled to <body> by ThemeContext). Full is
+   Phosphor's original strength; Soft and Subtle keep text readable. */
+html.scr-crt-subtle { --crt-lines: 0.15; }
+html.scr-crt-soft { --crt-lines: 0.3; }
+html.scr-crt-full { --crt-lines: 0.55; }
+html.scr-vig-subtle { --crt-vignette: 0.3; }
+html.scr-vig-soft { --crt-vignette: 0.5; }
+html.scr-vig-full { --crt-vignette: 0.75; }
+.scr-lines, .scr-vig-layer { display: none; }
+html.scr-crt .scr-lines {
+  display: block;
   position: fixed;
   inset: 0;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.55) 0px, rgba(0,0,0,0.55) 1px, transparent 1px, transparent 3px);
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,var(--crt-lines)) 0px, rgba(0,0,0,var(--crt-lines)) 1px, transparent 1px, transparent 3px);
   mix-blend-mode: multiply;
   pointer-events: none;
   z-index: 9998;
 }
-html.theme-phosphor body::before {
-  content: '';
+html.scr-vig .scr-vig-layer {
+  display: block;
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.75) 100%);
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,var(--crt-vignette)) 100%);
   pointer-events: none;
   z-index: 9997;
 }
-html.theme-phosphor::before {
+/* The rolling scan line, in the theme's accent, at half Phosphor's old strength.
+   z-index -1: background only. It paints over the page colour but under the app
+   shell (a fixed layer, so its own stacking context), so the battle screen, the
+   cards and the buttons all cover it. The CRT layers stay above everything. */
+html.scr-roll::before {
   content: '';
   position: fixed;
   left: 0;
   right: 0;
   top: 0;
   height: 100px;
-  background: linear-gradient(transparent 0%, rgba(255,154,60,0.06) 40%, rgba(255,154,60,0.10) 50%, rgba(255,154,60,0.06) 60%, transparent 100%);
+  background: linear-gradient(transparent 0%, color-mix(in srgb, var(--color-accent) 3%, transparent) 40%, color-mix(in srgb, var(--color-accent) 5%, transparent) 50%, color-mix(in srgb, var(--color-accent) 3%, transparent) 60%, transparent 100%);
   animation: tv-scanline 7s linear infinite;
   pointer-events: none;
-  z-index: 9999;
+  z-index: -1;
 }
 
 /* ============================================
@@ -565,7 +585,7 @@ html.theme-lavender {
 }
 
 /* ============================================
-   THEME 19: Sage Garden (light) — muted sage green
+   THEME 19: Sarah's Theme (light, id "sage") — muted sage green + peony photo
    ============================================ */
 html.theme-sage {
   --color-bg-0: #f5f7f6;
@@ -586,6 +606,112 @@ html.theme-sage {
   --color-accent-hover: #82a696;
   --color-accent-muted: rgba(107, 144, 128, 0.25);
   --color-accent-glow: rgba(107, 144, 128, 0.3);
+}
+/* The shell has filter: grayscale(…) which drops any background-attachment:fixed
+   on html, so paint the peonies on body — the app shell is h-dvh with no body
+   scroll, so a scroll-attached background sits at viewport bottom. */
+html.theme-sage body { background-color: transparent; }
+/* Any canvas the photo misses shows html's bg-0 (near white) as a white bar at the
+   bottom; paint it the photo's bottom-edge colour instead. */
+html.theme-sage { background-color: #94998e; }
+/* Fixed layer with 48px spare top and bottom; ThemeContext sets --sage-shift
+   from the scrolled container for a slight parallax drift (up to -48px). The
+   bottom gets that 48px again plus the home-indicator inset, because an installed
+   iOS PWA can size fixed layers short of the screen, and the drift would otherwise
+   pull the photo's edge up off the bottom. */
+html.theme-sage body::before {
+  content: '';
+  position: fixed;
+  inset: -48px 0 calc(-96px - env(safe-area-inset-bottom, 0px));
+  z-index: -1;
+  background: #c9d3d6 url('../sage-peony.jpg') center / cover no-repeat;
+  transform: translate3d(0, var(--sage-shift, 0px), 0);
+  transition: transform 0.3s ease-out;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-sage body::before { transform: none; }
+}
+/* the app shell paints bg-0 over html; let the flowers show through */
+html.theme-sage #root > .bg-bg-0 { background-color: transparent; }
+/* Pale surfaces blend with the background, so they'd cover the wildflowers —
+   let them through at low alpha. Anything darker stays fully filled, as do
+   modals sitting over a scrim. */
+html.theme-sage {
+  --color-bg-1: rgb(234 240 238 / 0.6);
+  --color-bg-2: rgb(211 227 220 / 0.75);
+  --color-surface: rgb(211 227 220 / 0.75);
+}
+/* Frosted glass: rounded cards blur the photo behind them */
+html.theme-sage :is(.bg-bg-1, .bg-bg-2, .bg-surface):is(.rounded-xl, .rounded-2xl, [class*="rounded-["]),
+html.theme-sage :is(.bg-success\/15, .bg-error\/15) {
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+html.theme-sage .fixed .bg-bg-1 { background-color: #eaf0ee; }
+html.theme-sage .fixed .bg-bg-2 { background-color: #d3e3dc; }
+html.theme-sage .fixed .bg-surface { background-color: #d3e3dc; }
+/* Solid rest ring — no tick cut-outs */
+html.theme-sage .rest-ring-ticks { mask: none; }
+/* Exercise / superset / cardio cards (the only rounded-xl + border + max-w-full elements) */
+html.theme-sage .rounded-xl.overflow-hidden.border.max-w-full { border-width: 2.5px; }
+/* Header: one frosted panel over the photo instead of two white strips.
+   --theme-meta tints the Android status bar to match it. */
+html.theme-sage { --theme-meta: #c9d0d2; }
+html.theme-sage .app-header,
+html.theme-sage .workout-header {
+  background-color: rgb(245 247 246 / 0.55);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+html.theme-sage .app-header { border-bottom: 0; }
+html.theme-sage .workout-header { border-bottom: 1px solid rgb(255 255 255 / 0.5); }
+html.theme-sage .banner-text {
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+}
+html.theme-sage .sage-banner {
+  opacity: 0.7;
+  border: 1px solid rgb(255 255 255 / 0.5);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
+}
+/* Pale green/red button text washes out over the photo */
+html.theme-sage button.text-success { color: #166534; }
+html.theme-sage button.text-error { color: #991b1b; }
+/* Completion bloom (src/lib/bloom.js): a blush ring eases out of the card and fades */
+@keyframes sage-bloom {
+  0%   { opacity: 1; transform: scale(1);    box-shadow: 0 0 0 0 rgb(228 150 145 / 0.6), inset 0 0 26px rgb(228 150 145 / 0.5); }
+  35%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.04); box-shadow: 0 0 0 22px rgb(228 150 145 / 0),  inset 0 0 26px rgb(228 150 145 / 0); }
+}
+.sage-bloom {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border: 2px solid rgb(226 146 140 / 0.9);
+  animation: sage-bloom 1.1s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.sage-petal {
+  position: fixed;
+  z-index: 61;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 80% 10% 80% 10%;
+  box-shadow: 0 1px 2px rgb(150 80 75 / 0.18);
+}
+/* Completed cards: success-muted is 15% green over glass, which reads as barely tinted */
+html.theme-sage .max-w-full.overflow-hidden.bg-success-muted {
+  background-color: rgb(197 227 207 / 0.68);
+  border-color: rgb(104 168 124 / 0.8);
+}
+html.theme-sage .workout-clock { font-family: var(--font-display); letter-spacing: -0.02em; }
+html.theme-sage .reorder-btn:not(.bg-accent) {
+  background-color: var(--color-bg-3);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
 }
 
 /* ============================================
@@ -754,6 +880,12 @@ html.theme-bit64 [style*="inset 0 0 0 1.5px var(--color-accent)"]::after {
    scattered accents — the wave background (WaveBackground cycles them), done
    △ green, cancel ○ red, and a colour per special-set tag. Nothing else is coloured.
    ============================================ */
+/* Default theme only (no theme class): a slightly darker green for done/success. */
+html:not([class*="theme-"]) {
+  --color-success: #16a34a;
+  --color-success-muted: rgba(22, 163, 74, 0.15);
+}
+
 html.theme-playstation {
   --color-bg-0: #000000;
   --color-bg-1: #111111;
@@ -833,6 +965,20 @@ html {
 html.ui-compact { --ui-scale: 14px; }
 html.ui-default { --ui-scale: 16px; }
 html.ui-large   { --ui-scale: 18px; }
+
+/* An installed iOS PWA lays bottom-fixed bars out against a slightly short viewport
+   until the first scroll, leaving a strip of bare canvas under the nav. Paint the
+   bar's colour past the bottom edge so that strip is never visible. */
+.nav-bleed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 120px;
+  background-color: inherit;
+  pointer-events: none;
+}
 
 body {
   margin: 0;
@@ -975,7 +1121,11 @@ html.text-size-large {
   --g-drop: #f59e0b;
   --g-bfr: #c084fc;
   --g-int: #fb923c;
+  --g-timed: #38bdf8; /* plain timed sets: one countdown each */
   --g-ok-soft: color-mix(in srgb, var(--color-success) 15%, transparent);
+  /* Checked boxes: a deep green fill, with the tick itself darker again. */
+  --g-ok: color-mix(in srgb, var(--color-success) 42%, #000);
+  --g-ok-ink: color-mix(in srgb, var(--color-success) 16%, #000);
   --g-acc-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);
   /* Countdowns (rest, walk, count-in): the accent, unless a theme gives timers their own colour. */
   --g-timer: var(--color-accent);
@@ -992,11 +1142,44 @@ html.text-size-large .g-root { zoom: 1.06; }
 .g-meta { font: 400 12px var(--font-mono); color: var(--color-text-secondary); }
 .g-h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
 .g-tab { font-variant-numeric: tabular-nums; }
+/* Focus steppers squeezed by an event box or superset tabs (the stacked layout
+   needs ~105px): fold into one row, − value +, so the number never rides up over the label. */
+@container (max-height: 110px) {
+  .g-step { padding-top: 6px !important; padding-bottom: 6px !important; }
+  .g-step-body { flex-direction: row !important; gap: 6px; margin-top: 4px; }
+  .g-step-btns { display: contents !important; }
+  .g-step .g-label { white-space: nowrap; }
+  .g-step-btn { flex: 0 0 34px !important; height: auto !important; min-height: 28px; }
+  .g-step-btn:first-child { order: -1; }
+  .g-step-val { margin: 0 !important; font-size: clamp(16px, 28cqh, 26px) !important; }
+  .g-step-val[data-long] { font-size: 14px !important; }
+}
+/* The rest view in a short card (the card shrinks to fit the screen, so the
+   finish row is always visible). The quest tip shrinks to one line, then goes;
+   the next-set block tightens. The clock and the buttons never go. */
+@container (max-height: 290px) {
+  .q-rest-next { margin-top: 10px !important; }
+}
+@container (max-height: 215px) {
+  .q-rest-scroll { height: 28px !important; padding-top: 0 !important; padding-bottom: 0 !important; font-size: 11px !important; }
+  .q-rest-scroll > span { -webkit-line-clamp: 1 !important; }
+  .q-rest-next-label { display: none !important; }
+  .q-rest-time { font-size: clamp(26px, 22cqh, 40px) !important; }
+  .q-rest-next-name { font-size: clamp(14px, 11cqh, 21px) !important; margin-top: 4px !important; }
+  .q-rest-next-load { font-size: clamp(12px, 9cqh, 18px) !important; margin-top: 0 !important; }
+  .q-rest-btns { margin-top: 8px !important; }
+  .q-rest-btns > button { height: clamp(40px, 28cqh, 50px) !important; }
+}
+@container (max-height: 140px) {
+  .q-rest-scroll { display: none !important; }
+}
 .g-tag { font: 600 10px var(--font-mono); letter-spacing: .12em; padding: 4px 8px; border-radius: 8px; color: var(--tag); background: color-mix(in srgb, var(--tag) 15%, transparent); white-space: nowrap; }
 
 @keyframes fx-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes fx-pop { 0% { opacity: 0; transform: scale(.5); } 60% { opacity: 1; transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes fx-fade { from { opacity: 0; } to { opacity: 1; } }
+/* superset hand-off: the card's edge lights once */
+@keyframes fx-handoff { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes fx-up { 0% { transform: translateY(100%); } 70% { transform: translateY(-2%); } 100% { transform: none; } }
 @keyframes fx-ring { from { stroke-dashoffset: 754; } to { stroke-dashoffset: 0; } }
 @keyframes fx-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
@@ -1005,9 +1188,42 @@ html.text-size-large .g-root { zoom: 1.06; }
 @keyframes fx-drop { 0% { opacity: 0; transform: translateY(-40px); } 60% { opacity: 1; transform: translateY(5px); } 100% { transform: none; } }
 @keyframes fx-dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 @keyframes fx-burst { 0% { opacity: .8; transform: scale(.3); } 100% { opacity: 0; transform: scale(2.4); } }
-@keyframes fx-flash { 0% { opacity: 0; transform: scale(.6); } 25% { opacity: 1; transform: scale(1.08); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
-@keyframes fx-flash-bg { 0% { opacity: 0; } 20% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fx-flash { 0% { opacity: 0; transform: scale(.6); } 11% { opacity: 1; transform: scale(1.08); } 31% { opacity: 1; transform: scale(1); } 92% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+/* Last 10 s of a rest: the clock blinks red, 1 s on / 1 s off. A countdown that
+   only ticks down reads as static — this is the cue to get back under the bar. */
+@keyframes fx-last10 { 0%, 49.99% { color: #ff2222; } 50%, 100% { color: var(--color-text-primary); } }
+.q-last10 { animation: fx-last10 2s step-end infinite; }
+@media (prefers-reduced-motion: reduce) { .q-last10 { animation: none; color: #ff2222; } }
+/* Quest chest reel */
+@keyframes qc-spin { to { transform: rotate(360deg); } }
+@keyframes qc-flash { from { opacity: .85; } to { opacity: 0; } }
+@keyframes qc-burst { from { transform: translate(-50%, -50%); opacity: 1; } to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r)) scale(.3); opacity: 0; } }
+@keyframes qc-stamp { from { transform: scale(2.4) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes qc-shake { 0%, 100% { transform: none; } 15% { transform: translate(calc(-1 * var(--s)), calc(.5 * var(--s))); } 30% { transform: translate(var(--s), calc(-.5 * var(--s))); } 45% { transform: translate(calc(-.6 * var(--s)), 0); } 60% { transform: translate(calc(.4 * var(--s)), calc(.3 * var(--s))); } 80% { transform: translate(calc(-.2 * var(--s)), 0); } }
+/* Quest taunt cut-in */
+@keyframes qt-in { from { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); filter: brightness(3); } to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); filter: none; } }
+@keyframes qt-out { to { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); } }
+@keyframes qt-speed { from { background-position-x: 100vw; } to { background-position-x: calc(-1 * var(--len)); } }
+@keyframes qt-mon { from { transform: translateX(120px) scale(1.25); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes qt-plate { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fx-flash-bg { 0% { opacity: 0; } 9% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
+/* The GO card's frames, worn like a VHS: the picture twitches sideways and a
+   tracking band slips across it, both in steps — tape jumps, it doesn't ease.
+   The .g-root reduced-motion rule above stops both. */
+@keyframes go-vhs { 0%, 100% { transform: translateX(0); } 18% { transform: translateX(-3px); } 36% { transform: translateX(2px); } 54% { transform: translateX(-1px); } 72% { transform: translateX(4px); } }
+@keyframes go-vhs-tear {
+  0% { clip-path: inset(86% 0 6% 0); transform: translateX(-10px); }
+  22% { clip-path: inset(62% 0 30% 0); transform: translateX(8px); }
+  44% { clip-path: inset(38% 0 55% 0); transform: translateX(-14px); }
+  66% { clip-path: inset(16% 0 78% 0); transform: translateX(6px); }
+  88% { clip-path: inset(2% 0 93% 0); transform: translateX(-7px); }
+  100% { clip-path: inset(70% 0 24% 0); transform: translateX(11px); }
+}
+.go-vhs { animation: go-vhs .32s steps(1) infinite; }
+.go-vhs-tear { animation: go-vhs-tear .78s steps(1) infinite; filter: brightness(1.5) contrast(.75); }
 @keyframes fx-toast { 0% { opacity: 0; transform: translateY(-12px) scale(.9); } 15% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+/* Quest's encounter name: slides down from behind the battle screen's top edge,
+   holds, slides back. Fully opaque the whole way — it's there to be read. */
 
 .fx-in { animation: fx-in .35s cubic-bezier(.2,1.3,.4,1) both; }
 /* Page entrances move but never fade: if a browser stalls the animation, a
@@ -1024,3 +1240,863 @@ html.text-size-large .g-root { zoom: 1.06; }
 @media (prefers-reduced-motion: reduce) {
   .g-root *, .g-root *::before { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ============================================
+   The Quest button — a little CRT panel
+   ============================================
+   It is a portal into Quest Mode, so it wears the phosphor amber the quest
+   screens use (and the Amber CRT / Phosphor themes ship), with the same
+   scanline treatment the app puts over the whole page on those themes. The
+   glow is a text-shadow and an inset shadow rather than a filter, so it stays
+   crisp on the pixel art. */
+.quest-crt {
+  position: relative;
+  color: #ffb24a;
+  background:
+    radial-gradient(130% 190% at 12% 0%, rgba(255, 160, 60, 0.20), transparent 64%),
+    linear-gradient(180deg, rgba(255, 150, 50, 0.10), rgba(255, 120, 30, 0.03)),
+    #140d05;
+  border-color: rgba(255, 170, 70, 0.55);
+  text-shadow: 0 0 8px rgba(255, 150, 50, 0.55);
+  box-shadow:
+    inset 0 0 26px rgba(255, 150, 50, 0.14),
+    inset 0 0 0 1px rgba(255, 170, 70, 0.10),
+    0 0 20px rgba(255, 140, 40, 0.12);
+}
+/* Scanlines, 1 in 3 as on the quest stage, plus the tube's own vertical
+   falloff. Inherits the button's radius, sits above the content, inert to
+   pointers. */
+.quest-crt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.30) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 150% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.35));
+}
+.quest-crt .quest-sub { color: rgba(255, 178, 74, 0.70); text-shadow: 0 0 6px rgba(255, 150, 50, 0.4); }
+
+/* The pixel arrow nudges right on a slow loop, so the row reads as an invitation
+   rather than another list item. Whole pixels only — a fractional translate
+   would blur a crispEdges SVG. */
+@keyframes quest-beckon {
+  0%, 62%, 100% { transform: translateX(0); }
+  78%           { transform: translateX(2px); }
+}
+
+/* A tube settling: barely there, and long enough between flickers to feel like
+   hardware rather than a loading state. */
+@keyframes quest-flicker {
+  0%, 92%, 100% { opacity: 1; }
+  94%           { opacity: 0.82; }
+  96%           { opacity: 1; }
+  97%           { opacity: 0.9; }
+  98%           { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quest-crt, .quest-crt svg { animation: none !important; }
+}
+
+/* QUEST-SKINS:BEGIN */
+/* ============================================
+
+   QUEST SKINS — generated, do not hand-edit
+
+   Source: questSkinsCss.mjs — node quest.check.mjs --write-skin-css
+
+   ============================================ */
+
+html.quest-skin-q-cur {
+  --color-bg-0: #000000;
+  --color-bg-1: #0d0a06;
+  --color-bg-2: #120d08;
+  --color-bg-3: #18110a;
+  --color-bg-4: #18110a;
+  --color-surface: #0d0a06;
+  --color-surface-hover: #120d08;
+  --color-surface-active: #18110a;
+  --color-border: #18110a;
+  --color-border-strong: #18110a;
+  --color-text-primary: #ff9a3c;
+  --color-text-secondary: #c4751f;
+  --color-text-tertiary: #8a5010;
+  --color-text-muted: #8a5010;
+  --color-accent: rgba(255,0,0,0.25);
+  --color-accent-hover: color-mix(in srgb, rgba(255,0,0,0.25) 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, rgba(255,0,0,0.25) 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, rgba(255,0,0,0.25) 40%, transparent);
+  --color-on-accent: #ffffff;
+  --color-success: #b6ff5a;
+  --color-error: #ff5a6a;
+  --g-ok: color-mix(in srgb, #b6ff5a 42%, #000);
+  --g-ok-ink: color-mix(in srgb, #b6ff5a 16%, #000);
+  --g-timer: #f59e0b;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #000000;
+  --q-r-card: 28px;
+  --q-r-btn: 18px;
+  --q-r-small: 14px;
+  --q-line: none;
+  --q-shadow: none;
+  --q-label: #ff6b5a;
+  --q-battle: #ff2222;
+  --q-rest: #f59e0b;
+  --q-nav-bg: #000;
+  --q-nav-col: rgba(255,0,0,.6);
+  --q-lv: #c08457;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3a {
+  --color-bg-0: #050505;
+  --color-bg-1: #0c0c0c;
+  --color-bg-2: #151515;
+  --color-bg-3: #222;
+  --color-bg-4: #222;
+  --color-surface: #0c0c0c;
+  --color-surface-hover: #151515;
+  --color-surface-active: #222;
+  --color-border: #222;
+  --color-border-strong: #222;
+  --color-text-primary: #f4f4f4;
+  --color-text-secondary: #b0b0b0;
+  --color-text-tertiary: #777;
+  --color-text-muted: #777;
+  --color-accent: #ff2222;
+  --color-accent-hover: color-mix(in srgb, #ff2222 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #ff2222 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #ff2222 40%, transparent);
+  --color-on-accent: #fff;
+  --color-success: #22c55e;
+  --color-error: #ff4d4d;
+  --g-ok: color-mix(in srgb, #22c55e 42%, #000);
+  --g-ok-ink: color-mix(in srgb, #22c55e 16%, #000);
+  --g-timer: #f59e0b;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #050505;
+  --q-r-card: 8px;
+  --q-r-btn: 8px;
+  --q-r-small: 6px;
+  --q-line: 2px solid #2a0b0b;
+  --q-shadow: none;
+  --q-label: #ff2222;
+  --q-battle: #ff2222;
+  --q-rest: #f59e0b;
+  --q-nav-bg: #000;
+  --q-nav-col: #ff2222;
+  --q-lv: #fbbf24;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+  --q-head-case: uppercase;
+}
+
+html.quest-skin-q-3b {
+  --color-bg-0: #f3eee3;
+  --color-bg-1: #fbf8f1;
+  --color-bg-2: #efe8da;
+  --color-bg-3: #e2d8c3;
+  --color-bg-4: #e2d8c3;
+  --color-surface: #fbf8f1;
+  --color-surface-hover: #efe8da;
+  --color-surface-active: #e2d8c3;
+  --color-border: #e2d8c3;
+  --color-border-strong: #e2d8c3;
+  --color-text-primary: #1f1b16;
+  --color-text-secondary: #5e554a;
+  --color-text-tertiary: #857a6b;
+  --color-text-muted: #857a6b;
+  --color-accent: #1f1b16;
+  --color-accent-hover: color-mix(in srgb, #1f1b16 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #1f1b16 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #1f1b16 40%, transparent);
+  --color-on-accent: #fbf8f1;
+  --color-success: #2f6b3a;
+  --color-error: #c0392b;
+  --g-ok: #2f6b3a;
+  --g-ok-ink: #fbf8f1;
+  --g-timer: #8a5a00;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #f3eee3;
+  --q-r-card: 6px;
+  --q-r-btn: 8px;
+  --q-r-small: 6px;
+  --q-line: 1.5px solid #2a2620;
+  --q-shadow: 3px 3px 0 #2a2620;
+  --q-label: #c0392b;
+  --q-battle: #c0392b;
+  --q-rest: #8a5a00;
+  --q-nav-bg: #f3eee3;
+  --q-nav-col: #1f1b16;
+  --q-lv: #1f1b16;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3c {
+  --color-bg-0: #000800;
+  --color-bg-1: #001000;
+  --color-bg-2: #001800;
+  --color-bg-3: #002200;
+  --color-bg-4: #002200;
+  --color-surface: #001000;
+  --color-surface-hover: #001800;
+  --color-surface-active: #002200;
+  --color-border: #002200;
+  --color-border-strong: #002200;
+  --color-text-primary: #33ff33;
+  --color-text-secondary: #22aa22;
+  --color-text-tertiary: #117711;
+  --color-text-muted: #117711;
+  --color-accent: #00ff00;
+  --color-accent-hover: color-mix(in srgb, #00ff00 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #00ff00 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #00ff00 40%, transparent);
+  --color-on-accent: #000;
+  --color-success: #33ff33;
+  --color-error: #ff5a5a;
+  --g-ok: #0a5a0a;
+  --g-ok-ink: #ccffcc;
+  --g-timer: #ccff66;
+  --font-display: 'DM Mono', ui-monospace, monospace;
+  --theme-meta: #000800;
+  --q-r-card: 8px;
+  --q-r-btn: 6px;
+  --q-r-small: 4px;
+  --q-line: 1px solid #003300;
+  --q-shadow: none;
+  --q-label: #00ff00;
+  --q-battle: #00ff00;
+  --q-rest: #ccff66;
+  --q-nav-bg: #000800;
+  --q-nav-col: #33ff33;
+  --q-lv: #33ff33;
+  --q-roll: rgba(0,255,0,.06);
+  --q-head-font: 'DM Mono', ui-monospace, monospace;
+}
+
+html.quest-skin-q-3e {
+  --color-bg-0: #d6d9cc;
+  --color-bg-1: #e6e8dd;
+  --color-bg-2: #cfd3c2;
+  --color-bg-3: #bfc4ae;
+  --color-bg-4: #bfc4ae;
+  --color-surface: #e6e8dd;
+  --color-surface-hover: #cfd3c2;
+  --color-surface-active: #bfc4ae;
+  --color-border: #bfc4ae;
+  --color-border-strong: #bfc4ae;
+  --color-text-primary: #1f2a18;
+  --color-text-secondary: #4a5640;
+  --color-text-tertiary: #6e7862;
+  --color-text-muted: #6e7862;
+  --color-accent: #9b2257;
+  --color-accent-hover: color-mix(in srgb, #9b2257 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #9b2257 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #9b2257 40%, transparent);
+  --color-on-accent: #fff;
+  --color-success: #306230;
+  --color-error: #9b2257;
+  --g-ok: #306230;
+  --g-ok-ink: #e6e8dd;
+  --g-timer: #306230;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #d6d9cc;
+  --q-r-card: 12px;
+  --q-r-btn: 27px;
+  --q-r-small: 10px;
+  --q-line: none;
+  --q-shadow: none;
+  --q-label: #3949ab;
+  --q-battle: #9b2257;
+  --q-rest: #306230;
+  --q-nav-bg: #d6d9cc;
+  --q-nav-col: #3949ab;
+  --q-lv: #0f380f;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+  --q-bezel: #5b5f6e;
+}
+
+html.quest-skin-q-4d {
+  --color-bg-0: #0b0b0d;
+  --color-bg-1: #141417;
+  --color-bg-2: #1c1c20;
+  --color-bg-3: #2a2a2e;
+  --color-bg-4: #2a2a2e;
+  --color-surface: #141417;
+  --color-surface-hover: #1c1c20;
+  --color-surface-active: #2a2a2e;
+  --color-border: #2a2a2e;
+  --color-border-strong: #2a2a2e;
+  --color-text-primary: #e4e4e8;
+  --color-text-secondary: #9a9aa2;
+  --color-text-tertiary: #70707a;
+  --color-text-muted: #70707a;
+  --color-accent: #ff5a5a;
+  --color-accent-hover: color-mix(in srgb, #ff5a5a 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #ff5a5a 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #ff5a5a 40%, transparent);
+  --color-on-accent: #0b0b0d;
+  --color-success: #40c890;
+  --color-error: #ff5a5a;
+  --g-ok: #40c890;
+  --g-ok-ink: #0b0b0d;
+  --g-timer: #f08ad8;
+  --font-display: 'DM Mono', ui-monospace, monospace;
+  --theme-meta: #0b0b0d;
+  --q-r-card: 0px;
+  --q-r-btn: 0px;
+  --q-r-small: 0px;
+  --q-line: 2px solid #2a2a2e;
+  --q-shadow: 4px 4px 0 #000;
+  --q-label: #6a9cff;
+  --q-battle: #ff5a5a;
+  --q-rest: #f08ad8;
+  --q-nav-bg: #0b0b0d;
+  --q-nav-col: #e4e4e8;
+  --q-lv: #40c890;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'DM Mono', ui-monospace, monospace;
+  --q-head-case: uppercase;
+  --q-bezel: #1c1c20;
+}
+
+html.quest-skin-q-3j {
+  --color-bg-0: #f8f4f6;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #f1e9ed;
+  --color-bg-3: #e7d0dc;
+  --color-bg-4: #e7d0dc;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1e9ed;
+  --color-surface-active: #e7d0dc;
+  --color-border: #e7d0dc;
+  --color-border-strong: #e7d0dc;
+  --color-text-primary: #2b1821;
+  --color-text-secondary: #593145;
+  --color-text-tertiary: #77465f;
+  --color-text-muted: #77465f;
+  --color-accent: #d6006e;
+  --color-accent-hover: color-mix(in srgb, #d6006e 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #d6006e 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #d6006e 40%, transparent);
+  --color-on-accent: #fff;
+  --color-success: #15803d;
+  --color-error: #c62828;
+  --g-ok: #15803d;
+  --g-ok-ink: #fff;
+  --g-timer: #7c3aed;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #f8f4f6;
+  --q-r-card: 28px;
+  --q-r-btn: 18px;
+  --q-r-small: 14px;
+  --q-line: none;
+  --q-shadow: 0 1px 2px rgba(43,24,33,.05), 0 10px 30px rgba(214,0,110,.08);
+  --q-label: #d6006e;
+  --q-battle: #d6006e;
+  --q-rest: #7c3aed;
+  --q-nav-bg: #f8f4f6;
+  --q-nav-col: #d6006e;
+  --q-lv: #7c3aed;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3k {
+  --color-bg-0: #fff7dc;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #fff0bf;
+  --color-bg-3: #ffe27a;
+  --color-bg-4: #ffe27a;
+  --color-surface: #ffffff;
+  --color-surface-hover: #fff0bf;
+  --color-surface-active: #ffe27a;
+  --color-border: #ffe27a;
+  --color-border-strong: #ffe27a;
+  --color-text-primary: #111111;
+  --color-text-secondary: #333333;
+  --color-text-tertiary: #666666;
+  --color-text-muted: #666666;
+  --color-accent: #e63946;
+  --color-accent-hover: color-mix(in srgb, #e63946 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #e63946 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #e63946 40%, transparent);
+  --color-on-accent: #ffffff;
+  --color-success: #1a8a4a;
+  --color-error: #e63946;
+  --g-ok: #1a8a4a;
+  --g-ok-ink: #ffffff;
+  --g-timer: #1d70b8;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #fff7dc;
+  --q-r-card: 10px;
+  --q-r-btn: 12px;
+  --q-r-small: 8px;
+  --q-line: 3px solid #111;
+  --q-shadow: 4px 4px 0 #111;
+  --q-label: #e63946;
+  --q-battle: #e63946;
+  --q-rest: #1d70b8;
+  --q-nav-bg: #fff7dc;
+  --q-nav-col: #111;
+  --q-lv: #e63946;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3m {
+  --color-bg-0: #f6f1e7;
+  --color-bg-1: #fffdf7;
+  --color-bg-2: #efe7d6;
+  --color-bg-3: #e3d7bf;
+  --color-bg-4: #e3d7bf;
+  --color-surface: #fffdf7;
+  --color-surface-hover: #efe7d6;
+  --color-surface-active: #e3d7bf;
+  --color-border: #e3d7bf;
+  --color-border-strong: #e3d7bf;
+  --color-text-primary: #22346f;
+  --color-text-secondary: #4a5a94;
+  --color-text-tertiary: #7a84a8;
+  --color-text-muted: #7a84a8;
+  --color-accent: #ff48b0;
+  --color-accent-hover: color-mix(in srgb, #ff48b0 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #ff48b0 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #ff48b0 40%, transparent);
+  --color-on-accent: #ffffff;
+  --color-success: #1f8a70;
+  --color-error: #e0245e;
+  --g-ok: #3255a4;
+  --g-ok-ink: #fffdf7;
+  --g-timer: #3255a4;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #f6f1e7;
+  --q-r-card: 14px;
+  --q-r-btn: 14px;
+  --q-r-small: 10px;
+  --q-line: none;
+  --q-shadow: 3px 3px 0 #3255a4;
+  --q-label: #ff48b0;
+  --q-battle: #ff48b0;
+  --q-rest: #3255a4;
+  --q-nav-bg: #f6f1e7;
+  --q-nav-col: #3255a4;
+  --q-lv: #ff48b0;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3p {
+  --color-bg-0: #000000;
+  --color-bg-1: #0c0c0c;
+  --color-bg-2: #161616;
+  --color-bg-3: #242424;
+  --color-bg-4: #242424;
+  --color-surface: #0c0c0c;
+  --color-surface-hover: #161616;
+  --color-surface-active: #242424;
+  --color-border: #242424;
+  --color-border-strong: #242424;
+  --color-text-primary: #ecece6;
+  --color-text-secondary: #a6a6a0;
+  --color-text-tertiary: #7a7a74;
+  --color-text-muted: #7a7a74;
+  --color-accent: #c8141e;
+  --color-accent-hover: color-mix(in srgb, #c8141e 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #c8141e 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #c8141e 40%, transparent);
+  --color-on-accent: #ffffff;
+  --color-success: #ecece6;
+  --color-error: #e01a26;
+  --g-ok: #ecece6;
+  --g-ok-ink: #000;
+  --g-timer: #a6a6a0;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #000000;
+  --q-r-card: 4px;
+  --q-r-btn: 4px;
+  --q-r-small: 2px;
+  --q-line: 1px solid #242424;
+  --q-shadow: none;
+  --q-label: #a6a6a0;
+  --q-battle: #e01a26;
+  --q-rest: #a6a6a0;
+  --q-nav-bg: #000;
+  --q-nav-col: #ecece6;
+  --q-lv: #c8141e;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: Georgia, 'Times New Roman', serif;
+  --q-head-weight: 700px;
+}
+
+html.quest-skin-q-3s {
+  --color-bg-0: #f2f7fc;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #e6eff8;
+  --color-bg-3: #d3e2f1;
+  --color-bg-4: #d3e2f1;
+  --color-surface: #ffffff;
+  --color-surface-hover: #e6eff8;
+  --color-surface-active: #d3e2f1;
+  --color-border: #d3e2f1;
+  --color-border-strong: #d3e2f1;
+  --color-text-primary: #10244a;
+  --color-text-secondary: #41618f;
+  --color-text-tertiary: #5f7aa0;
+  --color-text-muted: #5f7aa0;
+  --color-accent: #1d4ed8;
+  --color-accent-hover: color-mix(in srgb, #1d4ed8 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #1d4ed8 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #1d4ed8 40%, transparent);
+  --color-on-accent: #ffffff;
+  --color-success: #0f8a6a;
+  --color-error: #c0392b;
+  --g-ok: #0f8a6a;
+  --g-ok-ink: #ffffff;
+  --g-timer: #0ea5b7;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #f2f7fc;
+  --q-r-card: 26px;
+  --q-r-btn: 18px;
+  --q-r-small: 14px;
+  --q-line: none;
+  --q-shadow: 0 1px 2px rgba(16,36,74,.05), 0 10px 30px rgba(16,36,74,.07);
+  --q-label: #2563eb;
+  --q-battle: #1d4ed8;
+  --q-rest: #0ea5b7;
+  --q-nav-bg: #f2f7fc;
+  --q-nav-col: #1d4ed8;
+  --q-lv: #2563eb;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3u {
+  --color-bg-0: #0f0420;
+  --color-bg-1: #1a0832;
+  --color-bg-2: #260d45;
+  --color-bg-3: #36145c;
+  --color-bg-4: #36145c;
+  --color-surface: #1a0832;
+  --color-surface-hover: #260d45;
+  --color-surface-active: #36145c;
+  --color-border: #36145c;
+  --color-border-strong: #36145c;
+  --color-text-primary: #ffe9f4;
+  --color-text-secondary: #d9a6d8;
+  --color-text-tertiary: #a77aa8;
+  --color-text-muted: #a77aa8;
+  --color-accent: #ff6a5a;
+  --color-accent-hover: color-mix(in srgb, #ff6a5a 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #ff6a5a 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #ff6a5a 40%, transparent);
+  --color-on-accent: #1a0420;
+  --color-success: #5eead4;
+  --color-error: #ff5a7a;
+  --g-ok: #115e59;
+  --g-ok-ink: #ccfbf1;
+  --g-timer: #7dd3fc;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #0f0420;
+  --q-r-card: 26px;
+  --q-r-btn: 18px;
+  --q-r-small: 12px;
+  --q-line: 1px solid #36145c;
+  --q-shadow: none;
+  --q-label: #ff7ad0;
+  --q-battle: #ff48c8;
+  --q-rest: #7dd3fc;
+  --q-nav-bg: #0f0420;
+  --q-nav-col: #ff7ad0;
+  --q-lv: #ffb36b;
+  --q-roll: rgba(255,72,200,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3x {
+  --color-bg-0: #0a0706;
+  --color-bg-1: #16110e;
+  --color-bg-2: #221a15;
+  --color-bg-3: #33281f;
+  --color-bg-4: #33281f;
+  --color-surface: #16110e;
+  --color-surface-hover: #221a15;
+  --color-surface-active: #33281f;
+  --color-border: #33281f;
+  --color-border-strong: #33281f;
+  --color-text-primary: #ffeedd;
+  --color-text-secondary: #c9a88c;
+  --color-text-tertiary: #8f7562;
+  --color-text-muted: #8f7562;
+  --color-accent: #ff5a1f;
+  --color-accent-hover: color-mix(in srgb, #ff5a1f 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #ff5a1f 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #ff5a1f 40%, transparent);
+  --color-on-accent: #1a0600;
+  --color-success: #a3e635;
+  --color-error: #ff4d4d;
+  --g-ok: #3f5a12;
+  --g-ok-ink: #ecfccb;
+  --g-timer: #ffcc44;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #0a0706;
+  --q-r-card: 10px;
+  --q-r-btn: 8px;
+  --q-r-small: 6px;
+  --q-line: 1px solid #33281f;
+  --q-shadow: none;
+  --q-label: #ff6e14;
+  --q-battle: #ff5a1f;
+  --q-rest: #ffcc44;
+  --q-nav-bg: #0a0706;
+  --q-nav-col: #ff6e14;
+  --q-lv: #ff9a3c;
+  --q-roll: rgba(255,90,20,.04);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3y {
+  --color-bg-0: #f2f4ea;
+  --color-bg-1: #fbfaf3;
+  --color-bg-2: #e9eedd;
+  --color-bg-3: #d8e2c8;
+  --color-bg-4: #d8e2c8;
+  --color-surface: #fbfaf3;
+  --color-surface-hover: #e9eedd;
+  --color-surface-active: #d8e2c8;
+  --color-border: #d8e2c8;
+  --color-border-strong: #d8e2c8;
+  --color-text-primary: #1e2e1a;
+  --color-text-secondary: #4a5e40;
+  --color-text-tertiary: #6e7f62;
+  --color-text-muted: #6e7f62;
+  --color-accent: #3f6b2e;
+  --color-accent-hover: color-mix(in srgb, #3f6b2e 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #3f6b2e 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #3f6b2e 40%, transparent);
+  --color-on-accent: #fbfaf3;
+  --color-success: #3f6b2e;
+  --color-error: #b4472a;
+  --g-ok: #3f6b2e;
+  --g-ok-ink: #fbfaf3;
+  --g-timer: #c9922e;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #f2f4ea;
+  --q-r-card: 28px;
+  --q-r-btn: 20px;
+  --q-r-small: 14px;
+  --q-line: none;
+  --q-shadow: 0 1px 2px rgba(30,46,26,.05), 0 10px 30px rgba(40,70,30,.08);
+  --q-label: #c45c3a;
+  --q-battle: #c45c3a;
+  --q-rest: #c9922e;
+  --q-nav-bg: #f2f4ea;
+  --q-nav-col: #3f6b2e;
+  --q-lv: #c45c3a;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: Georgia, 'Times New Roman', serif;
+  --q-head-weight: 700px;
+}
+
+html.quest-skin-q-4a {
+  --color-bg-0: #0f1012;
+  --color-bg-1: #18191c;
+  --color-bg-2: #212327;
+  --color-bg-3: #2e3138;
+  --color-bg-4: #2e3138;
+  --color-surface: #18191c;
+  --color-surface-hover: #212327;
+  --color-surface-active: #2e3138;
+  --color-border: #2e3138;
+  --color-border-strong: #2e3138;
+  --color-text-primary: #e8e9ec;
+  --color-text-secondary: #9a9ea8;
+  --color-text-tertiary: #70747e;
+  --color-text-muted: #70747e;
+  --color-accent: #c8ff3c;
+  --color-accent-hover: color-mix(in srgb, #c8ff3c 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #c8ff3c 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #c8ff3c 40%, transparent);
+  --color-on-accent: #141518;
+  --color-success: #c8ff3c;
+  --color-error: #ff6b6b;
+  --g-ok: #3a4a12;
+  --g-ok-ink: #e6ffb0;
+  --g-timer: #9a9ea8;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #0f1012;
+  --q-r-card: 22px;
+  --q-r-btn: 14px;
+  --q-r-small: 10px;
+  --q-line: 1px solid #26282d;
+  --q-shadow: none;
+  --q-label: #9a9ea8;
+  --q-battle: #c8ff3c;
+  --q-rest: #9a9ea8;
+  --q-nav-bg: #0f1012;
+  --q-nav-col: #e8e9ec;
+  --q-lv: #c8ff3c;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-4b {
+  --color-bg-0: #080b20;
+  --color-bg-1: #0f1334;
+  --color-bg-2: #171c46;
+  --color-bg-3: #232a5c;
+  --color-bg-4: #232a5c;
+  --color-surface: #0f1334;
+  --color-surface-hover: #171c46;
+  --color-surface-active: #232a5c;
+  --color-border: #232a5c;
+  --color-border-strong: #232a5c;
+  --color-text-primary: #f3ead6;
+  --color-text-secondary: #b8b0a0;
+  --color-text-tertiary: #8a88a8;
+  --color-text-muted: #8a88a8;
+  --color-accent: #e4d6b4;
+  --color-accent-hover: color-mix(in srgb, #e4d6b4 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #e4d6b4 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #e4d6b4 40%, transparent);
+  --color-on-accent: #0b0f2a;
+  --color-success: #9be3b0;
+  --color-error: #ff8a8a;
+  --g-ok: #1f4a36;
+  --g-ok-ink: #d6f5e0;
+  --g-timer: #8fa6ff;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #080b20;
+  --q-r-card: 20px;
+  --q-r-btn: 12px;
+  --q-r-small: 8px;
+  --q-line: 1px solid #232a5c;
+  --q-shadow: none;
+  --q-label: #e4d6b4;
+  --q-battle: #e4d6b4;
+  --q-rest: #8fa6ff;
+  --q-nav-bg: #080b20;
+  --q-nav-col: #e4d6b4;
+  --q-lv: #e4d6b4;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: Georgia, 'Times New Roman', serif;
+  --q-head-weight: 700px;
+}
+
+html.quest-skin-q-4c {
+  --color-bg-0: #030a0e;
+  --color-bg-1: #081518;
+  --color-bg-2: #0e2024;
+  --color-bg-3: #163036;
+  --color-bg-4: #163036;
+  --color-surface: #081518;
+  --color-surface-hover: #0e2024;
+  --color-surface-active: #163036;
+  --color-border: #163036;
+  --color-border-strong: #163036;
+  --color-text-primary: #e2fbf0;
+  --color-text-secondary: #94c8b4;
+  --color-text-tertiary: #64928a;
+  --color-text-muted: #64928a;
+  --color-accent: #50e696;
+  --color-accent-hover: color-mix(in srgb, #50e696 80%, #fff);
+  --color-accent-muted: color-mix(in srgb, #50e696 15%, transparent);
+  --color-accent-glow: color-mix(in srgb, #50e696 40%, transparent);
+  --color-on-accent: #03140c;
+  --color-success: #50e696;
+  --color-error: #ff7a8a;
+  --g-ok: #14503a;
+  --g-ok-ink: #d0fbe6;
+  --g-timer: #b8a4ff;
+  --font-display: 'Manrope', system-ui, sans-serif;
+  --theme-meta: #030a0e;
+  --q-r-card: 26px;
+  --q-r-btn: 18px;
+  --q-r-small: 12px;
+  --q-line: 1px solid #163036;
+  --q-shadow: none;
+  --q-label: #50e696;
+  --q-battle: #50e696;
+  --q-rest: #b8a4ff;
+  --q-nav-bg: #030a0e;
+  --q-nav-col: #50e696;
+  --q-lv: #b8a4ff;
+  --q-roll: rgba(255,0,0,.05);
+  --q-head-font: 'Manrope', system-ui, sans-serif;
+}
+
+html.quest-skin-q-3a .q-cta {
+  box-shadow: inset 0 -5px 0 color-mix(in srgb, #ff2222 45%, #000), 0 0 22px color-mix(in srgb, #ff2222 30%, transparent) !important;
+}
+
+html.quest-skin-q-3b .q-cta {
+  box-shadow: 3px 3px 0 #c0392b !important;
+}
+
+html.quest-skin-q-3e .q-cta {
+  box-shadow: 0 3px 0 #5e1435 !important;
+}
+
+html.quest-skin-q-4d .q-cta {
+  box-shadow: 4px 4px 0 #000 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .06em !important;
+}
+
+html.quest-skin-q-3k .q-cta {
+  border: 3px solid #111 !important;
+  box-shadow: 4px 4px 0 #111 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .02em !important;
+}
+
+html.quest-skin-q-3m .q-cta {
+  box-shadow: 3px 3px 0 #3255a4 !important;
+}
+
+html.quest-skin-q-3u .q-cta {
+  background: linear-gradient(90deg, #ff6a5a, #ff9a4a 55%, #ffd27a) !important;
+  box-shadow: 0 6px 20px rgba(255,140,60,.35) !important;
+}
+
+html.quest-skin-q-3x .q-cta {
+  background: linear-gradient(90deg, #e61e3c, #ff5a1f 50%, #ffaa00) !important;
+  box-shadow: 0 0 22px rgba(255,90,31,.4) !important;
+}
+
+html.quest-skin-q-4b .q-cta {
+  background: linear-gradient(#fde68a, #fbbf24 55%, #d97706) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 6px 18px rgba(251,191,36,.25) !important;
+}
+
+html.quest-skin-q-4c .q-cta {
+  box-shadow: 0 0 24px color-mix(in srgb, #50e696 45%, transparent), inset 0 1px 0 rgba(255,255,255,.3) !important;
+}
+
+/* The quest screens under a skin: the three radii, the card frame, the
+   bezelled stage and the face-button glyphs. Everything else rides the
+   variables above, which the existing Tailwind bg- and text- utilities read.
+   The html class is only ever set while a quest screen is up (ThemeContext),
+   so these need no extra scope of their own. */
+html[class*="quest-skin-"] .rounded-\[28px\] { border-radius: var(--q-r-card); }
+html[class*="quest-skin-"] .rounded-\[20px\],
+html[class*="quest-skin-"] .rounded-\[18px\] { border-radius: var(--q-r-btn); }
+html[class*="quest-skin-"] .rounded-\[14px\],
+html[class*="quest-skin-"] .rounded-\[12px\] { border-radius: var(--q-r-small); }
+html[class*="quest-skin-"] .q-card { border: var(--q-line); box-shadow: var(--q-shadow); }
+html[class*="quest-skin-"] .g-label { color: var(--q-label); }
+html[class*="quest-skin-"] .q-head { font-family: var(--q-head-font); font-weight: var(--q-head-weight, 800); text-transform: var(--q-head-case, none); }
+html[class*="quest-skin-"] .q-nav { background: var(--q-nav-bg); color: var(--q-nav-col); }
+/* The handheld and console skins put the stage behind a moulded bezel. */
+html[class*="quest-skin-"] .q-bezel { padding: 8px 8px 4px; border-radius: 10px 10px 30px 10px; background: var(--q-bezel); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+html[class*="quest-skin-"].scr-roll::before { background: linear-gradient(transparent 0%, var(--q-roll) 50%, transparent 100%); }
+/* Console 2000's face buttons: a square tile before the label. */
+.q-glyph { display: inline-flex; width: 20px; height: 20px; margin-right: 8px; align-items: center; justify-content: center; vertical-align: middle; background: #0b0b0d; box-shadow: 0 0 0 2px #0b0b0d; font: 700 12px 'Manrope', system-ui, sans-serif; line-height: 1; }
+.q-glyph-t { color: #40c890; } .q-glyph-c { color: #ff5a5a; } .q-glyph-x { color: #6a9cff; } .q-glyph-s { color: #f08ad8; }
+/* The rubber stamp that replaces the damage number on Field Journal. */
+@keyframes qs-stamp { 0% { transform: scale(2.2) rotate(-14deg); opacity: 0; } 60% { transform: scale(.92) rotate(-6deg); opacity: 1; } 100% { transform: scale(1) rotate(-6deg); opacity: 1; } }
+/* QUEST-SKINS:END */

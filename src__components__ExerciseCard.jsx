@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback, useEffect, useRef } from 'react';
-import SetRow from './SetRow';
+import SetSwiper from './SetSwiper';
 import RestTimer from './RestTimer';
 import ProgressionBar from './ProgressionBar';
 import NavIcon from './NavIcon';
@@ -30,12 +30,15 @@ export default function ExerciseCard({
   onRemoveBFR,
   onAddInterval,
   onRemoveInterval,
+  onAddTimed,
+  onRemoveTimed,
   onLinkSuperset,
   onUnlinkSuperset,
   onAddVariable,
   onRemoveVariable,
   onTimerActiveChange,
   inSuperset = false,
+  supersetActive = true,
 }) {
   // Inside a superset the shell owns the chrome and the card is always open —
   // the A/B switch above it is what changes which exercise you're looking at.
@@ -105,7 +108,7 @@ export default function ExerciseCard({
     return (
     <motion.div layout="position" variants={staggerItem}
       className={inSuperset
-        ? `overflow-hidden w-full max-w-full transition-colors ${stateBg}`
+        ? `overflow-hidden w-full max-w-full flex-1 flex flex-col transition-colors ${stateBg}`
         : `rounded-xl overflow-hidden border transition-colors w-full max-w-full ${stateBorder} ${stateBg}`}
     >
       {/* Superset badge — only when the card is standing on its own */}
@@ -130,15 +133,15 @@ export default function ExerciseCard({
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className={`font-display truncate ${expanded ? 'font-bold text-lg text-text-primary' : 'font-semibold text-sm text-text-primary'}`}>
+            <div className={`font-display truncate ${expanded ? 'font-bold text-2xl text-text-primary' : 'font-semibold text-lg text-text-primary'}`}>
               {exercise.substituted ? (
                 <>
                   <span className="line-through text-text-tertiary">{exercise.substituted.original}</span>
                   <span className="text-warning mx-1">→</span>
-                  {expanded ? <TypewriterName text={exercise.name} active={expanded} /> : <span>{exercise.name}</span>}
+                  {expanded ? <TypewriterName text={exercise.name} active={expanded && supersetActive} /> : <span>{exercise.name}</span>}
                 </>
               ) : expanded ? (
-                <TypewriterName text={exercise.name} active={expanded} />
+                <TypewriterName text={exercise.name} active={expanded && supersetActive} />
               ) : exercise.name}
             </div>
             {hasDropSets && (
@@ -149,6 +152,9 @@ export default function ExerciseCard({
             )}
             {exercise.sets.some(s => s.type === 'interval') && (
               <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/10 text-orange-400 border border-orange-400/20">INTERVAL</span>
+            )}
+            {exercise.sets.some(s => s.type === 'timed') && (
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">TIMED</span>
             )}
             {hasVariableSets && (
               <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20">VAR</span>
@@ -163,7 +169,7 @@ export default function ExerciseCard({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <motion.div layout className={`px-2.5 py-1 rounded-lg font-mono text-sm font-bold ${allComplete ? 'bg-success text-white' : 'bg-bg-3 text-text-secondary'}`}>
+          <motion.div layout className={`px-2.5 py-1 rounded-lg font-mono text-sm font-bold ${allComplete ? 'bg-success text-white' : `bg-bg-3 text-text-secondary ps-${'xots'[exerciseIndex % 4]}`}`}>
             {allComplete ? '✓' : `${completedCount}/${totalSets}`}
           </motion.div>
           {!inSuperset && (
@@ -180,7 +186,7 @@ export default function ExerciseCard({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="overflow-hidden"
+            className={`overflow-hidden ${inSuperset ? 'flex-1 flex flex-col' : ''}`}
           >
             <RecoveryNote exerciseName={exercise.name} />
             {/* Controls row */}
@@ -206,30 +212,10 @@ export default function ExerciseCard({
               minutes={Math.floor(exercise.restSeconds / 60)} seconds={exercise.restSeconds % 60}
               onConfirm={(totalSeconds) => onUpdateRest(exerciseIndex, totalSeconds)} />
 
-            {/* Column headers */}
-            <div className="grid grid-cols-[32px_1fr_1fr_44px] gap-2 px-3 py-2 text-[10px] font-mono text-text-tertiary uppercase tracking-wider">
-              <span className="text-center">SET</span>
-              <span className="text-center">KG</span>
-              <span className="text-center">REPS</span>
-              <span className="text-center">✓</span>
-            </div>
-
-            {/* Set rows */}
-            <AnimatePresence>
-              {(() => {
-                let normalCount = 0;
-                return exercise.sets.map((set, si) => {
-                  const isNormal = set.type !== 'drop';
-                  const ni = isNormal ? normalCount++ : normalCount - 1;
-                  return (
-                    <SetRow key={si} index={si} normalIndex={ni} set={set} exerciseIndex={exerciseIndex}
-                      onUpdate={handleUpdateSet} onDelete={handleDeleteSet}
-                      onComplete={onSetComplete} restSeconds={exercise.restSeconds}
-                      onPhaseChange={hasIntervalSets ? setIntervalPhase : undefined} />
-                  );
-                });
-              })()}
-            </AnimatePresence>
+            {/* One set at a time: set pills, big KG / REPS steppers, swipe between sets. */}
+            <SetSwiper exercise={exercise} exerciseIndex={exerciseIndex}
+              onUpdate={handleUpdateSet} onDelete={handleDeleteSet} onComplete={onSetComplete}
+              onPhaseChange={hasIntervalSets ? setIntervalPhase : undefined} />
 
             {/* Exercise Notes */}
             <AnimatePresence>
@@ -243,7 +229,7 @@ export default function ExerciseCard({
             </AnimatePresence>
 
             {/* Action buttons — uniform icon-over-label so labels of any length line up */}
-            <div className="flex border-t border-border">
+            <div className={`flex border-t border-border ${inSuperset ? 'mt-auto' : ''}`}>
               <motion.button whileTap={{ scale: 0.95 }} onClick={() => onAddSet(exerciseIndex)}
                 className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-accent hover:bg-accent-muted transition-colors">
                 <NavIcon id="plus" size={16} />
@@ -282,7 +268,7 @@ export default function ExerciseCard({
             </div>
 
             <SubstituteModal open={showSubstitute} onClose={() => setShowSubstitute(false)}
-              exerciseName={exercise.name} onSelect={(newName) => onSubstitute?.(exerciseIndex, newName)} />
+              exerciseName={exercise.name} onSelect={(newName, type) => onSubstitute?.(exerciseIndex, newName, type)} />
 
             <SpecialSetModal
               open={showSpecial}
@@ -297,6 +283,8 @@ export default function ExerciseCard({
               onRemoveBFR={onRemoveBFR}
               onAddInterval={onAddInterval}
               onRemoveInterval={onRemoveInterval}
+              onAddTimed={onAddTimed}
+              onRemoveTimed={onRemoveTimed}
               onLinkSuperset={onLinkSuperset}
               onAddVariable={onAddVariable}
               onRemoveVariable={onRemoveVariable}

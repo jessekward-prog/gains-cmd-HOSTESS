@@ -6,7 +6,9 @@ import useBackHandler from '../hooks/useBackHandler';
 import { PickerWheel } from './RestPickerModal';
 import { EXERCISE_LIST_ID } from './ExerciseNameOptions';
 
-export default function SpecialSetModal({ open, onClose, exercise, allExercises, exerciseIndex, onAddDropSet, onRemoveDropSet, onLinkSuperset, onUnlinkSuperset, onAddBFR, onRemoveBFR, onAddInterval, onRemoveInterval, onAddVariable, onRemoveVariable, onToggleFailure }) {
+const fmtDur = (s) => (s >= 60 ? `${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ''}` : `${s}s`);
+
+export default function SpecialSetModal({ open, onClose, exercise, allExercises, exerciseIndex, onAddDropSet, onRemoveDropSet, onLinkSuperset, onUnlinkSuperset, onAddBFR, onRemoveBFR, onAddInterval, onRemoveInterval, onAddTimed, onRemoveTimed, onAddVariable, onRemoveVariable, onToggleFailure }) {
   const [mode, setMode] = useState(null);
   const [drops, setDrops] = useState(2);
   const [supersetTarget, setSupersetTarget] = useState('');
@@ -17,7 +19,9 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
   const hasBFR = exercise?.sets?.some(s => s.type === 'bfr');
   const hasInterval = exercise?.sets?.some(s => s.type === 'interval');
   const hasVariable = exercise?.sets?.some(s => s.type === 'variable');
-  const failureEligible = (exercise?.sets || []).map((s, i) => ({ s, i })).filter(({ s }) => s.type !== 'drop' && s.type !== 'bfr' && s.type !== 'interval');
+  const hasTimed = exercise?.sets?.some(s => s.type === 'timed');
+  const currentTimedSec = exercise?.sets?.find(s => s.type === 'timed')?.timedSec || 0;
+  const failureEligible = (exercise?.sets || []).map((s, i) => ({ s, i })).filter(({ s }) => s.type !== 'drop' && s.type !== 'bfr' && s.type !== 'interval' && s.type !== 'timed');
   const failureCount = failureEligible.filter(({ s }) => s.reps === 'failure').length;
   const hasSuperset = !!exercise?.supersetWith;
   const [bfrSeconds, setBfrSeconds] = useState(45);
@@ -27,6 +31,8 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
   const [intervalRestMin, setIntervalRestMin] = useState(0);
   const [intervalRestSec, setIntervalRestSec] = useState(30);
   const [intervalSets, setIntervalSets] = useState(3);
+  const [timedMin, setTimedMin] = useState(5);
+  const [timedSec, setTimedSec] = useState(0);
   const [varSets, setVarSets] = useState([
     { weight: '', repRange: '8-12' },
     { weight: '', repRange: '8-12' },
@@ -45,6 +51,8 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
     setIntervalRestMin(0);
     setIntervalRestSec(30);
     setIntervalSets(3);
+    setTimedMin(5);
+    setTimedSec(0);
     setVarSets([{ weight: '', repRange: '8-12' }, { weight: '', repRange: '8-12' }, { weight: '', repRange: '8-12' }]);
     onClose();
   }, [onClose]);
@@ -100,6 +108,27 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
     onRemoveInterval(exerciseIndex);
     handleClose();
   }, [exerciseIndex, onRemoveInterval, handleClose]);
+
+  const openTimed = useCallback(() => {
+    // Editing an existing timer starts the wheels where it is now.
+    if (currentTimedSec > 0) {
+      setTimedMin(Math.min(60, Math.floor(currentTimedSec / 60)));
+      setTimedSec(currentTimedSec % 60 - (currentTimedSec % 60) % 5);
+    }
+    setMode('timed');
+  }, [currentTimedSec]);
+
+  const handleApplyTimed = useCallback(() => {
+    const secs = timedMin * 60 + timedSec;
+    if (secs < 5) return;
+    onAddTimed?.(exerciseIndex, secs);
+    handleClose();
+  }, [exerciseIndex, timedMin, timedSec, onAddTimed, handleClose]);
+
+  const handleRemoveTimed = useCallback(() => {
+    onRemoveTimed?.(exerciseIndex);
+    handleClose();
+  }, [exerciseIndex, onRemoveTimed, handleClose]);
 
   const handleApplyVariable = useCallback(() => {
     if (varSets.length === 0) return;
@@ -203,6 +232,37 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
                     </div>
                   </motion.button>
                 )}
+
+                {/* Timed — one countdown per set, the normal rest timer between */}
+                {onAddTimed && (hasTimed ? (
+                  <div className="w-full p-4 bg-bg-2 border border-sky-400/30 rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-display font-semibold text-sm text-sky-400 mb-0.5">Timed sets active</div>
+                        <div className="text-[11px] text-text-secondary">{fmtDur(currentTimedSec)} per set · your rest timer between</div>
+                      </div>
+                      <span className="text-[9px] font-mono px-2 py-1 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">ON</span>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={openTimed}
+                        className="flex-1 py-2 bg-bg-3 border border-border rounded-lg text-xs font-mono text-text-secondary hover:border-sky-400/30 transition-colors">
+                        Change time
+                      </motion.button>
+                      <motion.button whileTap={{ scale: 0.97 }} onClick={handleRemoveTimed}
+                        className="flex-1 py-2 bg-error/10 border border-error/30 rounded-lg text-xs font-mono text-error hover:bg-error/20 transition-colors">
+                        Remove
+                      </motion.button>
+                    </div>
+                  </div>
+                ) : (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={openTimed}
+                    className="w-full p-4 bg-bg-2 border border-border rounded-xl text-left hover:border-sky-400/30 transition-colors">
+                    <div className="font-display font-semibold text-sm text-text-primary mb-1">Timed sets</div>
+                    <div className="text-[11px] text-text-secondary leading-relaxed">
+                      Each set is one countdown — run 5 min, hold a plank 60s. No reps; your normal rest timer runs between sets.
+                    </div>
+                  </motion.button>
+                ))}
 
                 {/* BFR */}
                 {hasBFR ? (
@@ -424,6 +484,54 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
                     className="w-full py-3 rounded-xl font-mono font-semibold text-sm text-white"
                     style={{ background: 'rgb(251 146 60)' }}>
                     {hasInterval ? 'Update Intervals' : 'Apply Intervals'}
+                  </motion.button>
+                </div>
+              );
+            })()}
+
+            {/* Timed config */}
+            {mode === 'timed' && (() => {
+              const minOptions = Array.from({ length: 61 }, (_, i) => i);
+              const secOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+              const total = timedMin * 60 + timedSec;
+              const nSets = (exercise?.sets || []).filter(s => s.type !== 'drop').length;
+              return (
+                <div className="p-4 flex flex-col gap-4 overflow-y-auto flex-1 overscroll-contain">
+                  <button onClick={() => setMode(null)} className="text-[11px] font-mono text-text-tertiary text-left">← back</button>
+                  <div className="text-xs font-mono text-text-secondary">How long per set?</div>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {[30, 60, 300, 600].map(sec => (
+                      <motion.button key={sec} whileTap={{ scale: 0.9 }}
+                        onClick={() => { setTimedMin(Math.floor(sec / 60)); setTimedSec(sec % 60); }}
+                        className={`py-3 rounded-xl border-2 text-sm font-mono font-semibold transition-all ${
+                          total === sec ? 'border-sky-400 bg-sky-400/10 text-sky-400' : 'border-border text-text-secondary'}`}>
+                        {fmtDur(sec)}
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <PickerWheel items={minOptions} value={timedMin} onChange={setTimedMin} />
+                      <div className="text-center text-xs font-mono text-text-tertiary mt-1">min</div>
+                    </div>
+                    <div className="flex-1">
+                      <PickerWheel items={secOptions} value={timedSec} onChange={setTimedSec} />
+                      <div className="text-center text-xs font-mono text-text-tertiary mt-1">sec</div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-text-tertiary font-mono bg-bg-3 rounded-lg px-3 py-2">
+                    {total >= 5
+                      ? `${nSets} set${nSets === 1 ? '' : 's'} × ${fmtDur(total)} · ${exercise?.restSeconds ? `${fmtDur(exercise.restSeconds)} rest between` : 'rest timer between'}`
+                      : 'Pick at least 5 seconds'}
+                  </div>
+
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={handleApplyTimed} disabled={total < 5}
+                    className="w-full py-3 rounded-xl font-mono font-semibold text-sm text-white disabled:opacity-40"
+                    style={{ background: 'rgb(56 189 248)' }}>
+                    {hasTimed ? 'Update Timed Sets' : 'Apply Timed Sets'}
                   </motion.button>
                 </div>
               );

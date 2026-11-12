@@ -20,9 +20,14 @@ export const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, 
 export const titleCase = (s) => s.replace(/(^|[\s(/-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
 
 export function indexCatalog(list) {
-  const byId = {}, byName = {};
-  list.forEach((x) => { byId[x.id] = x; byName[norm(x.n)] ??= x; });
-  return { list, byId, byName };
+  const byId = {}, byName = {}, df = {};
+  const toks = list.map((x) => {
+    byId[x.id] = x; byName[norm(x.n)] ??= x;
+    const t = norm(x.n).split(' ').filter(Boolean);
+    new Set(t).forEach((w) => { df[w] = (df[w] || 0) + 1; });
+    return t;
+  });
+  return { list, byId, byName, toks, idf: (w) => Math.log(list.length / ((df[w] || 0) + 1)) };
 }
 
 let loading;
@@ -37,22 +42,71 @@ export function resolve(name, links, cat) {
   return cat.byName[norm(name)] || null;
 }
 
-// Library candidates for a name, best first, to shortlist for the picker / AI.
-// ponytail: plain token overlap over all 1,324 entries per name — fine for a
-// few hundred names; index by token if this ever runs per keystroke on big lists.
-export function candidates(name, cat, n = 8) {
-  const q = new Set(norm(name).split(' ').filter(Boolean));
-  if (!q.size) return [];
+// Equipment the user might type, as the dataset's own `eq` value.
+const EQ_OF = {
+  barbell: 'barbell', dumbbell: 'dumbbell', db: 'dumbbell', cable: 'cable', kettlebell: 'kettlebell', kb: 'kettlebell',
+  machine: 'leverage machine', lever: 'leverage machine', leverage: 'leverage machine', smith: 'smith machine',
+  sled: 'sled machine', band: 'band', ez: 'ez barbell', assisted: 'assisted', rope: 'rope', roller: 'roller',
+  bodyweight: 'body weight', trap: 'trap bar',
+};
+// When the name says no equipment, the plainest kit is the likelier answer, and
+// it breaks the ties that used to hand "bench press" to *band* bench press.
+const EQ_RANK = ['barbell', 'dumbbell', 'cable', 'leverage machine', 'body weight', 'smith machine',
+  'ez barbell', 'kettlebell', 'sled machine', 'weighted', 'band', 'assisted'];
+const eqRank = (e) => { const i = EQ_RANK.indexOf(e); return i < 0 ? 99 : i; };
+const UNILATERAL = new Set(['one', 'single', 'alternate', 'alternating']);
+
+// How much of the typed name a library entry accounts for, 0–1. Words are IDF
+// weighted, so the movement ("fly") outweighs the body part ("chest") and
+// "chest fly" can no longer tie with "chest dip". Words the entry adds and the
+// name didn't ask for cost 0.6 of their weight — enough that a precise long
+// name still beats a short wrong one, not so much that every variant is
+// disqualified. Then: wrong equipment halves it, a unilateral variant nobody
+// asked for takes 20% off, and the plainest kit wins what's left.
+function scored(name, cat, n) {
+  const q = [...new Set(norm(name).split(' ').filter(Boolean))];
+  if (!q.length) return [];
+  const qw = q.reduce((a, w) => a + cat.idf(w), 0);
+  const want = q.map((w) => EQ_OF[w]).find(Boolean) || null;
+  const oneSided = q.some((w) => UNILATERAL.has(w));
   return cat.list
-    .map((x) => {
-      const t = norm(x.n).split(' ');
-      const hit = t.filter((w) => q.has(w)).length;
-      return { x, score: hit / (q.size + t.length - hit) };
+    .map((x, i) => {
+      const t = cat.toks[i], ts = new Set(t);
+      const hit = q.filter((w) => ts.has(w)).reduce((a, w) => a + cat.idf(w), 0);
+      if (!hit) return { x, score: 0 };
+      const extra = t.filter((w) => !q.includes(w)).reduce((a, w) => a + cat.idf(w), 0);
+      let score = hit / (qw + 0.6 * extra);
+      score *= want ? (x.eq === want ? 1 : 0.5) : 1 - Math.min(eqRank(x.eq), 12) * 0.012;
+      if (!oneSided && t.some((w) => UNILATERAL.has(w))) score *= 0.8;
+      return { x, score };
     })
     .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score || a.x.n.length - b.x.n.length)
-    .slice(0, n)
-    .map((r) => r.x);
+    .sort((a, b) => b.score - a.score || eqRank(a.x.eq) - eqRank(b.x.eq) || a.x.n.length - b.x.n.length)
+    .slice(0, n);
+}
+
+// Library candidates for a name, best first, to shortlist for the picker / AI.
+// ponytail: still a plain scan of all 1,324 entries per name — fine for a few
+// hundred names; index by token if this ever runs per keystroke on big lists.
+export function candidates(name, cat, n = 8) {
+  return cat ? scored(name, cat, n).map((r) => r.x) : [];
+}
+
+// Below this, the best guess is more likely to be the wrong movement than the
+// right one (measured over ~45 hand-typed names), and a blank frame beats a
+// chest dip where the user asked for a chest fly.
+export const MATCH_MIN = 0.42;
+
+// The entry to *show* for a name with nobody watching: the user's own link, an
+// exact library name, or a fuzzy guess that clears MATCH_MIN. Null means show
+// nothing — the ExerciseInfo picker is still how a name gets pinned by hand.
+export function guess(name, links, cat) {
+  if (!cat || !name) return null;
+  if (links && name in links) return cat.byId[links[name]] || null;
+  const exact = cat.byName[norm(name)];
+  if (exact) return exact;
+  const [top] = scored(name, cat, 1);
+  return top && top.score >= MATCH_MIN ? top.x : null;
 }
 
 // Dataset muscle words → body-map regions (MuscleMap's names). Words with no

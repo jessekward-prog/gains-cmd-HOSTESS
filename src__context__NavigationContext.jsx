@@ -29,15 +29,16 @@ const EXIT_CONFIRM_MS = 2000;
  *   - registerBackHandler(fn): temporarily intercept back (modals use this)
  *   - onExitAttempt: set a callback (toast) for double-tap-to-exit prompt
  */
-export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAttempt }) {
+export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAttempt, dismissOverlay, pathTo = (t) => [t] }) {
   // In-memory stack of tabs the user visited, in order.
-  // The last entry is the current tab.
+  // The last entry is the current tab. After a reload, `pathTo` rebuilds the
+  // screens that lead to the saved tab (a quest workout sits on the quest screen).
   const [stack, setStack] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('gains-cmd-active-tab');
+      const saved = sessionStorage.getItem('gains-beta-active-tab');
       if (saved) {
-        sessionStorage.removeItem('gains-cmd-active-tab');
-        return saved === ROOT_TAB ? [ROOT_TAB] : [ROOT_TAB, saved];
+        sessionStorage.removeItem('gains-beta-active-tab');
+        return saved === ROOT_TAB ? [ROOT_TAB] : [ROOT_TAB, ...pathTo(saved)];
       }
     } catch {}
     return [initialTab];
@@ -89,30 +90,42 @@ export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAtte
         return;
       }
 
-      // 1. Let registered back-handlers (modals etc.) intercept first.
-      const handlers = backHandlersRef.current;
-      for (let i = handlers.length - 1; i >= 0; i--) {
-        const handled = handlers[i]();
-        if (handled) {
-          // Re-push a history entry so the next back press will work again.
-          try {
-            const currentIndex = stackRef.current.length - 1;
-            window.history.pushState(
-              { navIndex: currentIndex, tab: stackRef.current[currentIndex] },
-              ''
-            );
-          } catch {}
-          return;
-        }
+      // 1. Toasts and the centre modal sit above everything, so they go first —
+      //    except while the exit prompt is up, which is itself a toast and has to
+      //    survive long enough for the second press to exit.
+      const inExitWindow = Date.now() - lastExitAttemptRef.current < EXIT_CONFIRM_MS;
+      let handled = false;
+      if (!inExitWindow && typeof dismissOverlay === 'function') {
+        try { handled = dismissOverlay() === true; } catch {}
       }
 
-      // 2. If we have more than one tab on the stack, pop it.
-      if (stackRef.current.length > 1) {
-        setStack((prev) => prev.slice(0, -1));
+      // 2. Then registered back-handlers (modals, sheets, wizards).
+      const handlers = backHandlersRef.current;
+      for (let i = handlers.length - 1; !handled && i >= 0; i--) {
+        handled = handlers[i]();
+      }
+
+      if (handled) {
+        // Re-push a history entry so the next back press will work again.
+        try {
+          const currentIndex = stackRef.current.length - 1;
+          window.history.pushState(
+            { navIndex: currentIndex, tab: stackRef.current[currentIndex] },
+            ''
+          );
+        } catch {}
         return;
       }
 
-      // 3. We're at the root. Double-tap-to-exit.
+      // 3. If we have more than one tab on the stack, pop it.
+      if (stackRef.current.length > 1) {
+        const next = stackRef.current.slice(0, -1);
+        stackRef.current = next;
+        setStack(next);
+        return;
+      }
+
+      // 4. We're at the root. Double-tap-to-exit.
       const now = Date.now();
       if (now - lastExitAttemptRef.current < EXIT_CONFIRM_MS) {
         // User confirmed exit — actually let the browser go back.
@@ -133,40 +146,41 @@ export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAtte
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [onExitAttempt]);
+  }, [onExitAttempt, dismissOverlay]);
 
   // ------------------------------------------------------------------
   // Public API
   // ------------------------------------------------------------------
 
+  // Going somewhere always pushes, so back returns to the screen you were just
+  // on (visiting a tab that's further down no longer erases what's above it).
+  // Side effects stay outside the state updater.
   const navigate = useCallback((nextTab) => {
-    if (!nextTab) return;
-    setStack((prev) => {
-      const current = prev[prev.length - 1];
-      if (current === nextTab) return prev;
+    const prev = stackRef.current;
+    if (!nextTab || prev[prev.length - 1] === nextTab) return;
+    const next = [...prev, nextTab];
+    stackRef.current = next;
+    try { window.history.pushState({ navIndex: next.length - 1, tab: nextTab }, ''); } catch {}
+    setStack(next);
+  }, []);
 
-      // If the target tab already exists earlier in the stack, treat
-      // this as a "back to that tab" — trim the stack and pop history.
-      const existingIndex = prev.indexOf(nextTab);
-      if (existingIndex !== -1) {
-        const popCount = prev.length - 1 - existingIndex;
-        if (popCount > 0) {
-          programmaticPopRef.current = true;
-          try { window.history.go(-popCount); } catch {}
-        }
-        return prev.slice(0, existingIndex + 1);
-      }
-
-      // New tab — push a history entry.
-      const nextStack = [...prev, nextTab];
-      try {
-        window.history.pushState(
-          { navIndex: nextStack.length - 1, tab: nextTab },
-          ''
-        );
-      } catch {}
-      return nextStack;
-    });
+  // Leaving a flow (finishing or cancelling a workout): go back down to `tab`
+  // if it's in the stack, or put it in place of the current screen.
+  const returnTo = useCallback((tab) => {
+    const prev = stackRef.current;
+    if (prev[prev.length - 1] === tab) return;
+    const at = prev.lastIndexOf(tab);
+    let next;
+    if (at !== -1) {
+      next = prev.slice(0, at + 1);
+      programmaticPopRef.current = true;
+      try { window.history.go(-(prev.length - 1 - at)); } catch {}
+    } else {
+      next = [...prev.slice(0, -1), tab];
+      try { window.history.replaceState({ navIndex: next.length - 1, tab }, ''); } catch {}
+    }
+    stackRef.current = next;
+    setStack(next);
   }, []);
 
   const goBack = useCallback(() => {
@@ -190,6 +204,7 @@ export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAtte
     tab,
     stack,
     navigate,
+    returnTo,
     goBack,
     canGoBack: stack.length > 1,
     registerBackHandler,

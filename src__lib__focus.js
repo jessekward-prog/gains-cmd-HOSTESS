@@ -8,6 +8,7 @@ export const TAGS = {
   drop: ['DROP SET', 'var(--g-drop)'],
   bfr: ['BFR', 'var(--g-bfr)'],
   interval: ['INTERVAL', 'var(--g-int)'],
+  timed: ['TIMED', 'var(--g-timed)'],
 };
 
 export const num = (v) => parseFloat(v) || 0;
@@ -29,6 +30,7 @@ function kindOf(ex) {
   const sets = ex?.sets || [];
   if (sets.some((s) => s.type === 'interval')) return 'interval';
   if (sets.some((s) => s.type === 'bfr')) return 'bfr';
+  if (sets.some((s) => s.type === 'timed')) return 'timed';
   if (sets.some((s) => s.type === 'drop')) return 'drop';
   return 'normal';
 }
@@ -76,14 +78,18 @@ export function setLabel(sets, i) {
  * Last session's top set and the all-time best, from history for this exact
  * exercise name (recommendations credit exact names only, so this does too).
  * `best` is the best weight — highest, or lowest for assisted lifts — and
- * `bestReps` the most reps done at it.
+ * `bestReps` the most reps done at it. With `minReps`, `rangeBest`/`rangeBestReps`
+ * are the same but only over sets that reached the bottom of the rep range —
+ * what "best" on the card means (a heavy triple isn't a best for a 15–20 set).
  */
-export function liftStats(history = [], name) {
+export function liftStats(history = [], name, minReps = 0) {
   const assisted = isAssisted(name);
   const better = (a, b) => (assisted ? a < b : a > b);
   let last = null;
   let best = null;
   let bestReps = 0;
+  let rangeBest = null;
+  let rangeBestReps = 0;
   for (const w of history) {
     if (isMarker(w)) continue;
     let exs = w.exercises;
@@ -100,9 +106,13 @@ export function liftStats(history = [], name) {
       const w2 = num(s.weight), r2 = num(s.reps);
       if (best === null || better(w2, best)) { best = w2; bestReps = r2; }
       else if (w2 === best && r2 > bestReps) bestReps = r2;
+      if (minReps && r2 >= minReps) {
+        if (rangeBest === null || better(w2, rangeBest)) { rangeBest = w2; rangeBestReps = r2; }
+        else if (w2 === rangeBest && r2 > rangeBestReps) rangeBestReps = r2;
+      }
     }
   }
-  return { lw: last?.w ?? null, lr: last?.r ?? null, best, bestReps };
+  return { lw: last?.w ?? null, lr: last?.r ?? null, best, bestReps, rangeBest, rangeBestReps };
 }
 
 /**
@@ -175,19 +185,27 @@ export function lastE1rm(history = [], name) {
 
 /** Everything the finish flow shows, computed before finishWorkout clears the workout. */
 export function summarize(workout, history = []) {
-  let vol = 0, sets = 0;
-  const prs = [], ex = [], strength = [];
+  let vol = 0, sets = 0, cal = 0;
+  const prs = [], ex = [], strength = [], cardio = [];
   for (const block of buildBlocks(workout.exercises)) {
     for (const i of block.indices) {
       const e = workout.exercises[i];
       const done = (e.sets || []).filter((s) => s.completed);
       sets += done.length;
-      let top = null;
+      let top = null, fail = null;
       const assisted = isAssisted(e.name);
       for (const s of done) {
         vol += num(s.weight) * num(s.reps);
-        if (s.type === 'drop' || s.reps === 'failure') continue;
-        const w = num(s.weight), tw = top ? num(top.weight) : null;
+        if (s.type === 'drop' || s.type === 'timed') continue; // timed sets have no reps to rank
+        const w = num(s.weight);
+        // A set taken to failure has no rep count, so it can't be the top set —
+        // but it's still the hardest thing the lifter did, and a summary that
+        // drops it reads as if they did nothing.
+        if (s.reps === 'failure') {
+          if (!fail || (assisted ? w < num(fail.weight) : w > num(fail.weight))) fail = s;
+          continue;
+        }
+        const tw = top ? num(top.weight) : null;
         if (!top || (assisted ? w < tw : w > tw) || (w === tw && num(s.reps) > num(top.reps))) top = s;
       }
       const stats = liftStats(history, e.name);
@@ -197,20 +215,34 @@ export function summarize(workout, history = []) {
       const tag = TAGS[block.kind]?.[0].toLowerCase();
       const est = e1rm(e.name, e.sets);
       if (est !== null) strength.push({ name: e.name, now: est, prev: lastE1rm(history, e.name) });
+      // A cardio block has no weight × reps to report — what it has is the
+      // timer and whatever the photo of the machine/watch gave back.
+      const c = block.kind === 'cardio' ? (e.sets?.[0] || {}) : null;
+      const cst = c?.cardioStats || null;
+      const csec = num(c?.elapsedSec);
+      const ccal = num(cst?.activeCalories) || num(cst?.totalCalories);
+      if (c && (cst || csec)) { cardio.push({ name: e.name, secs: csec, stats: cst }); cal += ccal; }
       ex.push({
         name: e.name,
-        sets: block.kind === 'cardio' ? 'cardio' : `${done.length}/${e.sets.length} sets${tag ? ` · ${tag}` : ''}`,
-        best: top ? `${fmtW(top.weight)} × ${top.reps || '—'}` : '—',
+        sets: c
+          ? [csec ? mmss(csec) : cst?.duration, cst?.activityType].filter(Boolean).join(' · ') || 'cardio'
+          : `${done.length}/${e.sets.length} sets${tag ? ` · ${tag}` : ''}`,
+        best: c
+          ? (ccal ? `${ccal} cal` : cst?.distance || (csec ? mmss(csec) : '—'))
+          : block.kind === 'timed' ? (done.length ? `${done.length} × ${mmss(num(done[0].timedSec) || 60)}` : '—')
+          : top ? `${fmtW(top.weight)} × ${top.reps || '—'}`
+          : fail ? `${fmtW(fail.weight)} × failure` : '—',
       });
     }
   }
   // Biggest jump first — that's the one the PR screen reveals.
   prs.sort((a, b) => Math.abs(b.w - b.best) - Math.abs(a.w - a.best));
-  return { name: workout.workoutName, prog: workout.programName, vol: Math.round(vol), sets, prs, ex, strength, exercises: workout.exercises };
+  return { name: workout.workoutName, prog: workout.programName, vol: Math.round(vol), sets, cal: Math.round(cal), prs, ex, strength, cardio, exercises: workout.exercises };
 }
 
 /** Saved workout layout: focus (beta default), dense, classic or block-grid. */
 export function workoutLayout() {
   // 'quest' was briefly a layout; it's now chosen per workout on the home screen.
-  try { const v = localStorage.getItem('gains-cmd-workout-layout'); return !v || v === 'quest' ? 'focus' : v; } catch { return 'focus'; }
+  // The default is the list ('classic' id, kept so saved choices survive).
+  try { const v = localStorage.getItem('gains-beta-workout-layout'); return !v || v === 'quest' ? 'classic' : v; } catch { return 'classic'; }
 }

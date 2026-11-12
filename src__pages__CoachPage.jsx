@@ -9,7 +9,9 @@ import ConfirmDialog from '../components/ConfirmDialog';
 marked.use({ gfm: true, breaks: true });
 
 function renderText(text) {
-  let html = marked.parse(text);
+  const safe = String(text || '').replace(/</g, '&lt;');
+  let html = marked.parse(safe);
+  html = html.replace(/<a href="(?:javascript|data|vbscript):[^"]*"/gi, '<a href="#"');
   html = html.replace(/<a href=/g, '<a target="_blank" rel="noopener noreferrer" href=');
   return html;
 }

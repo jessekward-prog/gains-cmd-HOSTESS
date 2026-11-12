@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { Pool, types } = require('pg');
 const session = require('express-session');
 
@@ -35,9 +36,73 @@ async function initializeTables() {
       FROM information_schema.tables 
       WHERE table_schema = 'public' AND table_name = 'users'
     `);
+    
+    // Always run column migrations (safe to run multiple times)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_phrase_hash VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);
+    `).catch(() => {}); // Ignore if already exist
 
-    // Base tables first — the migrations below reference users(id), and on a
-    // fresh database they used to run before it existed and fail silently.
+    // Always run recovery_status migration (safe to run multiple times)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS exercise_recovery (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        exercise_name VARCHAR(255) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        note TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, exercise_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_exercise_recovery_user ON exercise_recovery(user_id, exercise_name);
+    `).catch(() => {});
+
+    // App-level (not per-user) key/value settings -- currently just the linked
+    // local AI (lm_url, lm_api_key, lm_model), settable live via /api/lm.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `).catch(() => {});
+
+    // Login sessions — kept in Postgres so a redeploy doesn't log everyone out
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        sid TEXT PRIMARY KEY,
+        sess JSONB NOT NULL,
+        expire TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire);
+    `).catch(() => {});
+
+    // Chat history migration (safe to run multiple times)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chat_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_chat_history_user_id ON chat_history(user_id, created_at DESC);
+    `).catch(() => {});
+
+    // Workout share codes migration (safe to run multiple times)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS workout_shares (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(8) UNIQUE NOT NULL,
+        owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        workout_data JSONB NOT NULL,
+        workout_name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_workout_shares_code ON workout_shares(code);
+    `).catch(() => {});
+
     if (result.rows.length === 0) {
       console.log('📦 Creating database tables...');
       
@@ -158,80 +223,45 @@ async function initializeTables() {
     } else {
       console.log('✅ Database tables already exist');
     }
-    
-    // Always run column migrations (safe to run multiple times)
-    await client.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_phrase_hash VARCHAR(255);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);
-    `).catch(() => {}); // Ignore if already exist
-
-    // Always run recovery_status migration (safe to run multiple times)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS exercise_recovery (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        exercise_name VARCHAR(255) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        note TEXT DEFAULT '',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, exercise_name)
-      );
-      CREATE INDEX IF NOT EXISTS idx_exercise_recovery_user ON exercise_recovery(user_id, exercise_name);
-    `).catch(() => {});
-
-    // App-level (not per-user) key/value settings -- currently just the linked
-    // local AI (lm_url, lm_api_key, lm_model), settable live via /api/lm.
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      );
-    `).catch(() => {});
-
-    // Login sessions — kept in Postgres so a redeploy doesn't log everyone out
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        sid TEXT PRIMARY KEY,
-        sess JSONB NOT NULL,
-        expire TIMESTAMP NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire);
-    `).catch(() => {});
-
-    // Chat history migration (safe to run multiple times)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS chat_history (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        role VARCHAR(20) NOT NULL,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_chat_history_user_id ON chat_history(user_id, created_at DESC);
-    `).catch(() => {});
-
-    // Workout share codes migration (safe to run multiple times)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS workout_shares (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(8) UNIQUE NOT NULL,
-        owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        workout_data JSONB NOT NULL,
-        workout_name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_workout_shares_code ON workout_shares(code);
-    `).catch(() => {});
-
 
     // After creation so it also lands on a brand-new database.
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS appearance JSONB');
+    // Beta Mode (the Focus/Quest app) keeps its own appearance, exercise-library
+    // links and quest progress; the classic app never reads these.
+    await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS appearance_beta JSONB');
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS exercise_links JSONB');
-    // Quest Mode: profile + vault in one small column; Forge art (images) in its own table.
     await client.query('ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS quest JSONB');
     await client.query('ALTER TABLE workout_history ADD COLUMN IF NOT EXISTS chronicle TEXT');
+    // Alpha rep-tracker traces: a set's motion plus the rep count the user
+    // typed, which is the label that makes the trace worth keeping. Samples are
+    // base64 int16, not JSON floats — about a tenth the size.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rep_traces (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        exercise TEXT,
+        set_index INTEGER,
+        reps TEXT,
+        weight TEXT,
+        mount TEXT,
+        hz INTEGER,
+        n INTEGER,
+        samples TEXT
+      )`);
+    await client.query('CREATE INDEX IF NOT EXISTS rep_traces_user_idx ON rep_traces (user_id, created_at DESC)');
+    // Where the set begins inside the window, from the app's rest timer: the
+    // trace holds the rest and the walk over as well as the lifting.
+    await client.query('ALTER TABLE rep_traces ADD COLUMN IF NOT EXISTS set_start_ms INTEGER');
+    // What kind of set this was: a drop chain, a timed set and a straight set
+    // are different signals, and the exercise name alone doesn't say which.
+    await client.query('ALTER TABLE rep_traces ADD COLUMN IF NOT EXISTS kind TEXT');
+    await client.query('ALTER TABLE rep_traces ADD COLUMN IF NOT EXISTS set_type TEXT');
+    // Guided capture: whether the set was bounded by a START SET tap, and what
+    // the live counter made of it. Storing the prediction beside the typed reps
+    // is what lets every future set score itself.
+    await client.query('ALTER TABLE rep_traces ADD COLUMN IF NOT EXISTS guided BOOLEAN');
+    await client.query('ALTER TABLE rep_traces ADD COLUMN IF NOT EXISTS predicted INTEGER');
     await client.query(`
       CREATE TABLE IF NOT EXISTS quest_art (
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -307,7 +337,20 @@ async function createUser(email, passwordHash, username) {
   }
 }
 
+async function getUserByEmail(email) {
+  const result = await pool.query(
+    'SELECT id, email, password_hash, username, created_at, last_login FROM users WHERE email = $1',
+    [email]
+  );
+  return result.rows[0];
+}
 
+async function updateLastLogin(userId) {
+  await pool.query(
+    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+    [userId]
+  );
+}
 
 // Get user by ID (for session deserialization)
 async function getUserById(id) {
@@ -324,6 +367,26 @@ async function getUserById(id) {
 }
 
 // Create user from Google OAuth
+async function createUserFromGoogle(email, username, googleId) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      'INSERT INTO users (email, password_hash, username) VALUES ($1, $2, $3) RETURNING id, email, username',
+      [email, `google_${googleId}`, username]
+    );
+    
+    const user = result.rows[0];
+    
+    await client.query(
+      'INSERT INTO user_settings (user_id) VALUES ($1)',
+      [user.id]
+    );
+    
+    return user;
+  } finally {
+    client.release();
+  }
+}
 
 // Program functions
 async function getPrograms(userId) {
@@ -395,15 +458,6 @@ async function updateWorkoutNotes(userId, workoutId, notes) {
   await pool.query('UPDATE workout_history SET notes = $3 WHERE user_id = $1 AND id = $2', [userId, workoutId, notes]);
 }
 
-async function getWorkoutById(userId, workoutId) {
-  const { rows } = await pool.query('SELECT id, program_name, workout_name, date, exercises, duration, chronicle FROM workout_history WHERE user_id = $1 AND id = $2', [userId, workoutId]);
-  return rows[0] || null;
-}
-
-async function setChronicle(userId, workoutId, text) {
-  await pool.query('UPDATE workout_history SET chronicle = $1 WHERE user_id = $2 AND id = $3', [text, userId, workoutId]);
-}
-
 async function deleteWorkoutById(userId, workoutId) {
   const result = await pool.query(
     'DELETE FROM workout_history WHERE user_id = $1 AND id = $2',
@@ -415,7 +469,7 @@ async function deleteWorkoutById(userId, workoutId) {
 // Settings functions
 async function getSettings(userId) {
   const result = await pool.query(
-    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance, exercise_links, quest FROM user_settings WHERE user_id = $1',
+    'SELECT app_name, icon, theme_mode, theme_color, aggression_settings, appearance, appearance_beta, exercise_links, quest FROM user_settings WHERE user_id = $1',
     [userId]
   );
   
@@ -447,6 +501,22 @@ async function updateAppearance(userId, appearance) {
     'UPDATE user_settings SET appearance = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
     [JSON.stringify(appearance), userId]
   );
+}
+
+async function updateAppearanceBeta(userId, appearance) {
+  await pool.query(
+    'UPDATE user_settings SET appearance_beta = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+    [JSON.stringify(appearance), userId]
+  );
+}
+
+async function getWorkoutById(userId, workoutId) {
+  const { rows } = await pool.query('SELECT id, program_name, workout_name, date, exercises, duration, chronicle FROM workout_history WHERE user_id = $1 AND id = $2', [userId, workoutId]);
+  return rows[0] || null;
+}
+
+async function setChronicle(userId, workoutId, text) {
+  await pool.query('UPDATE workout_history SET chronicle = $1 WHERE user_id = $2 AND id = $3', [text, userId, workoutId]);
 }
 
 async function updateExerciseLinks(userId, links) {
@@ -570,14 +640,33 @@ async function setRecoveryStatus(userId, exerciseName, status, note = '') {
   );
 }
 
+async function setRecoveryPhrase(userId, phraseHash) {
+  await pool.query(
+    'UPDATE users SET recovery_phrase_hash = $1 WHERE id = $2',
+    [phraseHash, userId]
+  );
+}
 
+async function getUserByEmailForAuth(email) {
+  const result = await pool.query(
+    'SELECT id, email, password_hash, username, recovery_phrase_hash FROM users WHERE email = $1',
+    [email]
+  );
+  return result.rows[0];
+}
 
+async function setPasswordHash(userId, passwordHash) {
+  await pool.query(
+    'UPDATE users SET password_hash = $1 WHERE id = $2',
+    [passwordHash, userId]
+  );
+}
 
 // Workout share functions
 function generateShareCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/1/0 confusion
   let code = '';
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 6; i++) code += chars[crypto.randomInt(chars.length)];
   return code;
 }
 
@@ -612,11 +701,25 @@ async function getWorkoutShare(code) {
 }
 
 module.exports = {
+  updateAppearanceBeta,
+  getWorkoutById,
+  setChronicle,
+  updateExerciseLinks,
+  updateQuest,
+  getQuestArt,
+  setQuestArt,
+  deleteQuestArt,
   pool,
   ready,
   PgSessionStore,
   createUser,
+  getUserByEmail,
   getUserById,
+  createUserFromGoogle,
+  updateLastLogin,
+  setRecoveryPhrase,
+  getUserByEmailForAuth,
+  setPasswordHash,
   getPrograms,
   createProgram,
   deleteProgram,
@@ -629,13 +732,6 @@ module.exports = {
   getSettings,
   updateAggressionSettings,
   updateAppearance,
-  updateExerciseLinks,
-  updateQuest,
-  getWorkoutById,
-  setChronicle,
-  getQuestArt,
-  setQuestArt,
-  deleteQuestArt,
   getChatHistory,
   saveChatMessage,
   clearChatHistory,

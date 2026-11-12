@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import SetRow from './SetRow';
 import RestTimer from './RestTimer';
 import ProgressionBar from './ProgressionBar';
@@ -13,6 +13,8 @@ import TypewriterName from './TypewriterName';
 import { SupersetHeader } from './SupersetCard';
 import { supersetMembersOf, nextMemberForRound } from '../lib/supersets';
 import { targetLabel } from '../lib/format';
+import useBackHandler from '../hooks/useBackHandler';
+import { useHaptics } from '../hooks/useHaptics';
 
 /* ── The shared exercise detail panel (sets + actions) ────────── */
 function ExerciseDetail({
@@ -32,6 +34,8 @@ function ExerciseDetail({
   onRemoveBFR,
   onAddInterval,
   onRemoveInterval,
+  onAddTimed,
+  onRemoveTimed,
   onLinkSuperset,
   onUnlinkSuperset,
   onAddVariable,
@@ -54,7 +58,7 @@ function ExerciseDetail({
   const handleRepRangeChange = useCallback((e) => onUpdateRepRange(exerciseIndex, e.target.value), [exerciseIndex, onUpdateRepRange]);
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {/* Controls row */}
       <div className="flex items-center gap-3 px-3 py-3 bg-bg-1 border-t border-b border-border text-xs">
         <div className="flex items-center gap-1.5">
@@ -114,8 +118,9 @@ function ExerciseDetail({
         )}
       </AnimatePresence>
 
-      {/* Action buttons — uniform icon-over-label so labels of any length line up */}
-      <div className="flex border-t border-border">
+      {/* Action buttons — uniform icon-over-label so labels of any length line up.
+          mt-auto: in a stacked superset the shorter member's slack sits above them. */}
+      <div className="flex border-t border-border mt-auto">
         <motion.button whileTap={{ scale: 0.95 }} onClick={() => onAddSet(exerciseIndex)}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-accent hover:bg-accent-muted transition-colors">
           <NavIcon id="plus" size={16} />
@@ -154,7 +159,7 @@ function ExerciseDetail({
       </div>
 
       <SubstituteModal open={showSubstitute} onClose={() => setShowSubstitute(false)}
-        exerciseName={exercise.name} onSelect={(newName) => onSubstitute?.(exerciseIndex, newName)} />
+        exerciseName={exercise.name} onSelect={(newName, type) => onSubstitute?.(exerciseIndex, newName, type)} />
 
       <SpecialSetModal
         open={showSpecial}
@@ -169,12 +174,57 @@ function ExerciseDetail({
         onRemoveBFR={onRemoveBFR}
         onAddInterval={onAddInterval}
         onRemoveInterval={onRemoveInterval}
+        onAddTimed={onAddTimed}
+        onRemoveTimed={onRemoveTimed}
         onLinkSuperset={onLinkSuperset}
         onAddVariable={onAddVariable}
         onRemoveVariable={onRemoveVariable}
         onToggleFailure={handleToggleFailure}
       />
     </div>
+  );
+}
+
+/* ── Superset hand-off helpers ────────────────────────────────────
+   An open superset keeps every member mounted, stacked in one grid cell: the
+   cell takes the tallest member's height, so switching can't resize the panel
+   or shove anything below it. Only the active member is visible or reachable,
+   and it fades up on arrival — the one leaving is already gone, so the two are
+   never on screen together. */
+function StackedDetail({ exercises, members, activeIndex, fade, handlers }) {
+  return (
+    <div className="grid">
+      {(members || [activeIndex]).map((ei) => {
+        const on = ei === activeIndex;
+        return (
+          <div key={ei} inert={!on} aria-hidden={!on} className="min-w-0"
+            style={{ gridArea: '1 / 1', visibility: on ? 'visible' : 'hidden', animation: on && fade ? 'fx-fade .2s both' : 'none' }}>
+            <ExerciseDetail exercise={exercises[ei]} exerciseIndex={ei} allExercises={exercises} {...handlers} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// The name line, sized to the longest member's name for the same reason.
+function MemberName({ exercises, members, activeIndex }) {
+  return (
+    <span className="grid">
+      <span style={{ gridArea: '1 / 1' }}><TypewriterName text={exercises[activeIndex].name} /></span>
+      {(members || []).filter((i) => i !== activeIndex).map((i) => (
+        <span key={i} aria-hidden style={{ gridArea: '1 / 1', visibility: 'hidden' }}>{exercises[i].name}_</span>
+      ))}
+    </span>
+  );
+}
+
+// The panel edge lights once per hand-off.
+function HandoffPulse({ n, round = 'rounded-xl' }) {
+  if (!n) return null;
+  return (
+    <span key={n} aria-hidden className={`pointer-events-none absolute inset-0 z-10 ${round}`}
+      style={{ boxShadow: 'inset 0 0 0 1.5px rgba(96,165,250,0.75), inset 0 0 22px rgba(59,130,246,0.35)', animation: 'fx-handoff .66s ease-out both' }} />
   );
 }
 
@@ -246,7 +296,7 @@ export default function BlockGridView({
   const flipRef = useRef(null);
   const manualUntilRef = useRef(0);
   const expandMode = useMemo(() => {
-    try { return localStorage.getItem('gains-cmd-expand-mode') || 'inline'; } catch { return 'inline'; }
+    try { return localStorage.getItem('gains-beta-expand-mode') || 'inline'; } catch { return 'inline'; }
   }, []);
 
   const activeExercise = activeIndex !== null ? exercises[activeIndex] : null;
@@ -255,11 +305,21 @@ export default function BlockGridView({
   // weight and nav dots all follow the member you're on for free.
   const activeMembers = activeIndex !== null ? supersetMembersOf(exercises, activeIndex) : null;
 
+  const reduce = useReducedMotion();
+  const haptics = useHaptics();
+  // The last superset hand-off. Only a fresh one pulses or fades — a panel that
+  // merely mounts later (opening another block) mustn't replay it.
+  const [handoff, setHandoff] = useState({ n: 0, at: 0 });
+  const pulseN = !reduce && Date.now() - handoff.at < 700 ? handoff.n : 0;
+  const handOff = () => setHandoff((h) => ({ n: h.n + 1, at: Date.now() }));
+  const groupKey = activeMembers ? `ss-${activeMembers.join('-')}` : `ex-${activeIndex}`;
+
   const handleSelectMember = useCallback((ei) => {
     manualUntilRef.current = Date.now() + 2500;
     clearTimeout(flipRef.current);
+    if (ei !== activeIndex) { haptics.tap(); handOff(); }
     setActiveIndex(ei);
-  }, []);
+  }, [activeIndex, haptics]);
 
   useEffect(() => () => clearTimeout(flipRef.current), []);
 
@@ -272,7 +332,7 @@ export default function BlockGridView({
       const next = nextMemberForRound(exercises, members, ei, si);
       if (next < 0) return;
       clearTimeout(flipRef.current);
-      flipRef.current = setTimeout(() => setActiveIndex(next), 420);
+      flipRef.current = setTimeout(() => { handOff(); setActiveIndex(next); }, 420);
     },
   }), [allHandlers, exercises]);
 
@@ -284,6 +344,9 @@ export default function BlockGridView({
     setActiveIndex(null);
   }, []);
 
+  // Back closes the open exercise instead of leaving the workout.
+  useBackHandler(activeIndex !== null, handleClose);
+
   // ── INLINE EXPAND ──────────────────────────────────────────────
   if (expandMode === 'inline') {
     return (
@@ -291,17 +354,18 @@ export default function BlockGridView({
         <AnimatePresence mode="sync">
           {activeIndex !== null && activeExercise && (
             <motion.div
-              key={`expanded-${activeIndex}`}
+              key={`expanded-${groupKey}`}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="rounded-xl border-2 border-accent/50 bg-bg-2 overflow-hidden"
+              className="relative rounded-xl border-2 border-accent/50 bg-bg-2 overflow-hidden"
             >
+              <HandoffPulse n={pulseN} />
               <motion.button whileTap={{ scale: 0.98 }} onClick={handleClose}
                 className="w-full flex items-center justify-between p-3 text-left">
                 <div>
-                  <div className="font-display font-bold text-lg text-text-primary"><TypewriterName text={activeExercise.name} /></div>
+                  <div className="font-display font-bold text-lg text-text-primary"><MemberName exercises={exercises} members={activeMembers} activeIndex={activeIndex} /></div>
                   <div className="text-xs text-text-tertiary font-mono">
                     {targetLabel(activeExercise)}
                   </div>
@@ -317,12 +381,8 @@ export default function BlockGridView({
                   activeIndex={activeIndex} onSelect={handleSelectMember}
                   onSetRestMode={onSetSupersetRest} />
               )}
-              <ExerciseDetail
-                exercise={activeExercise}
-                exerciseIndex={activeIndex}
-                allExercises={exercises}
-                {...handlers}
-              />
+              <StackedDetail exercises={exercises} members={activeMembers} activeIndex={activeIndex}
+                fade={pulseN > 0} handlers={handlers} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -330,7 +390,7 @@ export default function BlockGridView({
         {/* Grid of remaining blocks */}
         <div className={`grid gap-2 ${activeIndex !== null ? 'grid-cols-3' : 'grid-cols-2'}`}>
           {exercises.map((exercise, ei) => {
-            if (ei === activeIndex) return null;
+            if (ei === activeIndex || activeMembers?.includes(ei)) return null;
             return (
               <BlockTile
                 key={ei}
@@ -371,14 +431,15 @@ export default function BlockGridView({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-bg-1 border-t-2 border-accent/40 rounded-t-2xl overflow-hidden"
+              className="relative bg-bg-1 border-t-2 border-accent/40 rounded-t-2xl overflow-hidden"
             >
+              <HandoffPulse n={pulseN} round="rounded-t-2xl" />
               <div className="flex justify-center pt-2 pb-1">
                 <div className="w-8 h-1 bg-bg-4 rounded-full" />
               </div>
               <div className="flex items-center justify-between px-3 pb-2">
                 <div>
-                  <div className="font-display font-bold text-lg text-text-primary"><TypewriterName text={activeExercise.name} /></div>
+                  <div className="font-display font-bold text-lg text-text-primary"><MemberName exercises={exercises} members={activeMembers} activeIndex={activeIndex} /></div>
                   <div className="text-[10px] text-text-tertiary font-mono">
                     {targetLabel(activeExercise)}
                   </div>
@@ -391,12 +452,8 @@ export default function BlockGridView({
                   activeIndex={activeIndex} onSelect={handleSelectMember}
                   onSetRestMode={onSetSupersetRest} />
               )}
-              <ExerciseDetail
-                exercise={activeExercise}
-                exerciseIndex={activeIndex}
-                allExercises={exercises}
-                {...handlers}
-              />
+              <StackedDetail exercises={exercises} members={activeMembers} activeIndex={activeIndex}
+                fade={pulseN > 0} handlers={handlers} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -411,7 +468,7 @@ export default function BlockGridView({
       const totalSets = activeExercise.sets.length;
       return (
         <motion.div
-          key={`takeover-${activeIndex}`}
+          key={`takeover-${groupKey}`}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
@@ -445,18 +502,15 @@ export default function BlockGridView({
           <RecoveryNote exerciseName={activeExercise.name} />
 
           {/* Detail panel */}
-          <div className="rounded-xl border border-border bg-bg-2 overflow-hidden">
+          <div className="relative rounded-xl border border-border bg-bg-2 overflow-hidden">
+            <HandoffPulse n={pulseN} />
             {activeMembers && (
               <SupersetHeader exercises={exercises} indices={activeMembers}
                 activeIndex={activeIndex} onSelect={handleSelectMember}
                 onSetRestMode={onSetSupersetRest} />
             )}
-            <ExerciseDetail
-              exercise={activeExercise}
-              exerciseIndex={activeIndex}
-              allExercises={exercises}
-              {...handlers}
-            />
+            <StackedDetail exercises={exercises} members={activeMembers} activeIndex={activeIndex}
+              fade={pulseN > 0} handlers={handlers} />
           </div>
 
           {/* Quick nav dots */}
@@ -515,11 +569,12 @@ export default function BlockGridView({
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-bg-1 border border-border rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto"
+              className="relative bg-bg-1 border border-border rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto"
             >
+              <HandoffPulse n={pulseN} round="rounded-2xl" />
               <div className="flex items-center justify-between p-3 border-b border-border sticky top-0 bg-bg-1 z-10">
                 <div>
-                  <div className="font-display font-bold text-lg text-text-primary"><TypewriterName text={activeExercise.name} /></div>
+                  <div className="font-display font-bold text-lg text-text-primary"><MemberName exercises={exercises} members={activeMembers} activeIndex={activeIndex} /></div>
                   <div className="text-[10px] text-text-tertiary font-mono">
                     {targetLabel(activeExercise)}
                   </div>
@@ -532,12 +587,8 @@ export default function BlockGridView({
                   activeIndex={activeIndex} onSelect={handleSelectMember}
                   onSetRestMode={onSetSupersetRest} />
               )}
-              <ExerciseDetail
-                exercise={activeExercise}
-                exerciseIndex={activeIndex}
-                allExercises={exercises}
-                {...handlers}
-              />
+              <StackedDetail exercises={exercises} members={activeMembers} activeIndex={activeIndex}
+                fade={pulseN > 0} handlers={handlers} />
             </motion.div>
           </motion.div>
         )}

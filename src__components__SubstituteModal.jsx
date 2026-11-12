@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Modal from './Modal';
 import Button from './Button';
@@ -32,11 +32,18 @@ const exerciseDatabase = {
   lower_abs: ['Leg Raises', 'Hanging Leg Raises', 'Reverse Crunches', 'Mountain Climbers', 'Knee Raises'],
   obliques: ['Russian Twists', 'Side Plank', 'Woodchoppers', 'Bicycle Crunches', 'Side Bends'],
   full_core: ['Plank', 'Dead Bug', 'Bird Dog', 'Pallof Press', 'Hollow Body Hold'],
+  cardio: ['Treadmill Walk', 'Incline Treadmill Walk', 'Treadmill Run', 'Stationary Bike', 'Assault Bike', 'Rowing Machine', 'Elliptical', 'Stair Climber', 'Ski Erg', 'Outdoor Run', 'Jump Rope'],
 };
+
+const CARDIO_NAME = /treadmill|walk|\brun\b|running|jog|bike|cycl|\bspin\b|rowing|rower|\berg\b|elliptical|stair|stepper|jump rope|swim|hiit|cardio/i;
+const isCardioName = (name) => CARDIO_NAME.test(name || '') && !/lunge|farmer|carry/i.test(name || '');
 
 // Granular muscle group detection matching legacy server.js
 function detectMuscleGroup(exerciseName) {
   const name = (exerciseName || '').toLowerCase();
+
+  // Cardio — before rows, so "Rowing Machine" isn't read as a back exercise
+  if (isCardioName(name)) return ['cardio'];
 
   // Lats
   if (/lat pulldown|lat pull down|pull.?up|chin.?up|straight arm pulldown/.test(name)) return ['lats'];
@@ -88,11 +95,23 @@ function detectMuscleGroup(exerciseName) {
   return ['mid_back']; // fallback
 }
 
-export default function SubstituteModal({ open, onClose, exerciseName, onSelect }) {
-  const [customInput, setCustomInput] = useState('');
+const TYPES = [['strength', 'Strength'], ['cardio', 'Cardio']];
 
-  const { groups, alternatives } = useMemo(() => {
-    const g = detectMuscleGroup(exerciseName);
+// onSelect(name, type) — type is 'strength' or 'cardio'. Picking the other type
+// converts the exercise (cardio gets the wall-clock timer and screenshot upload).
+export default function SubstituteModal({ open, onClose, exerciseName, isCardio = false, onSelect }) {
+  const [customInput, setCustomInput] = useState('');
+  const currentType = isCardio ? 'cardio' : 'strength';
+  // A strength-logged "Treadmill walk" almost certainly wants to be cardio — start there.
+  const suggestedType = isCardio || isCardioName(exerciseName) ? 'cardio' : 'strength';
+  const [type, setType] = useState(suggestedType);
+  useEffect(() => { if (open) setType(suggestedType); }, [open, suggestedType]);
+
+  const detected = useMemo(() => detectMuscleGroup(exerciseName), [exerciseName]);
+
+  const alternatives = useMemo(() => {
+    // Switching to strength from a cardio name has no muscle to go on — let them type it.
+    const g = type === 'cardio' ? ['cardio'] : detected.filter((x) => x !== 'cardio');
     const alts = [];
     const seen = new Set();
     for (const group of g) {
@@ -103,13 +122,13 @@ export default function SubstituteModal({ open, onClose, exerciseName, onSelect 
         }
       }
     }
-    return { groups: g, alternatives: alts.slice(0, 12) };
-  }, [exerciseName]);
+    return alts.slice(0, 12);
+  }, [exerciseName, detected, type]);
 
   const handleSelect = useCallback((name) => {
-    onSelect(name);
+    onSelect(name, type);
     onClose();
-  }, [onSelect, onClose]);
+  }, [onSelect, onClose, type]);
 
   const handleCustom = useCallback(() => {
     if (customInput.trim()) {
@@ -119,8 +138,8 @@ export default function SubstituteModal({ open, onClose, exerciseName, onSelect 
   }, [customInput, handleSelect]);
 
   const groupLabel = useMemo(() => {
-    return groups.map((g) => g.replace(/_/g, ' ')).join(' / ');
-  }, [groups]);
+    return (isCardio ? ['cardio'] : detected).map((g) => g.replace(/_/g, ' ')).join(' / ');
+  }, [detected, isCardio]);
 
   return (
     <Modal open={open} onClose={onClose} title={<span className="inline-flex items-center gap-1.5"><NavIcon id="swap" size={16} />Substitute Exercise</span>}>
@@ -129,6 +148,34 @@ export default function SubstituteModal({ open, onClose, exerciseName, onSelect 
           <span className="text-xs font-mono text-text-tertiary">REPLACING:</span>
           <div className="font-display font-semibold text-text-primary">{exerciseName}</div>
           <div className="text-xs text-accent font-mono mt-0.5 capitalize">{groupLabel}</div>
+        </div>
+
+        {/* Set type */}
+        <div className="mb-4">
+          <span className="text-xs font-mono text-text-tertiary">SET TYPE:</span>
+          <div className="flex gap-1 mt-1.5 p-1 bg-bg-0 border border-border rounded-xl">
+            {TYPES.map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setType(id)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${type === id ? 'bg-accent text-bg-0' : 'text-text-secondary'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {type !== currentType && (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => handleSelect(exerciseName)}
+              className="w-full mt-2 text-left p-3 bg-accent/10 border border-accent/40 rounded-xl text-sm text-text-primary"
+            >
+              Keep <span className="font-semibold">{exerciseName}</span> — switch to {type}
+              <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+                {type === 'cardio' ? 'Wall-clock timer + screenshot upload' : 'Weight × reps sets'}
+              </div>
+            </motion.button>
+          )}
         </div>
 
         {/* Custom input */}

@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { toastVariants } from '../lib/variants';
 
 const ToastContext = createContext(null);
 
@@ -84,6 +83,13 @@ export function ToastProvider({ children }) {
   const [confettiKey, setConfettiKey] = useState(0);
   const [confettiActive, setConfettiActive] = useState(false);
 
+  // Mirrors of the two dismissable layers, so dismissTop can decide from the
+  // current value (a state updater can't report back synchronously).
+  const toastsRef = useRef([]);
+  const centerRef = useRef(null);
+  useEffect(() => { toastsRef.current = toasts; }, [toasts]);
+  useEffect(() => { centerRef.current = centerModal; }, [centerModal]);
+
   const showToast = useCallback((message, type = 'info', duration = 3000, persistent = false) => {
     const id = ++toastId;
     setToasts((prev) => [...prev, { id, message, type, persistent }]);
@@ -103,33 +109,60 @@ export function ToastProvider({ children }) {
     setTimeout(() => setCenterModal(null), duration);
   }, []);
 
+  // Back / swipe-back clears the topmost layer — the centre modal first, then
+  // the newest notification. Navigation calls this before it pops a page.
+  const dismissTop = useCallback(() => {
+    if (centerRef.current) {
+      centerRef.current = null;
+      setCenterModal(null);
+      return true;
+    }
+    const open = toastsRef.current;
+    if (open.length) {
+      const { id } = open[open.length - 1];
+      toastsRef.current = open.slice(0, -1);
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+      return true;
+    }
+    return false;
+  }, []);
+
   const triggerConfetti = useCallback(() => {
     setConfettiKey((k) => k + 1);
     setConfettiActive(true);
   }, []);
 
-  const colors = {
-    success: 'bg-success/20 border-success/40 text-success',
-    error: 'bg-error/20 border-error/40 text-error',
-    info: 'bg-accent-muted border-accent/30 text-accent',
-    warning: 'bg-warning-muted border-warning/40 text-warning',
+  // Notifications drop down from the top of the screen, like Quest's encounter
+  // name: opaque, over the page, never moving anything underneath.
+  const edge = {
+    success: 'var(--color-success)',
+    error: 'var(--color-error)',
+    info: 'var(--color-accent)',
+    warning: 'var(--color-warning)',
+  };
+  const drop = {
+    initial: { y: '-100%' },
+    animate: { y: 0, transition: { type: 'spring', damping: 24, stiffness: 320 } },
+    exit: { y: '-100%', transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } },
   };
 
   return (
-    <ToastContext.Provider value={{ showToast, showCenterModal, triggerConfetti }}>
+    <ToastContext.Provider value={{ showToast, showCenterModal, triggerConfetti, dismissTop }}>
       {children}
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none w-[calc(100vw-2rem)] max-w-xs">
+      <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col pointer-events-none overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div
               key={t.id}
-              variants={toastVariants}
+              variants={drop}
               initial="initial"
               animate="animate"
               exit="exit"
-              className={`pointer-events-auto flex items-start gap-2 px-4 py-2.5 rounded-xl border font-mono text-xs leading-snug ${colors[t.type] || colors.info}`}
+              className="pointer-events-auto flex items-start gap-2 px-4 py-3 font-mono text-[13px] leading-snug"
+              style={{ background: 'var(--color-bg-2)', color: 'var(--color-text-primary)', borderBottom: `2px solid ${edge[t.type] || edge.info}` }}
             >
-              <span className="flex-1 text-center">{t.message}</span>
+              <span className="flex-shrink-0" style={{ color: edge[t.type] || edge.info }}>&gt;</span>
+              <span className="flex-1">{t.message}</span>
               {t.persistent && (
                 <button onClick={() => dismissToast(t.id)} className="flex-shrink-0 opacity-60 hover:opacity-100 leading-none mt-0.5">✕</button>
               )}

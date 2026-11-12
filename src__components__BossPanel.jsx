@@ -1,11 +1,11 @@
 import BodyMap from './BodyMap';
 import useWeeklyBoss from '../hooks/useWeeklyBoss';
-import { BOSS_GROUPS, BOSS_GROUP_SETS, BOSS_WORDS } from '../lib/quest';
+import { BOSS_GROUPS, BOSS_WORDS } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 
-// Weekly boss progress: two groups of four sets, at least 48 h apart, offered at
-// the end of any workout. Shown on the home screen and the quest screen.
+// Weekly boss progress: two fights of one set to failure, at least 48 h apart,
+// offered at the start of a workout. Shown on the quest screen.
 export default function BossPanel() {
   const { boss, nextAt, beaten } = useWeeklyBoss();
   if (!boss) return null;
@@ -26,7 +26,7 @@ export default function BossPanel() {
         </div>
         <div className="mt-1.5 text-text-tertiary" style={{ font: `400 10px/1.45 ${MONO}` }}>
           {beaten ? 'Beaten this week · +1 card pack claimed'
-            : `${BOSS_WORDS[boss.region]} · ${BOSS_GROUPS} fights of ${BOSS_GROUP_SETS} sets of ${boss.exercise} · ${fights}/${BOSS_GROUPS} done · ${wait ? `next fight in ${wait} h` : 'ready at the end of your next workout'}`}
+            : `${BOSS_WORDS[boss.region]} · ${BOSS_GROUPS} fights, each 1 set to failure of ${boss.exercise} · ${fights}/${BOSS_GROUPS} done · ${wait ? `next fight in ${wait} h` : 'offered at the start of your next workout'}`}
         </div>
       </div>
     </div>

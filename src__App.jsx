@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from './context/ToastContext';
 import { HeaderMessageProvider } from './context/HeaderMessageContext';
 import { TimerProvider, useGlobalTimer } from './context/TimerContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
+import { RepSensorProvider } from './context/RepSensorContext';
 import AppHeader from './components/AppHeader';
 import BottomNav from './components/BottomNav';
 import GlobalRestTimer from './components/GlobalRestTimer';
@@ -13,9 +14,15 @@ import NavIcon from './components/NavIcon';
 import ExerciseNameOptions from './components/ExerciseNameOptions';
 import QuestTitle from './components/QuestTitle';
 import AppearanceSync from './components/AppearanceSync';
+import ErrorBoundary from './components/ErrorBoundary';
 import PinGate from './components/PinGate';
+import WaveBackground from './components/WaveBackground';
+import { useTheme } from './context/ThemeContext';
 import { workoutLayout } from './lib/focus';
 import { moodState } from './lib/mood';
+import { stageArt } from './components/QuestStage';
+import { warmQuestSprites } from './hooks/useQuestSprites';
+import useQuest, { readTint } from './hooks/useQuest';
 import ProgramsPage from './pages/ProgramsPage';
 import WorkoutPage from './pages/WorkoutPage';
 import HistoryPage from './pages/HistoryPage';
@@ -35,6 +42,23 @@ function AppShell() {
   const { stop: stopRestTimer } = useGlobalTimer();
   useEffect(() => { if (!activeWorkout) stopRestTimer(); }, [activeWorkout, stopRestTimer]);
 
+  // Quest Mode has its own look (Settings → Quest), only on the quest screens.
+  const { setQuestActive, questSkin } = useTheme();
+  const inQuest = tab === 'quest' || (tab === 'workout' && !!activeWorkout?.quest);
+  useEffect(() => { setQuestActive(inQuest); }, [inQuest, setQuestActive]);
+
+  // The quest sprites are recoloured once per session and cached. Doing that on
+  // arrival put a second of fetching and per-pixel work under the decode wave,
+  // so the scene was still black a third of the way through it and landed with a
+  // pop. Recolour at idle from whatever screen you're on instead: the cache is
+  // keyed on the same skin and jobs, so the stage is painted before the wave starts.
+  const { prof, ready } = useQuest();
+  useEffect(() => {
+    if (inQuest || !ready) return undefined;
+    const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
+    return warmQuestSprites(K, jobs);
+  }, [inQuest, ready, questSkin, prof.theme, prof.hero, prof.pet]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The live background brightens as the workout fills up.
   useEffect(() => {
     const sets = (activeWorkout?.exercises || []).flatMap((e) => e.sets || []);
@@ -48,7 +72,10 @@ function AppShell() {
   const hadWorkout = useRef(false);
   useEffect(() => {
     const has = !!activeWorkout;
-    if (has && !hadWorkout.current && tab === 'programs') navigate('workout');
+    if (has && !hadWorkout.current && tab === 'programs') {
+      if (activeWorkout.quest) navigate('quest'); // so back from a quest goes to the quest screen
+      navigate('workout');
+    }
     hadWorkout.current = has;
   }, [activeWorkout, tab, navigate]);
 
@@ -62,11 +89,13 @@ function AppShell() {
   return (
     <div className="min-h-dvh">
       <div
-        className="flex flex-col h-dvh"
-        style={{
-          filter: navExpanded ? 'grayscale(1)' : 'grayscale(0)',
-          transition: 'filter 0.4s ease',
-        }}
+        // fixed inset-0, not h-dvh: an installed iOS PWA can report dvh short of the screen
+        className="fixed inset-0 flex flex-col"
+        // Apply filter only when expanded: `transition: filter` promotes this div
+        // to its own layer in Chromium, which drops the body background (eg.
+        // Sarah's Theme chamomile plates). Setting the whole style conditionally
+        // keeps the shell as plain markup when idle.
+        style={navExpanded ? { filter: 'grayscale(1)', transition: 'filter 0.4s ease' } : undefined}
       >
         <AppHeader />
 
@@ -88,7 +117,7 @@ function AppShell() {
           </div>
         </div>
         {/* Spacer matching BottomNav height so flex-1 stops at the nav top on all devices */}
-        <div className="flex-shrink-0" style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))' }} />
+        <div className="flex-shrink-0" style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px) * 0.5)' }} />
       </div>
 
       <BottomNav
@@ -110,8 +139,8 @@ function AppShell() {
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
-  const { loading: dataLoading, loadAll } = useWorkout();
-  const { showToast } = useToast();
+  const { loading: dataLoading, loadAll, activeWorkout } = useWorkout();
+  const { showToast, dismissTop } = useToast();
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -132,23 +161,15 @@ function AppContent() {
     );
   }
 
-  // PinGate only lets us mount once the session is signed in, so no user here
-  // means the session went away underneath us — locking again re-shows the PIN.
   if (!user) {
-    return (
-      <div className="g-root min-h-dvh bg-bg-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div className="text-[22px] font-extrabold">Session ended</div>
-        <button onClick={() => { window.location.href = '/auth/logout'; }}
-          className="h-[50px] px-6 rounded-[18px] bg-accent font-extrabold text-[15px]" style={{ color: 'var(--color-on-accent)' }}>
-          Enter PIN
-        </button>
-      </div>
-    );
+    return <PinGate />;
   }
 
   return (
     <NavigationProvider
       onExitAttempt={() => showToast('Press back again to exit', 'info')}
+      dismissOverlay={dismissTop}
+      pathTo={(t) => (t === 'workout' && activeWorkout?.quest ? ['quest', 'workout'] : [t])}
     >
       <AppShell />
     </NavigationProvider>
@@ -157,20 +178,24 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <PinGate>
-      <AuthProvider>
-        <WorkoutProvider>
-          <TimerProvider>
-            <ToastProvider>
-              <HeaderMessageProvider>
-                <AppContent />
-              </HeaderMessageProvider>
-            </ToastProvider>
-          </TimerProvider>
-        </WorkoutProvider>
-      </AuthProvider>
-      </PinGate>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <WorkoutProvider>
+            <TimerProvider>
+              <ToastProvider>
+                <HeaderMessageProvider>
+                  <RepSensorProvider>
+                    {/* The live waves background (was mounted by the Hostess copy's PIN gate) */}
+                    <WaveBackground />
+                    <AppContent />
+                  </RepSensorProvider>
+                </HeaderMessageProvider>
+              </ToastProvider>
+            </TimerProvider>
+          </WorkoutProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

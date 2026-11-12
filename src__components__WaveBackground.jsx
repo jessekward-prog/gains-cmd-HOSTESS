@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { moodState, deriveMood, MOODS } from '../lib/mood';
+import { revealing } from '../lib/reveal';
 
 // The live "Waves" background from the Claude Design handoff (LIVE_BACKGROUND.md):
 // XMB-style ribbons behind every screen that react to the app — calm grey
 // lines when nothing is happening, colour and fill only during an event (rest,
 // set done, PR, BFR, intervals), every change crossfaded over ~1s. It reads
 // moodState each frame and eases toward the targets it derives from it.
-export const WAVE_KEY = 'gains-cmd-waves';
+export const WAVE_KEY = 'gains-beta-waves';
 export const readWaveStyle = () => {
   try { return localStorage.getItem(WAVE_KEY) === 'off' ? 'off' : 'xmb'; } catch { return 'xmb'; }
 };
@@ -25,7 +26,10 @@ function rgb(ctx, css, fallback) {
   return v.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
 }
 
-export default function WaveBackground() {
+// `embed`: the same waves scaled down to fill whatever box they sit in (the
+// "up next" card), rather than the page. Shorter crests, dimmer lines, no
+// full-screen tint — it reads as the background showing through the card.
+export default function WaveBackground({ embed = false }) {
   const canvasRef = useRef(null);
   const [style, setStyle] = useState(readWaveStyle);
 
@@ -64,16 +68,22 @@ export default function WaveBackground() {
     let W = 0, H = 0;
     const size = () => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      W = innerWidth; H = innerHeight;
+      W = embed ? cv.clientWidth : innerWidth;
+      H = embed ? cv.clientHeight : innerHeight;
       cv.width = W * dpr; cv.height = H * dpr;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     size();
     addEventListener('resize', size);
+    // An embedded canvas also resizes when its card does (a longer workout name
+    // wraps), which the window event never fires for.
+    const ro = embed ? new ResizeObserver(size) : null;
+    ro?.observe(cv);
 
     let raf, prev = performance.now();
     const draw = (now) => {
       raf = requestAnimationFrame(draw);
+      if (revealing()) return;
       // Every mood drifts slowly enough that ~30fps reads the same and halves
       // the cost; only the quick swell after a completed set gets every frame.
       if (swell < 0.05 && now - prev < 32) return;
@@ -96,14 +106,17 @@ export default function WaveBackground() {
 
       const [r, gg, b] = c.map(Math.round), col = (a) => `rgba(${r},${gg},${b},${a})`;
       g.clearRect(0, 0, W, H);
-      if (k * f > 0.002) { // the full-screen tint is the costliest fill — skip it while invisible
+      if (!embed && k * f > 0.002) { // the full-screen tint is the costliest fill — skip it while invisible
         const bg = g.createLinearGradient(0, 0, W, H);
         bg.addColorStop(0, col(0.03 * k * f)); bg.addColorStop(0.55, col(0.18 * k * f)); bg.addColorStop(1, col(0.07 * k * f));
         g.fillStyle = bg; g.fillRect(0, 0, W, H);
       }
 
       g.globalCompositeOperation = light ? 'source-over' : 'lighter';
-      const amp = 38 + swell * 40, cy = H * y;
+      // Embedded: crests sized to the box, and everything dimmed to stay behind
+      // the card's own text.
+      const dim = embed ? 0.9 : 1;
+      const amp = (38 + swell * 40) * (embed ? Math.min(1, H / 150) * 0.7 : 1), cy = H * (embed ? 0.42 : y);
       const curve = (o, a, fr, ph) => (x) => cy + o + Math.sin(x * fr + t * ph) * a + Math.sin(x * fr * 2.3 - t * ph * 0.7 + o * 0.02) * a * 0.35;
       const tint = light ? [r * 0.6, gg * 0.6, b * 0.6].map(Math.round) : [Math.min(255, r + 90), Math.min(255, gg + 90), Math.min(255, b + 90)];
       const tcol = (a) => `rgba(${tint[0]},${tint[1]},${tint[2]},${a})`;
@@ -118,7 +131,7 @@ export default function WaveBackground() {
         for (let x = 0; x <= W; x += 6) g.lineTo(x, top(x));
         g.lineTo(W, H); g.lineTo(0, H); g.closePath();
         const fg = g.createLinearGradient(0, cy - amp, 0, H);
-        fg.addColorStop(0, col((light ? 0.22 : 0.34) * fc)); fg.addColorStop(1, col((light ? 0.1 : 0.16) * fc));
+        fg.addColorStop(0, col((light ? 0.22 : 0.34) * fc * dim)); fg.addColorStop(1, col((light ? 0.1 : 0.16) * fc * dim));
         g.fillStyle = fg; g.fill();
         g.globalCompositeOperation = light ? 'source-over' : 'lighter';
       }
@@ -128,7 +141,7 @@ export default function WaveBackground() {
       g.closePath();
       if (f > 0.01) {
         const lg = g.createLinearGradient(0, cy - amp, 0, cy + amp + 120);
-        lg.addColorStop(0, tcol(0)); lg.addColorStop(0.4, tcol((0.08 * k + 0.02) * f)); lg.addColorStop(1, tcol(0));
+        lg.addColorStop(0, tcol(0)); lg.addColorStop(0.4, tcol((0.08 * k + 0.02) * f * dim)); lg.addColorStop(1, tcol(0));
         g.fillStyle = lg; g.fill();
       }
 
@@ -137,23 +150,25 @@ export default function WaveBackground() {
         const fn = curve(i * 7 - 18, amp * (0.6 + i / 14), (0.0068 + i * 0.0002) * sx, 0.8 + i * 0.03);
         g.beginPath();
         for (let x = -4; x <= W + 4; x += 5) g.lineTo(x, fn(x));
-        const la = (0.06 + 0.14 * k) * (1 - Math.abs(i - 2.5) / 4.5);
+        const la = (0.06 + 0.14 * k) * (1 - Math.abs(i - 2.5) / 4.5) * dim;
         g.strokeStyle = ps ? `rgba(${PS[i % 4]},${la * 1.8})` : tcol(la);
         g.stroke();
       }
 
       for (const [di, d] of dots.entries()) {
         if (!reduceMotion) d.x = (d.x + d.v * dt * (1 + sp)) % 1;
-        const x = d.x * W, yy = cy + (d.y - 0.5) * 260 + Math.sin(t + d.ph) * 18;
-        const a = (0.15 + 0.3 * k) * (0.5 + 0.5 * Math.sin(t * 2 + d.ph));
+        const x = d.x * W, yy = cy + (d.y - 0.5) * (embed ? H * 0.9 : 260) + Math.sin(t + d.ph) * (embed ? 6 : 18);
+        const a = (0.15 + 0.3 * k) * (0.5 + 0.5 * Math.sin(t * 2 + d.ph)) * dim;
         g.beginPath(); g.arc(x, yy, d.r + swell * 1.5, 0, 6.29); g.fillStyle = ps ? `rgba(${PS[di % 4]},${a})` : tcol(a); g.fill();
       }
       g.globalCompositeOperation = 'source-over';
     };
     raf = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(raf); removeEventListener('resize', size); };
-  }, [style]);
+    return () => { cancelAnimationFrame(raf); removeEventListener('resize', size); ro?.disconnect(); };
+  }, [style, embed]);
 
   if (style === 'off') return null;
-  return <canvas ref={canvasRef} aria-hidden="true" className="fixed inset-0 w-full h-full pointer-events-none" style={{ zIndex: -1 }} />;
+  return embed
+    ? <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }} />
+    : <canvas ref={canvasRef} aria-hidden="true" className="fixed inset-0 w-full h-full pointer-events-none" style={{ zIndex: -1 }} />;
 }

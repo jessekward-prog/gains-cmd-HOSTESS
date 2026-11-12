@@ -1,3 +1,24 @@
 Monster + knight sprites, dungeon tiles: 16x16 DungeonTileset II by 0x72 (https://0x72.itch.io/dungeontileset-ii), CC0 1.0.
 Heroes (samurai, ronin, brawler, kings, warlord, sellsword, iron guard, huntress, archer, wizard, warlock, sorcerer, hexblade): LuizMelo packs (https://luizmelo.itch.io), CC0 1.0.
 Landscape layers (land_*.png): ansimuz — Mountain Dusk Parallax background (https://ansimuz.itch.io/mountain-dusk-parallax-background), CC0 1.0.
+Weekly bosses (boss_*.png), frames cropped to a shared box per boss:
+  boss_dslime_*: "Boss: Demon Slime" FREE version by chierit (https://chierit.itch.io/boss-demon-slime), CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+  boss_frost_*: "Boss: Frost Guardian" FREE version by chierit (https://chierit.itch.io/boss-frost-guardian), CC BY 4.0.
+  boss_minotaur_*: "Boss: Minotaur" FREE version by chierit (https://chierit.itch.io/boss-minotaur), CC BY 4.0.
+  boss_golem_*: "Boss: Mecha-Stone Golem [FREE]" by Kronovi- (https://darkpixel-kronovi.itch.io/mecha-golem-free); commercial use allowed, no resale. Mirrored to face left.
+  boss_necro_*: "Necromancer (Free)" by CreativeKind (https://creativekind.itch.io/necromancer-free); commercial use allowed, no redistribution as an asset.
+
+── Cyberpunk theme ─────────────────────────────────────────
+Lands (land_cp_{neon,downtown,overpass,skyway,deepnet}.png): "Free Scrolling City
+  Backgrounds Pixel Art" by Free Game Assets (https://free-game-assets.itch.io/free-scrolling-city-backgrounds-pixel-art);
+  free; composited from each pack set's parallax layers into one still backdrop per area.
+Hero (cp_biker_*.png): "Free 3 Cyberpunk Sprites Pixel Art" by Free Game Assets
+  (https://free-game-assets.itch.io/free-3-cyberpunk-sprites-pixel-art); free for
+  personal and commercial use; cropped to a shared bbox and renamed.
+Monsters (cp_grunt, cp_rioter, cp_hazmat, cp_bot, cp_chop): "Free City Enemies Pixel
+  Art Sprite Sheets" by Free Game Assets
+  (https://free-game-assets.itch.io/free-city-enemies-pixel-art-sprite-sheets);
+  free, idle frames only; cropped per enemy to its own bbox.
+Weekly bosses (boss_cp_enforcer, boss_cp_bruiser): "Free Sci-Fi Antagonists" by Free
+  Game Assets (https://free-game-assets.itch.io/free-sci-fi-antagonists-pixel-character-pack);
+  free; frames (idle/attack1/hurt/death) cropped to one shared bbox per boss.

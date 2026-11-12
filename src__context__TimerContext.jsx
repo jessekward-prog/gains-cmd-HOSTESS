@@ -10,6 +10,11 @@ export function TimerProvider({ children }) {
   const [total, setTotal] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [endedAt, setEndedAt] = useState(0); // when the last rest ran out — drives the Focus card's GO flash
+  // Which exercise started this rest, and whether that card's own ring is on
+  // screen (list layout) — the floating timer tucks away while it is.
+  const [owner, setOwner] = useState(null);
+  const ownerRef = useRef(null);
+  const [docked, setDocked] = useState(false);
   const intervalRef = useRef(null);
   const endsAtRef = useRef(0);
   const onCompleteRef = useRef(null);
@@ -29,6 +34,7 @@ export function TimerProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY);
     setRemaining(0);
     setIsRunning(false);
+    setOwner(null); ownerRef.current = null;
     setEndedAt(Date.now());
     try {
       const audio = window.cachedTimerSound || new Audio('/timer-sound.mp3');
@@ -38,12 +44,13 @@ export function TimerProvider({ children }) {
     onCompleteRef.current?.();
   }, []);
 
-  const start = useCallback((seconds, onComplete) => {
+  const start = useCallback((seconds, onComplete, ownerId = null) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     onCompleteRef.current = onComplete || null;
     endsAtRef.current = Date.now() + seconds * 1000;
     moodState.rest = { end: endsAtRef.current, total: seconds * 1000 };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: seconds }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: seconds, owner: ownerId }));
+    setOwner(ownerId); ownerRef.current = ownerId;
     setTotal(seconds);
     setRemaining(seconds);
     setIsRunning(true);
@@ -59,6 +66,7 @@ export function TimerProvider({ children }) {
     moodState.rest = null;
     localStorage.removeItem(STORAGE_KEY);
     setIsRunning(false);
+    setOwner(null); ownerRef.current = null;
     setRemaining(0);
     setTotal(0);
   }, []);
@@ -69,7 +77,7 @@ export function TimerProvider({ children }) {
     setTotal((t) => {
       const next = t + seconds;
       moodState.rest = { end: endsAtRef.current, total: next * 1000 };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: next }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: next, owner: ownerRef.current }));
       return next;
     });
     tick();
@@ -88,6 +96,7 @@ export function TimerProvider({ children }) {
     endsAtRef.current = saved.endsAt;
     moodState.rest = { end: saved.endsAt, total: saved.total * 1000 };
     setTotal(saved.total);
+    setOwner(saved.owner ?? null); ownerRef.current = saved.owner ?? null;
     setRemaining(Math.ceil((saved.endsAt - Date.now()) / 1000));
     setIsRunning(true);
     intervalRef.current = setInterval(tick, 250);
@@ -108,7 +117,7 @@ export function TimerProvider({ children }) {
   const progress = total > 0 ? (total - remaining) / total : 0;
 
   return (
-    <TimerContext.Provider value={{ remaining, total, isRunning, progress, endedAt, start, stop, extend }}>
+    <TimerContext.Provider value={{ remaining, total, isRunning, progress, endedAt, start, stop, extend, owner, docked, setDocked }}>
       {children}
     </TimerContext.Provider>
   );

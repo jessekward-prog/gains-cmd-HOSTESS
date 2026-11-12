@@ -22,6 +22,7 @@ export default function SetRow({
   const isBFR = set.type === 'bfr';
   const isInterval = set.type === 'interval';
   const isVariable = set.type === 'variable';
+  const isTimed = set.type === 'timed';
   const dropMode = set.dropMode || 'failure';
 
   const handleRepsChange = useCallback((e) => {
@@ -38,6 +39,9 @@ export default function SetRow({
   }, [index, set, dropMode, onUpdate]);
 
   const isFailure = set.reps === 'failure';
+  const handleToggleFailure = useCallback(() => {
+    onUpdate?.(index, { ...set, reps: isFailure ? '' : 'failure' });
+  }, [index, set, isFailure, onUpdate]);
 
   const haptics = useHaptics();
   const handleCheck = useCallback(() => {
@@ -54,13 +58,21 @@ export default function SetRow({
     onComplete?.(exerciseIndex, index, restSeconds);
   }, [index, set, exerciseIndex, restSeconds, onUpdate, onComplete]);
 
+  // Timed set: the countdown running out logs it (and starts rest) exactly like ticking a set.
+  const handleTimedComplete = useCallback(() => {
+    if (set.completed) return;
+    haptics.tap();
+    onUpdate?.(index, { ...set, completed: true, timedStartMs: null });
+    onComplete?.(exerciseIndex, index, restSeconds);
+  }, [index, set, exerciseIndex, restSeconds, onUpdate, onComplete, haptics]);
+
   const handleIntervalComplete = useCallback(() => {
     onUpdate?.(index, { ...set, completed: true });
     onComplete?.(exerciseIndex, index, restSeconds);
   }, [index, set, exerciseIndex, restSeconds, onUpdate, onComplete]);
 
   // ── Normal / Variable set row ────────────────────────────────────────
-  if (!isDropSet && !isBFR && !isInterval) {
+  if (!isDropSet && !isBFR && !isInterval && !isTimed) {
     const label = (normalIndex ?? index) + 1;
     return (
       <motion.div layout variants={setRowVariants} initial="initial" animate="animate" exit="exit" className="relative">
@@ -84,9 +96,10 @@ export default function SetRow({
                 : 'text-text-primary border-border focus:border-accent focus:ring-accent/30'}`}
             onFocus={e => e.target.select()} />
           {isFailure ? (
-            <div className="w-full text-center py-2.5 px-2 rounded-lg bg-warning-muted border border-warning/40 font-display font-bold text-xl text-warning select-none">
+            <button onClick={handleToggleFailure} aria-label="Switch to reps"
+              className="w-full text-center py-2.5 px-2 rounded-lg bg-warning-muted border border-warning/40 font-display font-bold text-xl text-warning select-none">
               failure
-            </div>
+            </button>
           ) : (
             <input type="number" inputMode="numeric" placeholder="reps" value={set.reps} onChange={handleRepsChange}
               className={`w-full text-center py-2.5 px-2 rounded-lg bg-bg-1 border font-display font-bold text-xl tabular-nums outline-none focus:ring-1 transition-colors ${
@@ -97,18 +110,25 @@ export default function SetRow({
           )}
           <motion.button whileTap={{ scale: 0.85 }} onClick={handleCheck}
             className={`tap-target flex items-center justify-center rounded-lg transition-all ${
-              set.completed ? 'bg-success text-white' : 'border border-border text-text-muted'}`}
-            style={{ width: 36, height: 36, margin: '0 auto' }}>
+              set.completed ? '' : 'border border-border text-text-muted'}`}
+            style={{ width: 36, height: 36, margin: '0 auto', ...(set.completed ? { background: 'var(--g-ok)', color: 'var(--g-ok-ink)' } : {}) }}>
             {set.completed ? '✓' : ''}
           </motion.button>
         </div>
         <AnimatePresence>
           {showDelete && (
-            <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { onDelete?.(index); setShowDelete(false); }}
-              className="absolute inset-0 flex items-center justify-center bg-error/10 border border-error/30 text-error text-sm font-mono">
-              Remove set
-            </motion.button>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 flex text-sm font-mono bg-bg-1">
+              <button onClick={() => setShowDelete(false)} aria-label="Close" className="w-11 flex items-center justify-center bg-bg-1 border border-border text-text-tertiary">✕</button>
+              <button onClick={() => { handleToggleFailure(); setShowDelete(false); }}
+                className="flex-1 flex items-center justify-center bg-warning-muted border border-warning/30 text-warning">
+                {isFailure ? 'Back to reps' : 'To failure'}
+              </button>
+              <button onClick={() => { onDelete?.(index); setShowDelete(false); }}
+                className="flex-1 flex items-center justify-center bg-error/10 border border-error/30 text-error">
+                Remove set
+              </button>
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
@@ -138,6 +158,51 @@ export default function SetRow({
               onStart={() => onUpdate?.(index, { ...set, bfrStartMs: Date.now() })}
             />
           </div>
+        </div>
+        <AnimatePresence>
+          {showDelete && (
+            <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { onDelete?.(index); setShowDelete(false); }}
+              className="absolute inset-0 flex items-center justify-center bg-error/10 border border-error/30 text-error text-sm font-mono">
+              Remove set
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  }
+
+  // ── Timed row: optional weight, one countdown, manual tick as a fallback ──
+  if (isTimed) {
+    const label = (normalIndex ?? index) + 1;
+    return (
+      <motion.div layout variants={setRowVariants} initial="initial" animate="animate" exit="exit" className="relative">
+        <div className={`flex items-center gap-2 px-3 py-3 border-b border-bg-2 ${set.completed ? 'bg-success-muted' : ''}`}>
+          <button onClick={() => setShowDelete(p => !p)}
+            className="flex-shrink-0 w-8 text-center text-sm font-mono text-text-tertiary tap-target">
+            {showDelete ? '✕' : label}
+          </button>
+          <input type="number" inputMode="decimal" placeholder="kg" value={set.weight} onChange={handleWeightChange}
+            className={`w-20 flex-shrink-0 text-center py-2.5 px-2 rounded-lg bg-bg-1 border font-display font-bold text-xl tabular-nums outline-none focus:ring-1 transition-colors ${
+              set.completed ? 'text-success border-success/30' : 'text-text-primary border-border focus:border-accent focus:ring-accent/30'}`}
+            onFocus={e => e.target.select()} />
+          <div className="flex-1 min-w-0 h-[46px]">
+            <BFRTimerBar
+              key={set.completed ? 'done' : 'open'}
+              seconds={set.timedSec || 60}
+              onComplete={handleTimedComplete}
+              completed={set.completed}
+              startMs={set.timedStartMs ? set.timedStartMs - (set.timedDoneSec || 0) * 1000 : null}
+              onStart={() => onUpdate?.(index, { ...set, timedStartMs: Date.now(), timedDoneSec: 0 })}
+              onStop={() => onUpdate?.(index, { ...set, timedStartMs: null, timedDoneSec: 0 })}
+            />
+          </div>
+          <motion.button whileTap={{ scale: 0.85 }} aria-label={set.completed ? 'Undo set' : 'Mark set done'}
+            onClick={() => (set.completed ? onUpdate?.(index, { ...set, completed: false, timedStartMs: null }) : handleTimedComplete())}
+            className={`tap-target flex-shrink-0 flex items-center justify-center rounded-lg transition-all ${set.completed ? '' : 'border border-border text-text-muted'}`}
+            style={{ width: 36, height: 36, ...(set.completed ? { background: 'var(--g-ok)', color: 'var(--g-ok-ink)' } : {}) }}>
+            {set.completed ? '✓' : ''}
+          </motion.button>
         </div>
         <AnimatePresence>
           {showDelete && (

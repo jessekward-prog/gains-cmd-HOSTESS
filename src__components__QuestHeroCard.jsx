@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useBackHandler from '../hooks/useBackHandler';
+import { revealing } from '../lib/reveal';
 import useQuest from '../hooks/useQuest';
 import useQuestArt from '../hooks/useQuestArt';
 import DitherCard, { effCard } from './DitherCard';
@@ -9,7 +10,7 @@ import Ticker from './Ticker';
 import { CARDS, RAR, PAL } from '../lib/dither';
 import { useToast } from '../context/ToastContext';
 import {
-  BORDERS, RARITY, PETS, HEROES, ASSET, borderCss, ownsBorder, ownsPet, equippedBorder, lvTitle, xpMult,
+  BORDERS, RARITY, PETS, HEROES, ASSET, borderCss, ownsBorder, ownsPet, equippedBorder, lvTitle, xpMult, heroesOf,
   LV_TITLES,
 } from '../lib/quest';
 
@@ -18,7 +19,7 @@ const DISPLAY = "'Manrope', var(--font-display), sans-serif";
 
 export function useFrame(ms = 100) {
   const [f, setF] = useState(0);
-  useEffect(() => { const id = setInterval(() => setF((n) => n + 1), ms); return () => clearInterval(id); }, [ms]);
+  useEffect(() => { const id = setInterval(() => { if (!revealing()) setF((n) => n + 1); }, ms); return () => clearInterval(id); }, [ms]);
   return f;
 }
 
@@ -123,16 +124,21 @@ export default function QuestHeroCard({ open, onClose }) {
           {nextUp.length ? `NEXT · LV ${nextUp[0][0]} · ${nextUp.map((u) => u[1]).join(' + ')}` : 'EVERY LEVEL REWARD UNLOCKED'}
         </div>
         {/* Each option is a tile like the Card Vault one; its picker opens right under it. */}
-        <OptionRow open={panel === 'hero'} onClick={() => toggle('hero')} title="Hero" sub={`${prof.hero} · ${Object.keys(HEROES).length} to choose from`}
-          icon={<SpriteIcon src={`${ASSET}sprites/${HEROES[prof.hero]?.[0] || 'warrior'}_idle_0.png`} h={HEROES[prof.hero] || HEROES.Warlord} />} />
-        {panel === 'hero' && (
-          <Picker title="HERO" count={`${Object.keys(HEROES).length}`}>
-            {Object.entries(HEROES).map(([name, h]) => (
-              <Tile key={name} on={prof.hero === name} onClick={() => save((q) => ({ ...q, hero: name }))}
-                img={`${ASSET}sprites/${h[0]}_idle_0.png`} frame={{ w: h[1], h: h[2], cx: h[4] }} name={name} sub={prof.hero === name ? 'CHOSEN' : ''} />
-            ))}
-          </Picker>
-        )}
+        {(() => {
+          const heroes = heroesOf(prof.theme); const names = Object.keys(heroes);
+          return <>
+            <OptionRow open={panel === 'hero'} onClick={() => toggle('hero')} title="Hero" sub={`${prof.hero} · ${names.length} to choose from`}
+              icon={<SpriteIcon src={`${ASSET}sprites/${heroes[prof.hero]?.[0] || names[0] && heroes[names[0]][0]}_idle_0.png`} h={heroes[prof.hero] || heroes[names[0]]} />} />
+            {panel === 'hero' && (
+              <Picker title="HERO" count={`${names.length}`}>
+                {Object.entries(heroes).map(([name, h]) => (
+                  <Tile key={name} on={prof.hero === name} onClick={() => save((q) => ({ ...q, hero: name }))}
+                    img={`${ASSET}sprites/${h[0]}_idle_0.png`} frame={{ w: h[1], h: h[2], cx: h[4] }} name={name} sub={prof.hero === name ? 'CHOSEN' : ''} />
+                ))}
+              </Picker>
+            )}
+          </>;
+        })()}
 
         <OptionRow open={panel === 'pet'} onClick={() => toggle('pet')} title="Pet"
           sub={petDef ? `${petDef[1]} · +${petDef[2] ? 5 : 10}% XP` : `None · ${PETS.filter((p) => ownsPet(prof, lvl, p)).length} of ${PETS.length} found`}

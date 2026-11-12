@@ -39,7 +39,7 @@ export default function BottomNav({ activeTab, onChange, hasActiveWorkout, onExp
 
       {expanded && (
         <div className="fixed left-2 right-2 z-50 max-w-xl mx-auto p-3 bg-bg-1 rounded-[28px] grid grid-cols-4 gap-1.5 fx-up g-root"
-          style={{ bottom: `calc(${BAR + 2}px + env(safe-area-inset-bottom, 0px))`, boxShadow: 'var(--g-sheet-shadow)' }}>
+          style={{ bottom: `calc(${BAR + 2}px + env(safe-area-inset-bottom, 0px) * 0.5)`, boxShadow: 'var(--g-sheet-shadow)' }}>
           {tabs.map((tab) => {
             const on = activeTab === tab.id;
             return (
@@ -60,8 +60,8 @@ export default function BottomNav({ activeTab, onChange, hasActiveWorkout, onExp
       )}
 
       <button onClick={() => setExpanded((e) => !e)} aria-expanded={expanded} aria-label="Navigation"
-        className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center gap-2.5 bg-bg-0 text-accent"
-        style={{ height: `calc(${BAR}px + env(safe-area-inset-bottom, 0px))`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        className="nav-bleed q-nav fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center gap-2.5 bg-bg-0 text-accent"
+        style={{ height: `calc(${BAR}px + env(safe-area-inset-bottom, 0px) * 0.5)`, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) * 0.5)' }}>
         <NavIcon id={activeTab} size={18} />
         <span style={{ font: `500 12px ${MONO}`, letterSpacing: '.06em' }}>{current?.label}</span>
         <span className="text-text-tertiary" style={{ fontFamily: MONO, fontSize: 14, transition: 'transform .25s', transform: expanded ? 'rotate(180deg)' : 'none' }}>⌃</span>

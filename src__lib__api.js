@@ -8,8 +8,6 @@ async function request(method, url, body) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    // The session lost its PIN unlock (logged out, expired) — reload to the PIN screen.
-    if (res.status === 401 && data?.pinRequired) window.location.reload();
     throw new Error(data?.error || `${method} ${url} failed: ${res.status}`);
   }
   return res.json();
@@ -44,7 +42,12 @@ export const clearActiveWorkout = () => api.del('/api/active-workout');
 
 // Settings
 export const getSettings = () => api.get('/api/settings');
-export const saveAppearance = (appearance) => api.post('/api/appearance', { appearance });
+// Beta keeps its own appearance on the account, so it never overwrites the classic app's.
+export const saveAppearance = (appearance) => api.post('/api/appearance-beta', { appearance });
+export const login = (email, password) => api.post('/auth/login', { email, password });
+export const register = (email, password, username) => api.post('/auth/register', { email, password, username });
+export const resetPassword = (email, recoveryPhrase, newPassword) =>
+  api.post('/auth/reset-password', { email, recoveryPhrase, newPassword });
 export const saveExerciseLinks = (links) => api.post('/api/exercise-links', { links });
 export const suggestExerciseLinks = (items) => api.post('/api/exercise-links/suggest', { items });
 export const saveQuest = (quest) => api.post('/api/quest', { quest });
@@ -71,22 +74,14 @@ export const setRecoveryStatus = (exerciseName, status, note) =>
 export const generateRecommendations = (trainingSettings) =>
   api.post('/api/generate-recommendations', { trainingSettings });
 
-// Exercise categorization
-
 // Wizard
 export const wizardInit = (programSummary) => api.post('/api/wizard-init', { programSummary });
 export const wizardChat = (messages, programSummary) =>
   api.post('/api/wizard-chat', { messages, programSummary });
 
-// Manual review
-
 // Cardio stats
 export const extractCardioStats = (imageData, mediaType) =>
   api.post('/api/extract-cardio-stats', { imageData, mediaType });
-
-// Substitution
-
-// Training Report
 
 // Workout Remix
 export const remixWorkout = (workout, instruction, mode) =>
@@ -97,3 +92,7 @@ export const shareWorkout = (workoutData, workoutName) =>
   api.post('/api/workouts/share', { workoutData, workoutName });
 export const previewShare = (code) => api.get(`/api/share/${code}`);
 export const importShare = (code) => api.post(`/api/share/${code}/import`, {});
+
+// Alpha rep-tracker traces
+export const saveRepTrace = (trace) => api.post('/api/rep-traces', trace);
+export const getRepTraces = () => api.get('/api/rep-traces');

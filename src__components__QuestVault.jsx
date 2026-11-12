@@ -6,6 +6,7 @@ import useQuestArt, { saveArt, resetArt } from '../hooks/useQuestArt';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
 import DitherCard, { effCard } from './DitherCard';
+import { Reel, buildReel } from './ChestReel';
 import { CARDS, RAR, PAL, STYLES, prepare, thumb } from '../lib/dither';
 import { withDefaults, FORGE_RIGHTS, RIGHTS_LABEL, editsLeft } from '../lib/quest';
 
@@ -34,6 +35,52 @@ const Back = ({ label = 'CARD PACK' }) => (
   </div>
 );
 
+/** The card-pack panel: the Vault's header, and the end of a quest. */
+export function PackPanel({ packs, onOpen }) {
+  const t = useClock();
+  return (
+    <div className="relative overflow-hidden" style={{ borderRadius: 28, padding: 18, color: '#f0f0f0', fontFamily: DISPLAY, textAlign: 'left', background: packs ? 'radial-gradient(ellipse at 25% 50%, rgba(255,34,34,.18), #0e0e0e 70%)' : '#0e0e0e' }}>
+      <div className="flex items-center gap-5">
+        <div className="relative flex-shrink-0" style={{ width: 104, height: 140 }}>
+          {[-10, 0, 9].map((r, i) => (
+            <div key={i} className="absolute inset-0" style={{
+              transform: `rotate(${r}deg) translateY(${packs ? Math.sin(t * 2 + i) * 3 : 0}px)`, borderRadius: 14, padding: 2,
+              background: packs ? '#ff2222' : '#2a2a2a', boxShadow: packs ? `0 0 ${18 + Math.sin(t * 3) * 6}px rgba(255,34,34,.45)` : 'none', opacity: 2 - i < Math.max(1, Math.min(3, packs)) || !packs ? 1 : 0.25 }}>
+              <div className="w-full h-full overflow-hidden" style={{ borderRadius: 12 }}><Back /></div>
+            </div>
+          ))}
+          {packs > 0 && (
+            <span className="absolute flex items-center justify-center" style={{ right: -8, top: -8, minWidth: 30, height: 30, padding: '0 8px', borderRadius: 15, background: '#fbbf24', color: '#050505', font: `700 14px ${MONO}`, boxShadow: '0 0 0 3px #0e0e0e' }}>×{packs}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>CARD PACKS</div>
+          <div style={{ marginTop: 6, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05 }}>
+            {packs ? `${packs} pack${packs > 1 ? 's' : ''} to open` : 'No packs yet'}
+          </div>
+          <div style={{ marginTop: 6, font: `400 11px ${MONO}`, color: '#999', lineHeight: 1.5 }}>
+            {packs ? 'One card each. Doubles add a customise.' : 'Clear a quest to earn one.'}
+          </div>
+        </div>
+      </div>
+      <button onClick={onOpen} disabled={!packs} className="w-full active:scale-[.98] disabled:opacity-40"
+        style={{ marginTop: 16, height: 58, borderRadius: 18, background: '#ff2222', color: '#fff', fontWeight: 800, fontSize: 16 }}>
+        {packs ? 'Open a pack' : 'Clear a quest for a pack'}
+      </button>
+    </div>
+  );
+}
+
+// The pack reel: card backs framed in their rarity, landing on the one you pulled.
+const LETTERS = ['C', 'R', 'E', 'L'];
+const packTile = (r) => ({ r, col: RAR[LETTERS[r]].col, name: RAR[LETTERS[r]].name });
+const PackTile = ({ t, won }) => (
+  <div className="flex-shrink-0" style={{ width: 84, height: 118, padding: 3, borderRadius: 12, boxShadow: won ? `0 0 26px ${t.col}` : t.r ? `0 0 12px ${t.col}66` : 'none',
+    background: t.r === 3 ? 'conic-gradient(#ff5ea8, #fbbf24, #6dff3a, #3aa0ff, #c084fc, #ff5ea8)' : t.r ? t.col : '#4a4a4a' }}>
+    <div className="w-full h-full overflow-hidden" style={{ borderRadius: 10 }}><Back label={t.name} /></div>
+  </div>
+);
+
 /** Static thumbnails for the grid (one render per card + art change). */
 function useThumbs(ids, art) {
   const [thumbs, setThumbs] = useState({});
@@ -58,7 +105,7 @@ function useThumbs(ids, art) {
  * inspect it, "Use this card" to make it your hero card, or Customise it —
  * one customise per copy you own, and what it can change rises with rarity.
  */
-export default function QuestVault({ onClose }) {
+export default function QuestVault({ onClose, autoOpen = false }) {
   const { prof, vault } = useQuest();
   const { saveQuest } = useWorkout();
   const { showToast } = useToast();
@@ -96,8 +143,11 @@ export default function QuestVault({ onClose }) {
       return { ...cur, profile: { ...p, packs: Math.max(0, (p.packs || 0) - 1) }, vault: { ...v, owned: { ...v.owned, [c.id]: (v.owned[c.id] || 0) + 1 } } };
     }).catch(fail);
     setIns(null);
-    setRev({ id: c.id, t0: t, isNew: n === 1, n });
+    setRev({ id: c.id, t0: t, isNew: n === 1, n, spin: true, at: Date.now() });
   };
+  // Straight from a quest clear: open the pack it just earned, once.
+  const autoDone = useRef(false);
+  useEffect(() => { if (autoOpen && !autoDone.current && prof.packs) { autoDone.current = true; openPack(); } }, [autoOpen, prof.packs]); // eslint-disable-line react-hooks/exhaustive-deps
   const pickCard = (id) => updVault((v) => ({ ...v, favs: [id] }));
   const step = (d) => { const i = list.findIndex((c) => c.id === ins); if (list.length) setIns(list[(i + d + list.length) % list.length].id); };
   const startForge = (slot) => { const e = eff(slot); setForge({ slot, name: e.name, style: e.style, pal: e.pal, img: art[slot]?.img || null, err: '' }); };
@@ -130,7 +180,10 @@ export default function QuestVault({ onClose }) {
   const panel = { background: '#0e0e0e', borderRadius: 28, padding: 16 };
   const ic = ins ? eff(ins) : null, io = !!ic && owned(ins), icN = ins ? vault.owned[ins] || 0 : 0;
   const left = ins ? editsLeft(vault, ins) : 0;
-  const rc = rev ? eff(rev.id) : null, dt = rev ? t - rev.t0 : 0;
+  const rc = rev ? eff(rev.id) : null, dt = rev && !rev.spin ? t - rev.t0 : 0;
+  const tRef = useRef(t); tRef.current = t;
+  // The reel lands, holds its burst for a beat, then the big card shakes and flips.
+  const landPack = (at) => setTimeout(() => setRev((v) => (v && v.at === at ? { ...v, spin: false, t0: tRef.current } : v)), 900);
   let deg = 0, shake = 0;
   if (dt < 0.7) shake = Math.sin(dt * 55) * 5 * Math.min(1, dt / 0.5);
   else if (dt < 1.2) deg = 180 * (1 - Math.pow(1 - (dt - 0.7) / 0.5, 3));
@@ -169,35 +222,7 @@ export default function QuestVault({ onClose }) {
         </div>
 
         {/* Packs: the reason to come in here */}
-        <div className="relative overflow-hidden" style={{ ...panel, padding: 18, background: packs ? 'radial-gradient(ellipse at 25% 50%, rgba(255,34,34,.18), #0e0e0e 70%)' : '#0e0e0e' }}>
-          <div className="flex items-center gap-5">
-            <div className="relative flex-shrink-0" style={{ width: 104, height: 140 }}>
-              {[-10, 0, 9].map((r, i) => (
-                <div key={i} className="absolute inset-0" style={{
-                  transform: `rotate(${r}deg) translateY(${packs ? Math.sin(t * 2 + i) * 3 : 0}px)`, borderRadius: 14, padding: 2,
-                  background: packs ? '#ff2222' : '#2a2a2a', boxShadow: packs ? `0 0 ${18 + Math.sin(t * 3) * 6}px rgba(255,34,34,.45)` : 'none', opacity: 2 - i < Math.max(1, Math.min(3, packs)) || !packs ? 1 : 0.25 }}>
-                  <div className="w-full h-full overflow-hidden" style={{ borderRadius: 12 }}><Back /></div>
-                </div>
-              ))}
-              {packs > 0 && (
-                <span className="absolute flex items-center justify-center" style={{ right: -8, top: -8, minWidth: 30, height: 30, padding: '0 8px', borderRadius: 15, background: '#fbbf24', color: '#050505', font: `700 14px ${MONO}`, boxShadow: '0 0 0 3px #0e0e0e' }}>×{packs}</span>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>CARD PACKS</div>
-              <div style={{ marginTop: 6, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05 }}>
-                {packs ? `${packs} pack${packs > 1 ? 's' : ''} to open` : 'No packs yet'}
-              </div>
-              <div style={{ marginTop: 6, font: `400 11px ${MONO}`, color: '#999', lineHeight: 1.5 }}>
-                {packs ? 'One card each. Doubles add a customise.' : 'Clear a quest to earn one.'}
-              </div>
-            </div>
-          </div>
-          <button onClick={openPack} disabled={!packs} className="w-full active:scale-[.98] disabled:opacity-40"
-            style={{ marginTop: 16, height: 58, borderRadius: 18, background: '#ff2222', color: '#fff', fontWeight: 800, fontSize: 16 }}>
-            {packs ? 'Open a pack' : 'Clear a quest for a pack'}
-          </button>
-        </div>
+        <PackPanel packs={packs} onOpen={openPack} />
 
         {hero && (
           <button onClick={() => setIns(heroId)} className="flex items-center gap-3 text-left" style={{ ...panel, padding: 12, borderRadius: 22 }}>
@@ -296,7 +321,16 @@ export default function QuestVault({ onClose }) {
       )}
 
       {rc && (
-        <div className="fixed inset-0 z-[240] overflow-y-auto flex flex-col items-center justify-center gap-[18px]" style={{ background: '#050505', padding: '24px 18px' }}>
+        <div onClick={() => rev.spin && setRev((v) => ({ ...v, skip: true }))} className="fixed inset-0 z-[240] overflow-y-auto overflow-x-hidden flex flex-col items-center justify-center gap-[18px]" style={{ background: '#050505', padding: '24px 18px' }}>
+          {rev.spin ? (
+            <>
+              <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.2em', color: '#ff2222' }}>OPENING PACK</div>
+              <Reel key={rev.at} seed={`${rev.id}|${rev.at}`} skip={!!rev.skip} onLand={() => landPack(rev.at)} w={84} h={118}
+                tiles={buildReel(`${rev.id}|${rev.at}`, packTile(LETTERS.indexOf(rc.rarity)), (r) => packTile(r))}
+                render={(tl, w) => <PackTile t={tl} won={w} />} />
+              <div style={{ font: `400 10px ${MONO}`, color: '#666' }}>Tap to skip</div>
+            </>
+          ) : (<>
           <div style={{ font: `600 12px ${MONO}`, letterSpacing: '.24em', color: RAR[rc.rarity].col, opacity: infoOp }}>{RAR[rc.rarity].name}</div>
           <div style={{ width: 280, maxWidth: '76vw', perspective: 1000 }}>
             <div className="relative" style={{ aspectRatio: '5 / 7', transformStyle: 'preserve-3d', transform: `translateX(${shake}px) rotateY(${deg}deg)` }}>
@@ -322,6 +356,7 @@ export default function QuestVault({ onClose }) {
               </button>
             </div>
           </div>
+          </>)}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkout } from '../context/WorkoutContext';
@@ -13,13 +13,70 @@ import ThinkingDots from '../components/ThinkingDots';
 import NavIcon from '../components/NavIcon';
 import * as api from '../lib/api';
 import WizardModal from '../components/WizardModal';
+import useBackHandler from '../hooks/useBackHandler';
 import { EXERCISE_LIST_ID } from '../components/ExerciseNameOptions';
 import { isMarker } from '../lib/history';
 import { supersetRows } from '../lib/supersets';
 import { estimateMinutes, daysAgo } from '../lib/focus';
 import { readGreeting, defaultGreeting } from '../lib/greeting';
+import WaveBackground from '../components/WaveBackground';
 
 const MONO = 'var(--font-mono)';
+
+// The hero trudging along inside the Quest button. The run sprite is 114x59 with
+// the character sitting at x 31-89, y 18-59 across all 8 frames, so the box crops
+// to that (plus 3px either side so the cape never sits flush against the edge)
+// and the art draws at native scale — no blur, no wasted space.
+const RUN_W = 64, RUN_H = 41, RUN_FRAMES = 8;
+const runSrc = (i) => `/quest/sprites/warrior_run_${i}.png`;
+const reduceMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function QuestRunner() {
+  const [f, setF] = useState(0);
+  useEffect(() => {
+    for (let i = 0; i < RUN_FRAMES; i++) { const im = new Image(); im.src = runSrc(i); } // no first-cycle flicker
+    if (reduceMotion) return;
+    const id = setInterval(() => setF((n) => (n + 1) % RUN_FRAMES), 110);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span aria-hidden className="relative block overflow-hidden flex-shrink-0"
+      style={{ width: RUN_W, height: RUN_H }}>
+      <span className="absolute inset-0" style={{
+        backgroundImage: `url(${runSrc(f)})`,
+        backgroundPosition: '-28px -18px',
+        imageRendering: 'pixelated',
+        // The quest screens push every sprite through a luminance ramp onto one
+        // accent; this is the cheap equivalent, so he belongs in the amber panel
+        // instead of being the one full-colour thing on the home screen.
+        filter: 'sepia(1) saturate(2.6) hue-rotate(-12deg) brightness(1.05)',
+      }} />
+      {/* a scrap of ground sliding the other way, so he reads as covering distance */}
+      <span className="absolute left-0 right-0" style={{
+        bottom: 1, height: 2, opacity: 0.45,
+        background: 'repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 13px)',
+        transform: `translateX(${reduceMotion ? 0 : -(f * 13) / RUN_FRAMES}px)`,
+      }} />
+    </span>
+  );
+}
+
+// A chunky pixel chevron rather than the typographic arrow the other buttons use.
+// crispEdges keeps the steps hard at any DPR, so it reads as art and not a glyph,
+// and it beckons on a slow loop — the hero is walking toward it.
+function PixelArrow() {
+  return (
+    <svg width="16" height="18" viewBox="0 0 8 9" aria-hidden
+      shapeRendering="crispEdges" fill="currentColor"
+      style={reduceMotion ? undefined : { animation: 'quest-beckon 1.6s ease-in-out infinite' }}>
+      <rect x="1" y="0" width="2" height="1" /><rect x="2" y="1" width="2" height="1" />
+      <rect x="3" y="2" width="2" height="1" /><rect x="4" y="3" width="2" height="1" />
+      <rect x="5" y="4" width="2" height="1" /><rect x="4" y="5" width="2" height="1" />
+      <rect x="3" y="6" width="2" height="1" /><rect x="2" y="7" width="2" height="1" />
+      <rect x="1" y="8" width="2" height="1" />
+    </svg>
+  );
+}
 const parseWorkouts = (p) => (typeof p?.workouts === 'string' ? JSON.parse(p.workouts) : p?.workouts || []);
 const initials = (name) => name.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
 function specials(exs = []) {
@@ -28,6 +85,7 @@ function specials(exs = []) {
   if (exs.some((e) => e.hasDrops || e.numDrops > 0)) out.push('drops');
   if (exs.some((e) => e.isBFR)) out.push('BFR');
   if (exs.some((e) => e.isInterval)) out.push('intervals');
+  if (exs.some((e) => e.isTimed)) out.push('timed');
   return out;
 }
 
@@ -35,6 +93,8 @@ function specials(exs = []) {
    Default exercise template — mirrors the shape that WorkoutContext expects
    when starting a workout from a saved program.
    ────────────────────────────────────────────────────────────────────────── */
+const fmtSecs = (s) => (s >= 60 ? `${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ''}` : `${s}s`);
+
 function newExercise() {
   return {
     name: '',
@@ -52,6 +112,8 @@ function newExercise() {
     intervalWork: 30,
     intervalRest: 30,
     intervalTotal: 180,
+    isTimed: false,
+    timedSec: 60,
     supersetWith: '',
     isVariable: false,
     variableSets: [],
@@ -71,7 +133,7 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
   const update = (field, value) => onChange(index, field, value);
 
   const isCardio = exercise.type === 'cardio';
-  const hasAnySpecial = exercise.hasDrops || exercise.isBFR || exercise.isInterval || !!exercise.supersetWith || exercise.isVariable;
+  const hasAnySpecial = exercise.hasDrops || exercise.isBFR || exercise.isInterval || exercise.isTimed || !!exercise.supersetWith || exercise.isVariable;
 
   const borderColor = isCardio
     ? 'border-orange-400/30 bg-orange-400/5'
@@ -124,6 +186,9 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
           )}
           {exercise.isInterval && (
             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/10 text-orange-400 border border-orange-400/20">INTERVAL</span>
+          )}
+          {exercise.isTimed && (
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">TIMED</span>
           )}
           {exercise.supersetWith && (
             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">SS</span>
@@ -306,6 +371,15 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                   </div>
                 )}
 
+                {/* Timed preview */}
+                {exercise.isTimed && (
+                  <div className="px-3 py-2 bg-sky-400/5 border-b border-border">
+                    <span className="text-[10px] font-mono text-sky-400">
+                      Timed: {fmtSecs(exercise.timedSec || 60)} per set · rest timer between
+                    </span>
+                  </div>
+                )}
+
                 {/* Interval preview */}
                 {exercise.isInterval && (
                   <div className="px-3 py-2 bg-orange-400/5 border-b border-border">
@@ -382,6 +456,7 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                                   onChange(index, 'hasDrops', true);
                                   onChange(index, 'isBFR', false);
                                   onChange(index, 'isInterval', false);
+                                  onChange(index, 'isTimed', false);
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-lg text-[10px] font-mono transition-all ${
@@ -406,6 +481,57 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                           )}
                         </div>
 
+                        {/* Timed */}
+                        <div className={`p-3 rounded-xl border transition-colors ${exercise.isTimed ? 'border-sky-400/40 bg-sky-400/5' : 'border-border bg-bg-2'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <div className="font-display font-semibold text-xs text-text-primary">Timed sets</div>
+                              <div className="text-[10px] text-text-secondary">Each set is one countdown (e.g. run 5 min). Rest timer between.</div>
+                            </div>
+                            <motion.button whileTap={{ scale: 0.9 }}
+                              onClick={() => {
+                                if (exercise.isTimed) {
+                                  update('isTimed', false);
+                                } else {
+                                  onChange(index, 'isTimed', true);
+                                  onChange(index, 'hasDrops', false);
+                                  onChange(index, 'isBFR', false);
+                                  onChange(index, 'isInterval', false);
+                                  onChange(index, 'isVariable', false);
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-mono transition-all ${
+                                exercise.isTimed ? 'text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}
+                              style={exercise.isTimed ? { background: 'rgb(56 189 248)' } : {}}>
+                              {exercise.isTimed ? 'ON' : 'OFF'}
+                            </motion.button>
+                          </div>
+                          {exercise.isTimed && (
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <span className="text-[10px] font-mono text-text-tertiary">Per set:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {[30, 60, 120, 300, 600, 1200].map(s => (
+                                  <motion.button key={s} whileTap={{ scale: 0.9 }}
+                                    onClick={() => update('timedSec', s)}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                                      (exercise.timedSec || 60) === s ? 'text-white' : 'bg-bg-3 border border-border text-text-secondary'}`}
+                                    style={(exercise.timedSec || 60) === s ? { background: 'rgb(56 189 248)' } : {}}>
+                                    {fmtSecs(s)}
+                                  </motion.button>
+                                ))}
+                              </div>
+                              <label className="flex items-center gap-1 text-[10px] font-mono text-text-tertiary">
+                                or
+                                <input type="number" inputMode="decimal" min="0" step="0.5"
+                                  value={Math.round(((exercise.timedSec || 60) / 60) * 100) / 100}
+                                  onChange={e => { const m = parseFloat(e.target.value); if (m > 0) update('timedSec', Math.max(5, Math.round(m * 60))); }}
+                                  className="w-14 text-center py-1 rounded-lg bg-bg-1 border border-border text-xs text-text-primary outline-none focus:border-sky-400" />
+                                min
+                              </label>
+                            </div>
+                          )}
+                        </div>
+
                         {/* BFR */}
                         <div className={`p-3 rounded-xl border transition-colors ${exercise.isBFR ? 'border-purple-400/40 bg-purple-400/5' : 'border-border bg-bg-2'}`}>
                           <div className="flex items-center justify-between mb-2">
@@ -421,6 +547,7 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                                   onChange(index, 'isBFR', true);
                                   onChange(index, 'hasDrops', false);
                                   onChange(index, 'isInterval', false);
+                                  onChange(index, 'isTimed', false);
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-lg text-[10px] font-mono transition-all ${
@@ -460,6 +587,7 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                                   onChange(index, 'isInterval', true);
                                   onChange(index, 'hasDrops', false);
                                   onChange(index, 'isBFR', false);
+                                  onChange(index, 'isTimed', false);
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-lg text-[10px] font-mono transition-all ${
@@ -545,6 +673,7 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
                                   onChange(index, 'hasDrops', false);
                                   onChange(index, 'isBFR', false);
                                   onChange(index, 'isInterval', false);
+                                  onChange(index, 'isTimed', false);
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-lg text-[10px] font-mono transition-all flex-shrink-0 ${
@@ -676,6 +805,15 @@ export default function ProgramsPage({ onNavigate }) {
   const [importError, setImportError] = useState('');
   const [importTargetProgramId, setImportTargetProgramId] = useState('');
   const [importMode, setImportMode] = useState('new');
+
+  const closeImport = useCallback(() => { setShowImportModal(false); setImportCode(''); setImportPreview(null); setImportError(''); setImportTargetProgramId(''); setImportMode('new'); }, []);
+
+  // Back (or the swipe-back gesture) closes whichever of these hand-rolled
+  // sheets is open instead of leaving the page. The <Modal>/<ConfirmDialog>
+  // ones register themselves.
+  useBackHandler(!!workoutMenu, () => setWorkoutMenu(null));
+  useBackHandler(!!shareModal, () => setShareModal(null));
+  useBackHandler(showImportModal, closeImport);
 
   const handleDeleteWorkout = useCallback(async () => {
     if (!deleteWorkoutConfirm || !selectedProgram) return;
@@ -963,6 +1101,10 @@ export default function ProgramsPage({ onNavigate }) {
           base.intervalRest = ex.intervalRest || 30;
           base.intervalTotal = ex.intervalTotal || 180;
         }
+        if (ex.isTimed) {
+          base.isTimed = true;
+          base.timedSec = ex.timedSec || 60;
+        }
         if (ex.supersetWith && ex.supersetWith.trim()) {
           base.supersetWith = ex.supersetWith.trim();
         }
@@ -1007,34 +1149,43 @@ export default function ProgramsPage({ onNavigate }) {
         <p className="text-sm text-text-secondary">{upNext.line}</p>
 
         {upNext.workout && (
-          <div className="mt-[22px] p-5 rounded-[26px] bg-bg-1 flex flex-col gap-4">
-            <div>
+          <div className="relative overflow-hidden mt-[22px] p-5 rounded-[26px] bg-bg-1 flex flex-col gap-4">
+            {/* The page's own waves, scaled into the card — it is the one box
+                that is about today, so it gets the live background. */}
+            <WaveBackground embed />
+            <div className="relative">
               <div className="g-label truncate ps-t">UP NEXT · {upNext.program.name.toUpperCase()}</div>
               <div className="mt-2" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1 }}>{upNext.workout.name}</div>
               <div className="mt-1.5 g-meta">{workoutMeta(upNext.workout, true)}</div>
             </div>
             {activeWorkout ? (
               <button onClick={() => onNavigate('workout')}
-                className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
+                className="relative h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
                 style={{ color: 'var(--color-on-accent)' }}>
                 {activeWorkout.quest ? 'Quest in progress' : 'Workout in progress'} <span style={{ fontFamily: MONO }}>→</span>
               </button>
             ) : (
-              // Chosen per gym visit: a normal workout, or the same session played as a quest.
-              <div className="grid grid-cols-2 gap-2">
+              // Chosen per gym visit: a normal workout, or the same session played
+              // as a quest. Quest gets a line of its own — at half width it read as
+              // an afterthought beside Workout, and there is no room for the hero.
+              <div className="relative flex flex-col gap-2">
                 <button onClick={() => handleStartWorkout(upNext.index, upNext.program)}
                   className="h-14 rounded-[18px] bg-accent font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
                   style={{ color: 'var(--color-on-accent)' }}>
                   Workout <span style={{ fontFamily: MONO }}>→</span>
                 </button>
                 <button onClick={() => onNavigate('quest')}
-                  className="h-14 rounded-[18px] bg-bg-2 text-text-primary font-extrabold text-base flex items-center justify-between px-5 active:scale-[.98] transition-transform"
-                  style={{ boxShadow: 'inset 0 0 0 1.5px #ff9a3c' }}>
-                  <span className="flex flex-col items-start leading-none">
-                    Quest
-                    <span className="mt-1" style={{ font: `600 8px ${MONO}`, letterSpacing: '.16em', color: '#ff9a3c' }}>ALPHA TEST</span>
+                  className="quest-crt h-16 rounded-[18px] border font-extrabold text-base flex items-center justify-between pl-5 pr-4 active:scale-[.98] transition-transform overflow-hidden"
+                  style={reduceMotion ? undefined : { animation: 'quest-flicker 7s steps(1, end) infinite' }}>
+                  <span className="flex flex-col items-start leading-none min-w-0">
+                    <span style={{ fontFamily: MONO, letterSpacing: '.04em' }}>QUEST</span>
+                    <span className="mt-1 quest-sub" style={{ font: `600 8px ${MONO}`, letterSpacing: '.16em' }}>ALPHA TEST</span>
                   </span>
-                  <span style={{ fontFamily: MONO, color: '#ff9a3c' }}>→</span>
+                  {/* He walks toward the arrow, which is the whole invitation. */}
+                  <span className="flex items-center gap-2 flex-shrink-0">
+                    <QuestRunner />
+                    <PixelArrow />
+                  </span>
                 </button>
               </div>
             )}
@@ -1068,9 +1219,10 @@ export default function ProgramsPage({ onNavigate }) {
                 </button>
                 {open && (
                   <div className="flex flex-col px-2 pb-2">
+                    <div className="flex flex-col gap-1 p-1.5 rounded-2xl bg-bg-0">
                     {workouts.map((w, i) => (
                       <button key={i} onClick={() => handleStartWorkout(i, program)}
-                        className="flex items-center gap-3 p-2.5 rounded-2xl text-left active:bg-bg-2"
+                        className="flex items-center gap-3 p-2.5 rounded-xl text-left active:bg-bg-2"
                         style={{ animation: `fx-in .3s ${i * 0.05}s both` }}>
                         <div className="w-[38px] h-[38px] flex-none rounded-[13px] bg-bg-2 flex items-center justify-center text-text-secondary" style={{ font: `500 11px ${MONO}` }}>
                           {w.favorite ? '★' : initials(w.name)}
@@ -1079,9 +1231,10 @@ export default function ProgramsPage({ onNavigate }) {
                           <div className="text-[15px] font-bold truncate">{w.name}</div>
                           <div className="mt-0.5 text-text-tertiary truncate" style={{ font: `400 11px ${MONO}` }}>{workoutMeta(w, false, program)}</div>
                         </div>
-                        <span className="text-accent" style={{ font: `500 11px ${MONO}` }}>Start</span>
+                        <span className="flex-none px-3.5 py-2 rounded-full bg-accent active:scale-95 transition-transform" style={{ color: 'var(--color-on-accent)', font: `600 11px ${MONO}` }}>Start</span>
                       </button>
                     ))}
+                    </div>
                     <div className="flex gap-2 px-2 pt-2">
                       <button onClick={() => setSelectedProgram(program)} className="flex-1 h-10 rounded-[12px] bg-bg-2 text-text-secondary" style={{ font: `500 11px ${MONO}` }}>Manage workouts</button>
                       <button onClick={() => setDeleteConfirm(program)} className="h-10 px-4 rounded-[12px] bg-bg-2 text-error/70" style={{ font: `500 11px ${MONO}` }}>Delete</button>
@@ -1121,6 +1274,7 @@ export default function ProgramsPage({ onNavigate }) {
               if (ex.hasDrops || ex.numDrops > 0) return ' · DROP';
               if (ex.isBFR) return ' · BFR';
               if (ex.isInterval) return ' · INTERVAL';
+              if (ex.isTimed) return ' · TIMED';
               if (ex.supersetWith) return ` · SS w/ ${ex.supersetWith}`;
               return '';
             }
@@ -1157,6 +1311,7 @@ export default function ProgramsPage({ onNavigate }) {
                   if (ex.hasDrops && !orig.hasDrops) changes.push('drop sets');
                   if (ex.isBFR && !orig.isBFR) changes.push('BFR');
                   if (ex.isInterval && !orig.isInterval) changes.push('intervals');
+                  if (ex.isTimed && !orig.isTimed) changes.push('timed sets');
                   if (ex.supersetWith && !orig.supersetWith) changes.push(`superset w/ ${ex.supersetWith}`);
                   if (changes.length > 0) diffLines.push({ type: 'changed', text: `~ ${ex.name}: ${changes.join(', ')}` });
                 });
@@ -1577,7 +1732,7 @@ export default function ProgramsPage({ onNavigate }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[200] flex items-center justify-center p-6"
-              onClick={() => { setShowImportModal(false); setImportCode(''); setImportPreview(null); setImportError(''); setImportTargetProgramId(''); setImportMode('new'); }}
+              onClick={closeImport}
             >
               <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
               <motion.div
@@ -1652,7 +1807,7 @@ export default function ProgramsPage({ onNavigate }) {
                       {importLoading ? <span className="flex items-center justify-center gap-2">Importing <ThinkingDots /></span> : 'Import into Program'}
                     </Button>
                   )}
-                  <Button variant="ghost" onClick={() => { setShowImportModal(false); setImportCode(''); setImportPreview(null); setImportError(''); setImportTargetProgramId(''); setImportMode('new'); }} className="w-full">Cancel</Button>
+                  <Button variant="ghost" onClick={closeImport} className="w-full">Cancel</Button>
                 </div>
               </motion.div>
             </motion.div>

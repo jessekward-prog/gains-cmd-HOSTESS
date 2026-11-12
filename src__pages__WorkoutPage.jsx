@@ -1,4 +1,7 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
+import { bloom } from '../../lib/bloom';
+import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '../context/NavigationContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
@@ -12,7 +15,7 @@ import SupersetCard from '../components/SupersetCard';
 import CardioCard from '../components/CardioCard';
 import FocusWorkout from '../components/FocusWorkout';
 import { Countdown, FinishFlow } from '../components/FocusTransitions';
-import { summarize, workoutLayout as readLayout } from '../lib/focus';
+import { summarize, workoutLayout as readLayout, isCardio } from '../lib/focus';
 import { moodState } from '../lib/mood';
 
 import Button from '../components/Button';
@@ -57,6 +60,9 @@ function compressImage(file, maxWidth = 800) {
 }
 
 export default function WorkoutPage({ onNavigate }) {
+  // Leaving the workout (finish, cancel) returns to the screen it was started
+  // from — the quest screen for a quest — instead of stacking a new one.
+  const { returnTo } = useNavigation();
   const { activeWorkout, updateActiveWorkout, finishWorkout, cancelWorkout, programs, reloadPrograms, workoutHistory } = useWorkout();
   const { showToast } = useToast();
   const { showHeaderMessage } = useHeaderMessage();
@@ -74,6 +80,8 @@ export default function WorkoutPage({ onNavigate }) {
   const [newExSets, setNewExSets] = useState(3);
   const [newExReps, setNewExReps] = useState('8-12');
   const [newExRest, setNewExRest] = useState(90);
+  const [newExTimed, setNewExTimed] = useState(false); // each set is a countdown instead of reps
+  const [newExMin, setNewExMin] = useState('5');
   const [cardioStats, setCardioStats] = useState(null);
   const [cardioLoading, setCardioLoading] = useState(false);
   const [variationData, setVariationData] = useState(null);
@@ -87,6 +95,10 @@ export default function WorkoutPage({ onNavigate }) {
   const [countdown, setCountdown] = useState(() =>
     isFocus && !isQuest && !!activeWorkout && Date.now() - new Date(activeWorkout.startTime).getTime() < 4000);
   const [finishing, setFinishing] = useState(null); // { summary } while the finish flow is up
+  // Keep Quest Mode's look through the loot and summary, after the workout itself is cleared.
+  const { setQuestHold } = useTheme();
+  const holdQuest = !!finishing?.quest;
+  useEffect(() => { setQuestHold(holdQuest); return () => setQuestHold(false); }, [holdQuest, setQuestHold]);
   const [finishError, setFinishError] = useState(null);
   const [activeTimerIndices, setActiveTimerIndices] = useState({});
 
@@ -161,6 +173,8 @@ export default function WorkoutPage({ onNavigate }) {
       // Find the last normal set for weight prefill
       const lastNormal = [...ex.sets].reverse().find(s => s.type !== 'drop');
       const newNormalSet = { reps: '', weight: lastNormal?.weight || '', completed: false };
+      // A timed exercise's extra set is another countdown of the same length.
+      if (lastNormal?.type === 'timed') Object.assign(newNormalSet, { type: 'timed', timedSec: lastNormal.timedSec || ex.timedSec || 60 });
       const numDrops = ex.numDrops || 0;
       const dropSets = Array.from({ length: numDrops }, (_, i) => ({
         reps: '', weight: '', completed: false, type: 'drop', dropIndex: i,
@@ -176,6 +190,7 @@ export default function WorkoutPage({ onNavigate }) {
   const { start: startGlobalTimer } = useGlobalTimer();
 
   const handleSetComplete = useCallback((exerciseIndex, setIndex, restSeconds) => {
+    bloom();
     moodState.pulse = Date.now();
     const exercises = activeWorkout?.exercises || [];
     const members = supersetMembersOf(exercises, exerciseIndex);
@@ -186,12 +201,12 @@ export default function WorkoutPage({ onNavigate }) {
       // set being checked isn't in state yet, hence passing it in explicitly.
       if (round < 0 || !roundComplete(exercises, members, round, { exerciseIndex, setIndex })) return;
       const shared = exercises[members[0]]?.restSeconds ?? restSeconds;
-      if (shared > 0) startGlobalTimer(shared);
+      if (shared > 0) startGlobalTimer(shared, undefined, exerciseIndex);
       return;
     }
 
     if (restSeconds > 0) {
-      startGlobalTimer(restSeconds);
+      startGlobalTimer(restSeconds, undefined, exerciseIndex);
     }
   }, [activeWorkout, startGlobalTimer]);
 
@@ -229,19 +244,71 @@ export default function WorkoutPage({ onNavigate }) {
     });
   }, [updateActiveWorkout]);
 
-  const handleSubstitute = useCallback((exerciseIndex, newName) => {
+  // type ('strength' | 'cardio') is optional; when it differs from the exercise's
+  // current type the exercise is rebuilt in that shape (cardio → one timed set
+  // with screenshot upload; strength → weight × reps sets).
+  const handleSubstitute = useCallback((exerciseIndex, newName, type) => {
+    const cur = activeWorkout?.exercises?.[exerciseIndex];
+    const wasCardio = isCardio(cur);
+    const toCardio = type ? type === 'cardio' : wasCardio;
+    const converting = !!cur && toCardio !== wasCardio;
     updateActiveWorkout((prev) => {
       if (!prev) return prev;
       const next = { ...prev, exercises: [...prev.exercises] };
-      const orig = next.exercises[exerciseIndex].name;
-      next.exercises[exerciseIndex] = {
-        ...next.exercises[exerciseIndex],
-        name: newName,
-        substituted: { original: orig, replacement: newName },
-      };
+      const ex = next.exercises[exerciseIndex];
+      const renamed = newName !== ex.name;
+      const sub = renamed ? { substituted: { original: ex.name, replacement: newName } } : {};
+      if (!converting) {
+        next.exercises[exerciseIndex] = { ...ex, name: newName, ...sub };
+        return next;
+      }
+      // A superset can't hold a cardio block — unlink both halves.
+      if (ex.supersetWith) {
+        const pi = next.exercises.findIndex((e, i) => i !== exerciseIndex && e.name === ex.supersetWith);
+        if (pi >= 0) next.exercises[pi] = { ...next.exercises[pi], supersetWith: undefined };
+      }
+      if (toCardio) {
+        // Strength intervals carry over as cardio intervals over the same total time.
+        const ints = ex.sets.filter((s) => s.type === 'interval');
+        const iv = ints[0];
+        next.exercises[exerciseIndex] = {
+          name: newName,
+          ...sub,
+          type: 'cardio',
+          targetDurationSec: iv ? (iv.intervalTotal || 0) * ints.length : 0,
+          ...(iv ? { intervals: { workSec: iv.intervalWork || 30, restSec: iv.intervalRest || 30, finalPushSec: 0 } } : {}),
+          targetSets: 1,
+          targetReps: 'cardio',
+          repRange: 'cardio',
+          restSeconds: 0,
+          sets: [{ type: 'cardio', completed: false, elapsedSec: 0, cardioStats: null }],
+          notes: ex.notes || [],
+        };
+      } else {
+        next.exercises[exerciseIndex] = {
+          name: newName,
+          ...sub,
+          targetSets: 3,
+          targetReps: '8-12',
+          repRange: '8-12',
+          restSeconds: 90,
+          sets: Array.from({ length: 3 }, () => ({ reps: '', weight: '', completed: false })),
+          notes: ex.notes || [],
+        };
+      }
       return next;
     });
-    showToast(`Substituted: ${newName}`, 'success');
+    showToast(converting ? `${newName} → ${toCardio ? 'cardio' : 'strength'}` : `Substituted: ${newName}`, 'success');
+  }, [activeWorkout, updateActiveWorkout, showToast]);
+
+  const handleRename = useCallback((exerciseIndex, newName) => {
+    updateActiveWorkout((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, exercises: [...prev.exercises] };
+      next.exercises[exerciseIndex] = { ...next.exercises[exerciseIndex], name: newName };
+      return next;
+    });
+    showToast(`Renamed to ${newName}`, 'success');
   }, [updateActiveWorkout, showToast]);
 
   const handleAddDropSet = useCallback((exerciseIndex, numDrops) => {
@@ -318,6 +385,38 @@ export default function WorkoutPage({ onNavigate }) {
         s.type === 'drop' ? s : { ...s, type: 'interval', intervalWork: work, intervalRest: rest, intervalTotal: total, reps: '' }
       );
       next.exercises[exerciseIndex] = { ...ex, sets: newSets };
+      return next;
+    });
+  }, [updateActiveWorkout]);
+
+  // Timed sets: every working set becomes one countdown (no reps). Finishing
+  // the countdown logs the set and starts the normal rest timer, like any set.
+  // Drops and the other timed types can't share an exercise with it.
+  const handleAddTimed = useCallback((exerciseIndex, seconds) => {
+    updateActiveWorkout((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, exercises: [...prev.exercises] };
+      const ex = next.exercises[exerciseIndex];
+      const newSets = ex.sets
+        .filter(s => s.type !== 'drop')
+        .map(({ bfrSeconds, bfrStartMs, intervalWork, intervalRest, intervalTotal, intervalCountInStartMs, intervalTimerStartMs, variableRepRange, dropMode, dropIndex, ...s }) => (
+          { ...s, type: 'timed', timedSec: seconds, reps: '' }
+        ));
+      next.exercises[exerciseIndex] = {
+        ...ex, timedSec: seconds, sets: newSets,
+        hasDrops: false, numDrops: 0, bfrSeconds: undefined, isVariable: false, variableSets: undefined,
+      };
+      return next;
+    });
+  }, [updateActiveWorkout]);
+
+  const handleRemoveTimed = useCallback((exerciseIndex) => {
+    updateActiveWorkout((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, exercises: [...prev.exercises] };
+      const ex = next.exercises[exerciseIndex];
+      const newSets = ex.sets.map(({ timedSec, timedStartMs, ...s }) => (s.type === 'timed' ? { ...s, type: undefined } : s));
+      next.exercises[exerciseIndex] = { ...ex, timedSec: undefined, sets: newSets };
       return next;
     });
   }, [updateActiveWorkout]);
@@ -455,6 +554,8 @@ export default function WorkoutPage({ onNavigate }) {
 
   const handleAddExercise = useCallback(() => {
     if (!newExName.trim()) return showToast('Enter an exercise name', 'error');
+    const timedSec = newExTimed ? Math.round((parseFloat(newExMin) || 0) * 60) : 0;
+    if (newExTimed && timedSec < 5) return showToast('Enter how long each set lasts', 'error');
     updateActiveWorkout((prev) => {
       if (!prev) return prev;
       return {
@@ -465,15 +566,18 @@ export default function WorkoutPage({ onNavigate }) {
           targetReps: newExReps,
           repRange: newExReps,
           restSeconds: newExRest,
-          sets: Array.from({ length: newExSets }, () => ({ reps: '', weight: '', completed: false })),
+          ...(newExTimed ? { timedSec } : {}),
+          sets: Array.from({ length: newExSets }, () => ({
+            reps: '', weight: '', completed: false, ...(newExTimed ? { type: 'timed', timedSec } : {}),
+          })),
           notes: [],
         }],
       };
     });
     showToast(`Added ${newExName.trim()}`, 'success');
-    setNewExName(''); setNewExSets(3); setNewExReps('8-12'); setNewExRest(90);
+    setNewExName(''); setNewExSets(3); setNewExReps('8-12'); setNewExRest(90); setNewExTimed(false); setNewExMin('5');
     setShowAddExercise(false);
-  }, [newExName, newExSets, newExReps, newExRest, updateActiveWorkout, showToast]);
+  }, [newExName, newExSets, newExReps, newExRest, newExTimed, newExMin, updateActiveWorkout, showToast]);
 
   const handleCardioUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -509,18 +613,21 @@ export default function WorkoutPage({ onNavigate }) {
     if (added.length > 0) changes.push('Added: ' + added.join(', '));
     if (removed.length > 0) changes.push('Removed: ' + removed.join(', '));
     current.forEach((ex) => {
-      if (ex.type === 'cardio') return; // skip cardio for variation detection
       const orig = originals.find((o) => o.name === ex.name);
+      if (orig && isCardio(ex) !== (orig.type === 'cardio')) changes.push(`${ex.name} → ${isCardio(ex) ? 'cardio' : 'strength'}`);
+      if (ex.type === 'cardio') return; // skip cardio for the set-level checks
       if (!orig || !ex.sets) return;
       const normalSets = ex.sets.filter(s => s.type !== 'drop');
       const hasDrops = ex.sets.some(s => s.type === 'drop');
       const hasBFR = ex.sets.some(s => s.type === 'bfr');
       const hasInterval = ex.sets.some(s => s.type === 'interval');
+      const hasTimed = ex.sets.some(s => s.type === 'timed');
       const hasVariable = ex.sets.some(s => s.type === 'variable');
       const failureIndices = ex.sets.map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
       const origHadDrops = orig.hasDrops || false;
       const origHadBFR = orig.isBFR || false;
       const origHadInterval = orig.isInterval || false;
+      const origHadTimed = orig.isTimed || false;
       const origHadVariable = orig.isVariable || false;
       const origFailureCount = (orig.failureIndices || []).length;
       if (normalSets.length !== orig.sets) changes.push(`${ex.name}: ${orig.sets} → ${normalSets.length} sets`);
@@ -530,6 +637,8 @@ export default function WorkoutPage({ onNavigate }) {
       if (!hasBFR && origHadBFR) changes.push(`Removed BFR from ${ex.name}`);
       if (hasInterval && !origHadInterval) changes.push(`Added intervals to ${ex.name}`);
       if (!hasInterval && origHadInterval) changes.push(`Removed intervals from ${ex.name}`);
+      if (hasTimed && !origHadTimed) changes.push(`Timed sets on ${ex.name}`);
+      if (!hasTimed && origHadTimed) changes.push(`Removed timed sets from ${ex.name}`);
       if (hasVariable && !origHadVariable) changes.push(`Variable sets on ${ex.name}`);
       if (!hasVariable && origHadVariable) changes.push(`Removed variable sets from ${ex.name}`);
       if (failureIndices.length > 0 && origFailureCount === 0) changes.push(`${failureIndices.length} failure set${failureIndices.length > 1 ? 's' : ''} on ${ex.name}`);
@@ -552,11 +661,12 @@ export default function WorkoutPage({ onNavigate }) {
           restSeconds: 0,
         };
       }
-      const normalSets = (ex.sets || []).filter(s => s.type !== 'drop' && s.type !== 'bfr' && s.type !== 'interval' && s.type !== 'variable');
+      const normalSets = (ex.sets || []).filter(s => s.type !== 'drop' && s.type !== 'bfr' && s.type !== 'interval' && s.type !== 'variable' && s.type !== 'timed');
       const dropSets = (ex.sets || []).filter(s => s.type === 'drop');
       const hasBFR = (ex.sets || []).some(s => s.type === 'bfr');
       const hasInterval = (ex.sets || []).some(s => s.type === 'interval');
       const hasVariableType = (ex.sets || []).some(s => s.type === 'variable');
+      const timedSet = (ex.sets || []).find(s => s.type === 'timed');
       const hasDrops = dropSets.length > 0;
       const inferredNumDrops = normalSets.length > 0 ? Math.round(dropSets.length / normalSets.length) : (ex.numDrops || 0);
       const bfrSet = (ex.sets || []).find(s => s.type === 'bfr');
@@ -565,7 +675,7 @@ export default function WorkoutPage({ onNavigate }) {
       const failureIndices = (ex.sets || []).map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
       return {
         name: ex.name,
-        sets: hasBFR || hasInterval || hasVariableType ? (ex.sets || []).filter(s => s.type !== 'drop').length : normalSets.length || ex.sets?.filter?.(s => s.type !== 'drop').length || 4,
+        sets: hasBFR || hasInterval || hasVariableType || timedSet ? (ex.sets || []).filter(s => s.type !== 'drop').length : normalSets.length || ex.sets?.filter?.(s => s.type !== 'drop').length || 4,
         repRange: ex.targetReps || ex.repRange || '8-12',
         restSeconds: ex.restSeconds || 90,
         hasDrops,
@@ -576,6 +686,7 @@ export default function WorkoutPage({ onNavigate }) {
         intervalWork: intervalSet?.intervalWork || ex.intervalWork || 30,
         intervalRest: intervalSet?.intervalRest || ex.intervalRest || 30,
         intervalTotal: intervalSet?.intervalTotal || ex.intervalTotal || 180,
+        ...(timedSet ? { isTimed: true, timedSec: timedSet.timedSec || ex.timedSec || 60 } : {}),
         isVariable: hasVariableType,
         variableSets: hasVariableType ? varSets.map(s => ({ weight: s.weight, repRange: s.variableRepRange })) : undefined,
         supersetWith: ex.supersetWith || null,
@@ -644,12 +755,13 @@ export default function WorkoutPage({ onNavigate }) {
 
   const handleCancel = useCallback(async () => {
     setShowCancel(false);
+    const wasQuest = !!activeWorkout?.quest;
     try {
       await cancelWorkout();
       showHeaderMessage('Workout cancelled');
-      onNavigate('programs');
+      returnTo(wasQuest ? 'quest' : 'programs');
     } catch (e) { showToast('Error: ' + e.message, 'error'); }
-  }, [cancelWorkout, showToast, onNavigate, showHeaderMessage]);
+  }, [cancelWorkout, showToast, returnTo, showHeaderMessage, activeWorkout?.quest]);
 
   // Every card — plain, superset member, or block-grid panel — takes the same
   // handler set, so it's built once rather than spelled out at each call site.
@@ -661,21 +773,24 @@ export default function WorkoutPage({ onNavigate }) {
     onUpdateRepRange: handleUpdateRepRange,
     onUpdateRest: handleUpdateRest,
     onSubstitute: handleSubstitute,
+    onRename: handleRename,
     onAddDropSet: handleAddDropSet,
     onRemoveDropSet: handleRemoveDropSet,
     onAddBFR: handleAddBFR,
     onRemoveBFR: handleRemoveBFR,
     onAddInterval: handleAddInterval,
     onRemoveInterval: handleRemoveInterval,
+    onAddTimed: handleAddTimed,
+    onRemoveTimed: handleRemoveTimed,
     onLinkSuperset: handleLinkSuperset,
     onUnlinkSuperset: handleUnlinkSuperset,
     onAddVariable: handleAddVariable,
     onRemoveVariable: handleRemoveVariable,
     onUpdateCardioExercise: handleUpdateCardioExercise,
   }), [handleUpdateCardioExercise, handleUpdateSet, handleDeleteSet, handleAddSet, handleSetComplete,
-       handleUpdateRepRange, handleUpdateRest, handleSubstitute, handleAddDropSet,
+       handleUpdateRepRange, handleUpdateRest, handleSubstitute, handleRename, handleAddDropSet,
        handleRemoveDropSet, handleAddBFR, handleRemoveBFR, handleAddInterval,
-       handleRemoveInterval, handleLinkSuperset, handleUnlinkSuperset,
+       handleRemoveInterval, handleAddTimed, handleRemoveTimed, handleLinkSuperset, handleUnlinkSuperset,
        handleAddVariable, handleRemoveVariable]);
 
   // Every return keeps the same motion.div root. App's AnimatePresence
@@ -693,10 +808,11 @@ export default function WorkoutPage({ onNavigate }) {
         result={completeResult}
         failed={finishError}
         onDone={() => {
+          const wasQuest = !!finishing.quest;
           setFinishing(null); setFinishError(null); setCompleting(false); setCardioStats(null);
-          if (!finishError) { setCompleteResult(null); onNavigate('programs'); }
+          if (!finishError) { setCompleteResult(null); returnTo(wasQuest ? 'quest' : 'programs'); }
         }}
-        onProgress={() => { setFinishing(null); setCompleteResult(null); setCompleting(false); setCardioStats(null); onNavigate('recommendations'); }}
+        onProgress={() => { setFinishing(null); setCompleteResult(null); setCompleting(false); setCardioStats(null); returnTo('recommendations'); }}
       />
       </motion.div>
     );
@@ -710,7 +826,7 @@ export default function WorkoutPage({ onNavigate }) {
       <WorkoutComplete
         result={completeResult}
         duration={completeResult.duration}
-        onClose={() => { setCompleteResult(null); setCompleting(false); setCardioStats(null); onNavigate('history'); }}
+        onClose={() => { setCompleteResult(null); setCompleting(false); setCardioStats(null); returnTo('history'); }}
       />
       </motion.div>
     );
@@ -771,7 +887,7 @@ export default function WorkoutPage({ onNavigate }) {
 
       {/* Exercise list — normal mode */}
       {!reordering && !useBlockGrid && (
-        <motion.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-2 p-2">
+        <motion.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3 p-2">
           <AnimatePresence>
             {exerciseRows.map((row) => {
               // ── Supersets → one card holding every member ──────────────
@@ -802,14 +918,15 @@ export default function WorkoutPage({ onNavigate }) {
               const dimmed = anyTimerActive && !isTimerActive;
 
               // ── Cardio exercises → CardioCard (with timer, photo upload) ──
-              const isCardio = exercise.type === 'cardio' || exercise.sets?.[0]?.type === 'cardio';
-              const card = isCardio ? (
+              const cardio = isCardio(exercise);
+              const card = cardio ? (
                 <CardioCard
                   key={ei}
                   exercise={exercise}
                   exerciseIndex={ei}
                   onUpdateSet={handleUpdateSet}
                   onUpdateExercise={handleUpdateCardioExercise}
+                  onSubstitute={handleSubstitute}
                   onTimerActiveChange={handleTimerActiveChange}
                 />
               ) : (
@@ -870,7 +987,7 @@ export default function WorkoutPage({ onNavigate }) {
 
       {/* Reorder toggle + Add Exercise */}
       <div className="flex gap-2 px-3 pt-1 pb-2">
-        <Button variant={reordering ? 'primary' : 'ghost'} onClick={() => setReordering((r) => !r)} className="flex-1">
+        <Button variant={reordering ? 'primary' : 'ghost'} onClick={() => setReordering((r) => !r)} className="flex-1 reorder-btn">
           {reordering ? 'Done' : 'Reorder'}
         </Button>
         {!reordering && (
@@ -976,15 +1093,30 @@ export default function WorkoutPage({ onNavigate }) {
       <Modal open={showAddExercise} onClose={() => setShowAddExercise(false)} title="Add Exercise">
         <div className="p-4 flex flex-col gap-3">
           <input type="text" value={newExName} onChange={(e) => setNewExName(e.target.value)} placeholder="Exercise name" list={EXERCISE_LIST_ID} className="w-full bg-bg-0 border border-border rounded-lg px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-accent/50" autoFocus />
+          <div className="flex rounded-lg overflow-hidden border border-border text-xs font-mono">
+            {[[false, 'Reps'], [true, 'Timed']].map(([t, label]) => (
+              <button key={label} type="button" onClick={() => setNewExTimed(t)}
+                className={`flex-1 py-2 transition-colors ${newExTimed === t ? 'bg-accent text-white' : 'bg-bg-0 text-text-secondary'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <div>
               <span className="text-[10px] font-mono text-text-tertiary">SETS</span>
               <input type="number" value={newExSets} onChange={(e) => setNewExSets(parseInt(e.target.value) || 3)} className="w-full bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />
             </div>
-            <div>
-              <span className="text-[10px] font-mono text-text-tertiary">REPS</span>
-              <input type="text" value={newExReps} onChange={(e) => setNewExReps(e.target.value)} className="w-full bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />
-            </div>
+            {newExTimed ? (
+              <div>
+                <span className="text-[10px] font-mono text-text-tertiary">MIN / SET</span>
+                <input type="number" inputMode="decimal" step="0.5" min="0" value={newExMin} onChange={(e) => setNewExMin(e.target.value)} className="w-full bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />
+              </div>
+            ) : (
+              <div>
+                <span className="text-[10px] font-mono text-text-tertiary">REPS</span>
+                <input type="text" value={newExReps} onChange={(e) => setNewExReps(e.target.value)} className="w-full bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />
+              </div>
+            )}
             <div>
               <span className="text-[10px] font-mono text-text-tertiary">REST (s)</span>
               <input type="number" value={newExRest} onChange={(e) => setNewExRest(parseInt(e.target.value) || 90)} className="w-full bg-bg-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:border-accent/50" />

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGlobalTimer } from '../context/TimerContext';
 
 export default function GlobalRestTimer({ hidden }) {
-  const { remaining, total, isRunning, progress, stop } = useGlobalTimer();
+  const { remaining, total, isRunning, progress, stop, docked } = useGlobalTimer();
 
   const radius = 28;
   const stroke = 3;
@@ -12,7 +12,7 @@ export default function GlobalRestTimer({ hidden }) {
 
   return (
     <AnimatePresence>
-      {isRunning && !hidden && (
+      {isRunning && !hidden && !docked && (
         <motion.div
           initial={{ scale: 0, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}

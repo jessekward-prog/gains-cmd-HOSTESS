@@ -12,38 +12,92 @@ export const ASSET = '/quest/';
 const R = String.raw;
 export const TROPHY = [R`   .-------.   `, R`  _|       |_  `, R` ( |  ***  | ) `, R`  '|       |'  `, R`    \     /    `, R`     '. .'     `, R`      | |      `, R`    .-' '-.    `, R`    '-----'    `].join('\n');
 
-// ── Scene data (verbatim from the handoff) ──────────────────────────
-// [sprite key, display scale]; frame sizes in px.
-export const MONS = [['big_demon', 3], ['ogre', 3], ['big_zombie', 3], ['chort', 4], ['swampy', 5]];
-export const MON_NAMES = { big_demon: 'SLABFIEND', ogre: 'SKYOGRE', big_zombie: 'GRAVELORD', chort: 'WINGIMP', swampy: 'ROPESLIME' };
-export const SIZES = { big_demon: [32, 36], ogre: [32, 32], big_zombie: [32, 34], chort: [16, 24], swampy: [16, 16] };
-export const LANDS = [
-  { name: 'The Meadow', layers: [['bg', 0], ['mountain-far', 0.1], ['mountains', 0.25]] },
-  { name: 'Pine Forest', layers: [['bg', 0], ['mountains', 0.2], ['trees', 0.5], ['foreground-trees', 0.9]] },
-  { name: 'High Ridge', layers: [['bg', 0], ['mountain-far', 0.15], ['mountains', 0.35]], dim: 0.75 },
-  { name: 'The Dark Wood', layers: [['trees', 0.4], ['foreground-trees', 0.9]], dim: 0.55 },
-  { name: 'The Iron Dungeon', strip: true },
-];
-export const TINTS = { amber: ['Phosphor amber', '#ff9a3c'], green: ['Matrix green', '#33ff33'], cyan: ['Ice cyan', '#00bcd4'], red: ['Default red', '#ff2222'] };
-// name: [key, w, h, {idle,run,atk frames}, body-centre x, walk scale, battle scale]
-export const HEROES = {
-  Warlord: ['warrior', 114, 59, { idle: 10, run: 8, atk: 7 }, 66, 1.4, 1.9],
-  Samurai: ['samurai', 120, 69, { idle: 8, run: 8, atk: 6 }, 25, 1.3, 1.8],
-  Ronin: ['ronin', 112, 66, { idle: 4, run: 8, atk: 4 }, 26, 1.4, 2],
-  Brawler: ['brawler', 125, 80, { idle: 10, run: 8, atk: 7 }, 67, 1.2, 1.6],
-  'Fallen king': ['king', 99, 68, { idle: 8, run: 8, atk: 4 }, 45, 1.3, 1.8],
-  'Old king': ['oldking', 141, 82, { idle: 6, run: 8, atk: 6 }, 60, 1, 1.4],
-  Sellsword: ['mwarrior2', 96, 55, { idle: 8, run: 8, atk: 4 }, 41, 1.6, 2.2],
-  'Iron guard': ['mwarrior3', 106, 49, { idle: 10, run: 6, atk: 4 }, 50, 1.6, 2.2],
-  Huntress: ['huntress', 87, 65, { idle: 8, run: 8, atk: 5 }, 38, 1.6, 2.2],
-  Archer: ['huntress2', 48, 45, { idle: 10, run: 8, atk: 6 }, 18, 1.6, 2.2],
-  Wizard: ['wizard', 167, 136, { idle: 6, run: 8, atk: 8 }, 66, 0.9, 1.3],
-  Warlock: ['ewizard', 94, 69, { idle: 8, run: 8, atk: 8 }, 25, 1.4, 1.9],
-  Sorcerer: ['ewizard2', 162, 141, { idle: 8, run: 8, atk: 8 }, 62, 0.8, 1.1],
-  Hexblade: ['ewizard3', 88, 66, { idle: 10, run: 8, atk: 13 }, 25, 1.5, 2.1],
-  Knight: ['knight', 16, 28, { idle: 4, run: 4, atk: 0 }, 8, 2, 3],
+// ── Theme reskins ─────────────────────────────────────────────────
+// Fantasy is the original look (verbatim from the handoff); cyberpunk reskins
+// lands, hero, monsters and bosses while the gameplay stays identical. Each
+// theme owns its own hero/monster/boss/land tables, keys are globally unique,
+// so flat lookups still work.
+export const THEMES = {
+  fantasy: {
+    LAND_FILES: ['bg', 'mountain-far', 'mountains', 'trees', 'foreground-trees'],
+    LANDS: [
+      { name: 'The Meadow', layers: [['bg', 0], ['mountain-far', 0.1], ['mountains', 0.25]], fx: 'petals', walk: 'the meadow rolls by' },
+      { name: 'Pine Forest', layers: [['bg', 0], ['mountains', 0.2], ['trees', 0.5], ['foreground-trees', 0.9]], fx: 'needles', walk: 'the pines roll by' },
+      { name: 'High Ridge', layers: [['bg', 0], ['mountain-far', 0.15], ['mountains', 0.35]], dim: 0.75, fx: 'snow', walk: 'the ridge winds on' },
+      { name: 'The Dark Wood', layers: [['trees', 0.4], ['foreground-trees', 0.9]], dim: 0.55, fx: 'mist', walk: 'the dark wood closes in' },
+      { name: 'The Iron Dungeon', strip: true, fx: 'drips', walk: 'the halls roll by' },
+    ],
+    MONS: [['big_demon', 3], ['ogre', 3], ['big_zombie', 3], ['chort', 4], ['swampy', 5]],
+    MON_NAMES: { big_demon: 'SLABFIEND', ogre: 'SKYOGRE', big_zombie: 'GRAVELORD', chort: 'WINGIMP', swampy: 'ROPESLIME' },
+    SIZES: { big_demon: [32, 36], ogre: [32, 32], big_zombie: [32, 34], chort: [16, 24], swampy: [16, 16] },
+    HEROES: {
+      Warlord: ['warrior', 114, 59, { idle: 10, run: 8, atk: 7 }, 66, 1.4, 1.9],
+      Samurai: ['samurai', 120, 69, { idle: 8, run: 8, atk: 6 }, 25, 1.3, 1.8],
+      Ronin: ['ronin', 112, 66, { idle: 4, run: 8, atk: 4 }, 26, 1.4, 2],
+      Brawler: ['brawler', 125, 80, { idle: 10, run: 8, atk: 7 }, 67, 1.2, 1.6],
+      'Fallen king': ['king', 99, 68, { idle: 8, run: 8, atk: 4 }, 45, 1.3, 1.8],
+      'Old king': ['oldking', 141, 82, { idle: 6, run: 8, atk: 6 }, 60, 1, 1.4],
+      Sellsword: ['mwarrior2', 96, 55, { idle: 8, run: 8, atk: 4 }, 41, 1.6, 2.2],
+      'Iron guard': ['mwarrior3', 106, 49, { idle: 10, run: 6, atk: 4 }, 50, 1.6, 2.2],
+      Huntress: ['huntress', 87, 65, { idle: 8, run: 8, atk: 5 }, 38, 1.6, 2.2],
+      Archer: ['huntress2', 48, 45, { idle: 10, run: 8, atk: 6 }, 18, 1.6, 2.2],
+      Wizard: ['wizard', 167, 136, { idle: 6, run: 8, atk: 8 }, 66, 0.9, 1.3],
+      Warlock: ['ewizard', 94, 69, { idle: 8, run: 8, atk: 8 }, 25, 1.4, 1.9],
+      Sorcerer: ['ewizard2', 162, 141, { idle: 8, run: 8, atk: 8 }, 62, 0.8, 1.1],
+      Hexblade: ['ewizard3', 88, 66, { idle: 10, run: 8, atk: 13 }, 25, 1.5, 2.1],
+      Knight: ['knight', 16, 28, { idle: 4, run: 4, atk: 0 }, 8, 2, 3],
+    },
+    BOSS_SPRITES: null, // populated below so BOSS_SPRITES is in one place
+    BOSS_ORDER: ['dslime', 'golem', 'frost', 'minotaur', 'necro'],
+  },
+  cyberpunk: {
+    // Each cyberpunk land is a single still backdrop (not a parallax), so the
+    // horizon doesn't slide out of the hero's feet. Each layer sits at speed 0.
+    LAND_FILES: ['cp_neon', 'cp_downtown', 'cp_overpass', 'cp_skyway', 'cp_deepnet'],
+    LANDS: [
+      { name: 'Neon District', layers: [['cp_neon', 0]], fx: 'drips', walk: 'the neon streets hum' },
+      { name: 'Downtown', layers: [['cp_downtown', 0]], fx: 'drips', walk: 'downtown goes quiet' },
+      { name: 'The Overpass', layers: [['cp_overpass', 0]], fx: 'drips', walk: 'the overpass stretches on' },
+      { name: 'Skyway', layers: [['cp_skyway', 0]], fx: 'drips', walk: 'the skyway cuts across the night' },
+      { name: 'Deepnet Sector', layers: [['cp_deepnet', 0]], fx: 'drips', walk: 'deepnet sector dims' },
+    ],
+    MONS: [['cp_grunt', 2.5], ['cp_rioter', 2.5], ['cp_hazmat', 2.5], ['cp_bot', 2.5], ['cp_chop', 2.5]],
+    MON_NAMES: { cp_grunt: 'GRUNT', cp_rioter: 'RIOTER', cp_hazmat: 'HAZCORP', cp_bot: 'DRIVE-01', cp_chop: 'CHOPSKI' },
+    SIZES: { cp_grunt: [24, 32], cp_rioter: [22, 40], cp_hazmat: [34, 33], cp_bot: [27, 24], cp_chop: [24, 24] },
+    HEROES: {
+      Netrider: ['cp_biker', 35, 34, { idle: 4, run: 6, atk: 6 }, 17, 2, 2.6],
+    },
+    BOSS_SPRITES: null,
+    BOSS_ORDER: ['cp_enforcer', 'cp_bruiser'],
+  },
 };
-export const heroOf = (name) => HEROES[name] || HEROES.Warlord;
+export const TINTS = { amber: ['Phosphor amber', '#ff9a3c'], green: ['Matrix green', '#33ff33'], cyan: ['Ice cyan', '#00bcd4'], red: ['Default red', '#ff2222'] };
+const T = (t) => THEMES[t] || THEMES.fantasy;
+export const THEME_NAMES = { fantasy: 'Fantasy', cyberpunk: 'Cyberpunk' };
+// Flat exports: union across themes, so a sprite key alone is enough to look up
+// its size or display name. Per-theme lists go through the theme getters below.
+export const HEROES = { ...THEMES.fantasy.HEROES, ...THEMES.cyberpunk.HEROES };
+export const MON_NAMES = { ...THEMES.fantasy.MON_NAMES, ...THEMES.cyberpunk.MON_NAMES };
+export const SIZES = { ...THEMES.fantasy.SIZES, ...THEMES.cyberpunk.SIZES };
+export const MONS = THEMES.fantasy.MONS; // kept for backwards compat; prefer monsOf(theme)
+export const LANDS = THEMES.fantasy.LANDS; // kept for backwards compat; prefer landsOf(theme)
+export const monsOf = (theme) => T(theme).MONS;
+export const monNamesOf = (theme) => T(theme).MON_NAMES;
+// Species are stored in caps for labels; in a sentence they read as names.
+export const titleCase = (s) => (s ? s[0] + s.slice(1).toLowerCase() : s);
+export const landsOf = (theme) => T(theme).LANDS;
+export const heroesOf = (theme) => T(theme).HEROES;
+export const landFilesOf = (theme) => T(theme).LAND_FILES;
+export const bossOrderOf = (theme) => T(theme).BOSS_ORDER;
+// Theme-aware hero lookup: picks that theme's hero if the name belongs to it,
+// otherwise the theme's first hero (so switching themes never breaks the stage).
+// Called without a theme → falls back to the union so old callers still work.
+export const heroOf = (name, theme) => {
+  if (!theme) return HEROES[name] || HEROES.Warlord;
+  const list = heroesOf(theme);
+  return list[name] || list[Object.keys(list)[0]] || HEROES.Warlord;
+};
+export const defaultHeroOf = (theme) => Object.keys(heroesOf(theme))[0];
 
 // ── Progression (verbatim) ──────────────────────────────────────────
 // [key, name, unlock level (0 = chest only), frame height]
@@ -75,6 +129,8 @@ export const borderCss = (k, f = 0) => ({
 export const defProf = () => ({
   hero: 'Warlord', lvl: 1, xp: 0, quests: 0, vol: 0, crits: 0, pet: null, chestPets: [], epithets: [], epithet: null,
   border: 'plain', borders: [], packs: 1, lastQuest: null, lastChest: null,
+  favs: [], // quest favourites: [{ p: programName, w: workoutName, alias?: string }]
+  theme: 'fantasy', // 'fantasy' | 'cyberpunk' — reskins lands/hero/monsters/bosses
 });
 export const withDefaults = (p) => ({ ...defProf(), ...(p || {}) });
 export const lvTitle = (l) => LV_TITLES.filter((t) => l >= t[0]).pop()[1];
@@ -108,8 +164,8 @@ export const FLAT_LOAD = 60;
 export const loadOf = (name, weight) => (isAssisted(name) || num(weight) <= 0 ? FLAT_LOAD : num(weight));
 export const topRep = (ex) => Math.max(...(String(ex.targetReps || ex.repRange || '').match(/\d+/g) || ['8']).map(Number));
 const lowRep = (ex) => parseInt(String(ex.targetReps || ex.repRange || '').match(/\d+/)?.[0]) || 8;
-const timedBlock = (kind) => kind === 'cardio' || kind === 'interval' || kind === 'bfr';
-export const TIMED_XP = 150; // per completed timed set (cardio, interval, BFR): there's no kg × reps
+const timedBlock = (kind) => kind === 'cardio' || kind === 'interval' || kind === 'bfr' || kind === 'timed';
+export const TIMED_XP = 150; // per completed timed set (cardio, interval, BFR, timed): there's no kg × reps
 
 /** Damage of one completed set; timed sets are one hit each. */
 export function setDamage(ex, s, kind) {
@@ -120,8 +176,9 @@ export function setDamage(ex, s, kind) {
 export const isCrit = (ex, s) => s.type !== 'drop' && s.reps !== 'failure' && num(s.reps) > topRep(ex);
 
 /** A block as a monster: max HP = the planned work, HP left after the sets done so far. */
-export function monsterOf(exercises, block, bi) {
-  const [sprite, scale] = MONS[bi % MONS.length];
+export function monsterOf(exercises, block, bi, theme = 'fantasy') {
+  const list = monsOf(theme);
+  const [sprite, scale] = list[bi % list.length];
   const timed = timedBlock(block.kind);
   let max = 0, dealt = 0, done = true;
   for (const i of block.indices) {
@@ -157,6 +214,11 @@ export function blockXp(exercises, block, mult = 1) {
 }
 
 /** The whole session so far: XP from beaten blocks, crits, real kg moved. */
+/** Combo bonus: sets logged in a run of on-time sets carry `qc` (the combo count);
+ *  each is worth COMBO_XP per combo level from ×2, up to ×5. */
+export const COMBO_XP = 2;
+export const comboXp = (qc) => (qc >= 2 ? COMBO_XP * Math.min(qc, 5) : 0);
+
 export function questSession(exercises = [], mult = 1) {
   const blocks = buildBlocks(exercises);
   let xp = 0, crits = 0, vol = 0, beaten = 0, packs = 0;
@@ -169,6 +231,7 @@ export function questSession(exercises = [], mult = 1) {
       for (const s of ex.sets || []) {
         if (!s.completed) continue;
         vol += num(s.weight) * num(s.reps);
+        xp += comboXp(s.qc);
         const bonus = eventBonus(ex, s, b.kind);
         if (isCrit(ex, s) || bonus.crit) crits++;
         packs += bonus.pack;
@@ -387,6 +450,23 @@ export const fillLine = (tpl, v) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => 
 
 // ── Weekly boss: your most-neglected muscle ─────────────────────────
 export const BOSS_REGIONS = ['chest', 'upperBack', 'deltoids', 'quadriceps', 'hamstring', 'gluteal', 'biceps', 'triceps', 'abs'];
+// The boss sprites, one per week in turn. n: frames per animation (no hit → it
+// flashes; no death → it fades) · w×h: cropped frame · body: idle body height,
+// scaled to 120px (a usual monster is ~100) · foot: where its idle feet are, if
+// it hovers above the frame's floor · glow: its aura. All face the hero.
+export const BOSS_SPRITES = {
+  dslime: { n: { idle: 6, atk: 15, hit: 5, death: 22 }, w: 210, h: 124, body: 105, glow: 'rgba(255,90,20,.55)' },
+  golem: { n: { idle: 4, atk: 9, death: 14 }, w: 71, h: 71, body: 46, foot: 47, glow: 'rgba(80,220,255,.5)' },
+  frost: { n: { idle: 6, atk: 14, hit: 7, death: 16 }, w: 184, h: 96, body: 92, glow: 'rgba(120,200,255,.55)' },
+  minotaur: { n: { idle: 16, atk: 16 }, w: 204, h: 122, body: 100, glow: 'rgba(255,120,60,.45)' },
+  necro: { n: { idle: 8, atk: 13, hit: 5, death: 9 }, w: 88, h: 103, body: 52, glow: 'rgba(255,40,40,.5)' },
+  cp_enforcer: { n: { idle: 4, atk: 4, hit: 2, death: 6 }, w: 96, h: 74, body: 74, glow: 'rgba(255,80,180,.55)' },
+  cp_bruiser: { n: { idle: 4, atk: 4, hit: 2, death: 6 }, w: 51, h: 49, body: 49, glow: 'rgba(80,255,220,.55)' },
+};
+export const bossSprite = (wk, theme = 'fantasy') => {
+  const order = bossOrderOf(theme);
+  return order[Math.round(Date.parse(`${wk}T00:00:00Z`) / 604800000) % order.length] || order[0];
+};
 /** Monday-based week key, e.g. '2026-10-05'. */
 export function weekKey(now = new Date()) {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -404,10 +484,10 @@ export const BOSS_NAMES = { chest: 'The Breastplate Golem', upperBack: 'The Lat 
   hamstring: 'The Hamstring Hydra', gluteal: 'The Glute Colossus', biceps: 'The Curl Kraken', triceps: 'The Tricep Troll', abs: 'The Core Basilisk' };
 
 // ── Weekly boss fights ──────────────────────────────────────────────
-// The boss is beaten in BOSS_GROUPS fights of BOSS_GROUP_SETS sets, offered as
-// an optional finale at the end of any workout — never two fights within 48 h.
+// The boss is beaten in BOSS_GROUPS fights of one set to failure, offered at the
+// start of a workout (so it can't wreck the session) — never two within 48 h.
 export const BOSS_GROUPS = 2;
-export const BOSS_GROUP_SETS = 4;
+export const BOSS_GROUP_SETS = 1;
 export const BOSS_GAP_MS = 48 * 3600 * 1000;
 // When you've no history for the boss muscle: a simple, safe pick from the library.
 export const BOSS_DEFAULT_EXERCISE = { chest: 'Dumbbell Bench Press', upperBack: 'Cable Seated Row', deltoids: 'Dumbbell Lateral Raise',
@@ -435,3 +515,32 @@ export function recordBossFight(prof, wk, key, at = new Date().toISOString()) {
   const beaten = fights.length >= BOSS_GROUPS;
   return { ...prof, boss: { ...b, fights }, ...(beaten ? { bossBeat: wk, packs: (prof.packs || 0) + 1 } : {}) };
 }
+
+// ── Rep tracker opt-in ────────────────────────────────────────────
+/**
+ * Whether a running quest records sensor traces, as one decision over the
+ * remembered answer. `stored` is what the browser holds for this quest:
+ *   `<startTime>`   armed
+ *   `~<startTime>`  in play, recording switched off
+ *   `!<startTime>`  declined at the start prompt, never in play
+ * `answered` is a yes or no given in this page life, which always wins — auto-arm
+ * must never overturn a deliberate no. A sensor linked without anyone being
+ * asked (paired from the probe, or a quest resumed past the prompt) records: a
+ * live trace that saves nothing is the silent failure this exists to stop.
+ * Returns `{ arm: true }` to start recording, `{ store }` to write the answer
+ * down, or `{}` for nothing to do.
+ */
+export function repArm({ stored, questKey, alpha, answered, linked }) {
+  if (alpha) return { store: questKey };
+  // Switching recording off inside a quest that had it keeps the tracker in
+  // play ('~'), so its control stays on screen and can be switched back on.
+  // Only "not this time" at the prompt takes it out of play ('!').
+  if (answered) return { store: (stored === questKey ? '~' : '!') + questKey };
+  if (stored === questKey) return { arm: true };
+  if (stored === '~' + questKey || stored === '!' + questKey) return {};
+  return linked ? { arm: true } : {};
+}
+
+/** Is the rep tracker in play for this quest — armed, or armed and paused? */
+export const repAnswered = (stored, questKey) =>
+  !!questKey && (stored === questKey || stored === '~' + questKey);

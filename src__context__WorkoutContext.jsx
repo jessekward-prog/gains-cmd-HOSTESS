@@ -107,6 +107,7 @@ export function WorkoutProvider({ children }) {
         hasDrops: ex.hasDrops || false,
         isBFR: ex.isBFR || false,
         isInterval: ex.isInterval || false,
+        isTimed: ex.isTimed || false,
         isVariable: ex.isVariable || false,
         supersetWith: ex.supersetWith || null,
         failureIndices: ex.failureIndices || [],
@@ -143,7 +144,7 @@ export function WorkoutProvider({ children }) {
         if (lastWorkout?.exercises) {
           const exs = typeof lastWorkout.exercises === 'string'
             ? JSON.parse(lastWorkout.exercises) : lastWorkout.exercises;
-          const found = (exs || []).find((e) => e.name === ex.name);
+          const found = (exs || []).find((e) => e.name === ex.name && !e.boss); // not a weekly-boss set
           if (found) lastExercise = found;
         }
         if (!lastExercise) {
@@ -156,7 +157,7 @@ export function WorkoutProvider({ children }) {
             // so structure (number of sets, reps) is preserved.
             const exs = typeof hw.exercises === 'string'
               ? JSON.parse(hw.exercises) : hw.exercises;
-            const found = (exs || []).find((e) => e.name === ex.name);
+            const found = (exs || []).find((e) => e.name === ex.name && !e.boss); // not a weekly-boss set
             if (found) { lastExercise = found; break; }
           }
         }
@@ -174,7 +175,7 @@ export function WorkoutProvider({ children }) {
           if (structuralDate && hw.date <= structuralDate) break; // history is DESC by date
           const exs = typeof hw.exercises === 'string'
             ? JSON.parse(hw.exercises) : hw.exercises;
-          const found = (exs || []).find((e) => e.name === ex.name);
+          const found = (exs || []).find((e) => e.name === ex.name && !e.boss); // not a weekly-boss set
           if (found) {
             const w = found.sets?.[0]?.weight;
             if (w !== undefined && w !== null && w !== '') {
@@ -212,12 +213,14 @@ export function WorkoutProvider({ children }) {
         const histHasBFR = lastSets.some(s => s.type === 'bfr');
         const histHasInterval = lastSets.some(s => s.type === 'interval');
         const histHasVariable = lastSets.some(s => s.type === 'variable');
+        const histHasTimed = lastSets.some(s => s.type === 'timed');
 
         // Merge with flags (flags win for new variations with no history yet)
         const useBFR = histHasBFR || !!ex.isBFR;
         const useInterval = histHasInterval || !!ex.isInterval;
-        const useDrops = (histHasDrops || !!ex.hasDrops) && !useBFR && !useInterval;
-        const useVariable = (histHasVariable || !!ex.isVariable) && !useBFR && !useInterval && !useDrops;
+        const useTimed = (histHasTimed || !!ex.isTimed) && !useBFR && !useInterval;
+        const useDrops = (histHasDrops || !!ex.hasDrops) && !useBFR && !useInterval && !useTimed;
+        const useVariable = (histHasVariable || !!ex.isVariable) && !useBFR && !useInterval && !useDrops && !useTimed;
 
         if (useBFR) {
           // Get bfrSeconds from history first, then flag, then default
@@ -232,6 +235,11 @@ export function WorkoutProvider({ children }) {
           const total = ref?.intervalTotal || ex.intervalTotal || 180;
           for (let s = 0; s < sets.length; s++) {
             sets[s] = { ...sets[s], type: 'interval', intervalWork: work, intervalRest: rest, intervalTotal: total, reps: '' };
+          }
+        } else if (useTimed) {
+          const timedSec = lastSets.find(s => s.type === 'timed')?.timedSec || ex.timedSec || 60;
+          for (let s = 0; s < sets.length; s++) {
+            sets[s] = { ...sets[s], type: 'timed', timedSec, reps: '' };
           }
         } else if (useVariable) {
           const varSets = ex.variableSets || [];
@@ -275,7 +283,7 @@ export function WorkoutProvider({ children }) {
 
         // Restore failure sets from variation/program definition
         const failureIndices = ex.failureIndices || [];
-        if (failureIndices.length > 0 && !useBFR && !useInterval && !useVariable) {
+        if (failureIndices.length > 0 && !useBFR && !useInterval && !useVariable && !useTimed) {
           failureIndices.forEach(idx => {
             if (sets[idx]) sets[idx] = { ...sets[idx], reps: 'failure' };
           });
@@ -293,6 +301,7 @@ export function WorkoutProvider({ children }) {
           ...(useDrops ? { hasDrops: true, numDrops: sets.filter(s => s.type === 'drop').length / Math.max(sets.filter(s => s.type !== 'drop').length, 1) } : {}),
           ...(useBFR ? { isBFR: true, bfrSeconds: sets.find(s => s.type === 'bfr')?.bfrSeconds || ex.bfrSeconds || 45 } : {}),
           ...(useInterval ? { isInterval: true, intervalWork: sets.find(s => s.type === 'interval')?.intervalWork || ex.intervalWork || 30, intervalRest: sets.find(s => s.type === 'interval')?.intervalRest || ex.intervalRest || 30, intervalTotal: sets.find(s => s.type === 'interval')?.intervalTotal || ex.intervalTotal || 180 } : {}),
+          ...(useTimed ? { isTimed: true, timedSec: sets.find(s => s.type === 'timed')?.timedSec || ex.timedSec || 60 } : {}),
           ...(useVariable ? { isVariable: true, variableSets: sets.filter(s => s.type === 'variable').map(s => ({ weight: s.weight, repRange: s.variableRepRange })) } : {}),
           ...(ex.supersetWith ? { supersetWith: ex.supersetWith } : {}),
           ...(failureIndices.length > 0 ? { failureIndices } : {}),

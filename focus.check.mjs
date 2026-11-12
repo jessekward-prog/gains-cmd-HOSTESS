@@ -24,7 +24,13 @@ const session = (date, name, sets) => ({
     session('2026-09-28', 'Bench', [[82.5, 5], [80, 9]]),
   ];
   const s = F.liftStats(h, 'Bench');
-  assert.deepEqual(s, { lw: 80, lr: 8, best: 82.5, bestReps: 5 });
+  assert.deepEqual(s, { lw: 80, lr: 8, best: 82.5, bestReps: 5, rangeBest: null, rangeBestReps: 0 });
+  // The card's "best" only counts sets that reached the rep range's bottom:
+  // 82.5 × 5 isn't a best for an 8+ rep exercise; 80 × 9 is.
+  const r = F.liftStats(h, 'Bench', 8);
+  assert.equal(r.rangeBest, 80); assert.equal(r.rangeBestReps, 9);
+  assert.equal(r.best, 82.5); // PRs still judge against the all-time best
+  assert.equal(F.liftStats(h, 'Bench', 13).rangeBest, null);
   assert.equal(F.isPR(s, 'Bench', 85, 3), true);
   assert.equal(F.isPR(s, 'Bench', 82.5, 6), true);
   assert.equal(F.isPR(s, 'Bench', 82.5, 5), false);
@@ -38,6 +44,7 @@ const session = (date, name, sets) => ({
   const h = [session('2026-10-03', 'Assisted Pull-Up', [[30, 8], [25, 6]])];
   const s = F.liftStats(h, 'Assisted Pull-Up');
   assert.equal(s.best, 25);
+  assert.equal(F.liftStats(h, 'Assisted Pull-Up', 8).rangeBest, 30); // only 30 × 8 reached 8 reps
   assert.equal(F.isPR(s, 'Assisted Pull-Up', 22.5, 5), true);
   assert.equal(F.isPR(s, 'Assisted Pull-Up', 30, 10), false);
   assert.equal(F.isPR(s, 'Assisted Pull-Up', 0, 3), true); // fully unassisted
@@ -60,6 +67,8 @@ assert.equal(F.isPR({ best: 0, bestReps: 5 }, 'Pull-Up', 0, 12), false);
   w[2].sets.forEach((s) => { s.completed = true; });
   assert.equal(F.nextOpenBlock(w, b, 0), 2);
 }
+// Timed sets (one countdown each) are their own block kind.
+assert.equal(F.buildBlocks([{ name: 'Run', sets: [{ type: 'timed', timedSec: 300, completed: false }] }])[0].kind, 'timed');
 
 console.log('focus checks passed');
 
@@ -90,6 +99,45 @@ console.log('focus checks passed');
   assert.equal(F.lastE1rm(hist, 'Bench'), 93.5); // skips a session with no usable set
   const sum = F.summarize({ workoutName: 'W', programName: 'P', exercises: [{ name: 'Bench', sets: [S(85, 5)] }] }, hist);
   assert.deepEqual(sum.strength, [{ name: 'Bench', now: 99, prev: 93.5 }]);
+}
+// Sets taken to failure still report the weight — they carry no rep count, so
+// they can never be the "top" set, and used to leave the row blank.
+{
+  const w = { workoutName: 'W', programName: 'P', exercises: [
+    { name: 'Tricep dips', sets: [{ weight: '28', reps: 'failure', completed: true }, { weight: '24', reps: 'failure', completed: true }] },
+    { name: 'Assisted pull-up', sets: [{ weight: '30', reps: 'failure', completed: true }, { weight: '20', reps: 'failure', completed: true }] },
+    { name: 'Row', sets: [{ weight: '60', reps: '10', completed: true }, { weight: '70', reps: 'failure', completed: true }] },
+  ] };
+  const s = F.summarize(w, []);
+  assert.equal(s.ex[0].best, '28 × failure');        // heaviest of the two
+  assert.equal(s.ex[1].best, '20 × failure');        // assisted: less help is harder
+  assert.equal(s.ex[2].best, '60 × 10');             // a counted set still wins
+}
+// Cardio blocks report the timer and the photo's numbers, not "cardio · —".
+{
+  const w = { workoutName: 'W', programName: 'P', exercises: [
+    { name: 'Rowing machine', sets: [{ type: 'cardio', completed: true, elapsedSec: 300,
+      cardioStats: { activityType: 'Rowing', activeCalories: '142', totalCalories: '168', avgHeartRate: '131' } }] },
+    { name: 'Treadmill', sets: [{ type: 'cardio', completed: true, elapsedSec: 610 }] },
+  ] };
+  const s = F.summarize(w, []);
+  assert.equal(s.cal, 142);                       // active calories win over total; treadmill adds none
+  assert.equal(s.ex[0].sets, '5:00 · Rowing');
+  assert.equal(s.ex[0].best, '142 cal');
+  assert.equal(s.ex[1].sets, '10:10');            // timer only, no photo
+  assert.equal(s.ex[1].best, '10:10');
+  assert.deepEqual(s.cardio.map((c) => c.name), ['Rowing machine', 'Treadmill']);
+  assert.equal(F.summarize({ workoutName: 'W', programName: 'P', exercises: [] }, []).cal, 0);
+}
+// Timed sets report count × duration, not "BW × —", and never count as a PR.
+{
+  const w = { workoutName: 'W', programName: 'P', exercises: [
+    { name: 'Run', sets: [{ type: 'timed', timedSec: 300, weight: '', reps: '', completed: true }, { type: 'timed', timedSec: 300, weight: '', reps: '', completed: false }] },
+  ] };
+  const s = F.summarize(w, []);
+  assert.equal(s.ex[0].sets, '1/2 sets · timed');
+  assert.equal(s.ex[0].best, '1 × 5:00');
+  assert.equal(s.prs.length, 0);
 }
 console.log('summary checks passed');
 

@@ -3,15 +3,17 @@ import { createPortal } from 'react-dom';
 import useBackHandler from '../hooks/useBackHandler';
 import { useHaptics } from '../hooks/useHaptics';
 import * as api from '../lib/api';
-import { TAGS, blockName, buildBlocks, fmtW } from '../lib/focus';
+import { TAGS, blockName, buildBlocks, fmtW, mmss } from '../lib/focus';
 import { moodState } from '../lib/mood';
 import { useWorkout } from '../context/WorkoutContext';
 import useCatalog from '../hooks/useCatalog';
 import { sessionMuscles, REGION_LABEL } from '../lib/catalog';
 import BodyMap from './BodyMap';
 import QuestHeroCard from './QuestHeroCard';
+import QuestVault, { PackPanel } from './QuestVault';
+import ChestReel from './ChestReel';
 import useQuest from '../hooks/useQuest';
-import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, REEL, RARITY, TROPHY, ASSET, EVENTS, weekKey } from '../lib/quest';
+import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, TROPHY, EVENTS, weekKey } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
 const PENDING = /⏳?\s*AI_ANALYSIS_PENDING/;
@@ -221,6 +223,8 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
   const vol = summary.vol >= 10000 ? `${(summary.vol / 1000).toFixed(1)}t` : summary.vol.toLocaleString();
   const date = new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const cell = (i) => ({ animation: `fx-in .4s ${0.3 + i * 0.08}s cubic-bezier(.2,1.3,.4,1) both` });
+  const tiles = [[`${dur}m`, 'DURATION'], [vol, 'KG MOVED'], [String(summary.sets), 'SETS']];
+  if (summary.cal) tiles.push([summary.cal.toLocaleString(), 'CALORIES']);
   return portal(
     <div className={`${LAYER} overflow-y-auto`}>
       <div className="max-w-xl mx-auto px-5 pb-8" style={{ paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))' }}>
@@ -228,8 +232,8 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
         <div className="mt-2.5 origin-left" style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 0.95, animation: 'fx-pop .5s .1s cubic-bezier(.2,1.3,.4,1) both' }}>{summary.name}</div>
         <div className="mt-2 text-text-tertiary" style={{ font: `400 12px ${MONO}`, animation: 'fx-in .4s .2s both' }}>{summary.prog} · {date}</div>
 
-        <div className="grid grid-cols-3 gap-2 mt-[22px]">
-          {[[`${dur}m`, 'DURATION'], [vol, 'KG MOVED'], [String(summary.sets), 'SETS']].map(([v, l], i) => (
+        <div className={`grid ${tiles.length > 3 ? 'grid-cols-2' : 'grid-cols-3'} gap-2 mt-[22px]`}>
+          {tiles.map(([v, l], i) => (
             <div key={l} className="px-3.5 py-4 rounded-[22px] bg-bg-1" style={cell(i)}>
               <div className="g-tab" style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{v}</div>
               <div className="mt-1.5 g-label" style={{ letterSpacing: '.12em' }}>{l}</div>
@@ -248,6 +252,8 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
             ))}
           </div>
         )}
+
+        <CardioSession rows={summary.cardio} />
 
         {quest && <QuestChest exercises={summary.exercises} questKey={questKey} workoutId={result?.workoutId} />}
         <SessionMuscles exercises={summary.exercises} />
@@ -279,6 +285,51 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
         ))}
         <button onClick={finish} className="mt-6 w-full h-[58px] rounded-[20px] bg-accent font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)', animation: 'fx-in .4s 1s both' }}>Done</button>
       </div>
+    </div>
+  );
+}
+
+// Every cardio block's own numbers — the timer, plus whatever the photo of the
+// machine or watch gave back. Without this the summary has nothing to say about
+// a 25-minute row but "cardio".
+const CARDIO_FIELDS = [
+  ['activeCalories', 'Active cal'],
+  ['totalCalories', 'Total cal'],
+  ['avgHeartRate', 'Avg HR', ' bpm'],
+  ['maxHeartRate', 'Max HR', ' bpm'],
+  ['distance', 'Distance'],
+  ['avgPace', 'Avg pace'],
+];
+
+function CardioSession({ rows }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="mt-2 p-4 rounded-[22px] bg-bg-1" style={{ animation: 'fx-in .4s .52s both' }}>
+      <div className="g-label">CARDIO</div>
+      {rows.map((c, i) => {
+        const fields = CARDIO_FIELDS.map(([k, l, sfx]) => [l, c.stats?.[k], sfx]).filter(([, v]) => v != null && v !== '');
+        const time = c.secs ? mmss(c.secs) : c.stats?.duration || '';
+        return (
+          <div key={c.name + i} className={i ? 'mt-3.5 pt-3.5' : 'mt-3'} style={i ? { borderTop: '1px solid var(--color-bg-3)' } : undefined}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[15px] font-bold min-w-0 truncate">{c.name}</span>
+              {time && <span className="flex-shrink-0 text-text-tertiary" style={{ font: `500 13px ${MONO}` }}>{time}</span>}
+            </div>
+            {fields.length > 0 ? (
+              <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2">
+                {fields.map(([l, v, sfx]) => (
+                  <div key={l} className="min-w-0">
+                    <div className="g-label" style={{ fontSize: 9 }}>{l}</div>
+                    <div className="mt-0.5 text-[15px] font-bold truncate">{v}{sfx || ''}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1.5 text-text-tertiary" style={{ font: `400 11px ${MONO}`, lineHeight: 1.5 }}>Timer only — no photo of the display was read.</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -361,13 +412,13 @@ function QuestLoot({ exercises, questKey, onDone }) {
   const loot = prof.lastChest === questKey ? prof.lastLoot : null;
   const after = addXp(start.prof.lvl, start.prof.xp, start.session.xp);
   const up = after.lvl > start.prof.lvl;
-  const reelT = t - 0.6, rolling = reelT >= 0 && (reelT < 2.4 || !loot), shown = reelT >= 2.4 && loot;
-  const reelI = Math.floor(Math.pow(Math.max(0, reelT), 0.6) * 12);
+  const [landed, setLanded] = useState(false);
+  const reelT = t - 0.6, shown = landed && loot;
   const k = Math.min(1, t / 1.0);
   const xpNow = Math.round(start.session.xp * (1 - Math.pow(1 - k, 3)));
 
   return portal(
-    <div onClick={() => setSkipped(true)} className={`${LAYER} overflow-y-auto flex flex-col items-center justify-center text-center px-6 fx-fade`} style={{ background: '#050505' }}>
+    <div onClick={() => setSkipped(true)} className={`${LAYER} overflow-y-auto overflow-x-hidden flex flex-col items-center justify-center text-center px-6 fx-fade`} style={{ background: '#050505' }}>
       <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', color: '#ff2222' }}>QUEST CLEAR</div>
       <div className="mt-2" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1 }}>+{xpNow.toLocaleString()} XP</div>
       <div className="mt-2 text-text-secondary" style={{ font: `400 12px ${MONO}` }}>
@@ -382,16 +433,14 @@ function QuestLoot({ exercises, questKey, onDone }) {
         {reelT < 0 && (
           <div style={{ fontSize: 13, lineHeight: 1.15, whiteSpace: 'pre', color: '#fbbf24', fontFamily: MONO, animation: 'fx-pop .5s cubic-bezier(.2,1.4,.4,1) both' }}>{TROPHY}</div>
         )}
-        {rolling && (
-          <>
-            <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: '#999' }}>OPENING CHEST · LUCK +{Math.round(luckOf(start.session.crits) * 100)}%</div>
-            <div style={{ minWidth: 240, padding: '18px 20px', borderRadius: 18, background: '#171717', boxShadow: `inset 0 0 0 2px ${RARITY[reelI % 4][1]}`, fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', transform: reelT < 2 ? `translateX(${reelI % 2 ? 2 : -2}px)` : 'none' }}>{REEL[reelI % REEL.length]}</div>
-          </>
+        {reelT >= 0 && (
+          <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: '#999', opacity: landed ? 0 : 1, transition: 'opacity .3s' }}>
+            {loot ? 'OPENING CHEST' : 'UNLOCKING CHEST…'} · LUCK +{Math.round(luckOf(start.session.crits) * 100)}%
+          </div>
         )}
+        {reelT >= 0 && loot && <ChestReel loot={loot} seed={questKey} skip={skipped} onLand={() => setLanded(true)} />}
         {shown && (
-          <div className="flex flex-col items-center gap-3" style={{ animation: 'fx-pop .5s cubic-bezier(.2,1.4,.4,1) both' }}>
-            <div style={{ font: `600 11px ${MONO}`, letterSpacing: '.2em', padding: '4px 10px', borderRadius: 8, color: '#050505', background: loot.color }}>{loot.tier}</div>
-            {loot.pet && <img src={`${ASSET}sprites/pet_${loot.pet}_0.png`} alt="" style={{ height: (loot.h || 16) * 4, imageRendering: 'pixelated' }} />}
+          <div className="flex flex-col items-center gap-2" style={{ animation: 'fx-pop .5s .25s cubic-bezier(.2,1.4,.4,1) both' }}>
             <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1, color: loot.color, textWrap: 'balance' }}>{loot.label}</div>
             <div className="text-text-secondary" style={{ font: `400 11px ${MONO}` }}>{loot.sub} · saved to your hero card</div>
           </div>
@@ -413,6 +462,7 @@ function QuestChest({ exercises, questKey, workoutId }) {
   const { prof } = useQuest();
   const [session] = useState(() => questSession(exercises, xpMult(prof, prof.lvl)));
   const [cardOpen, setCardOpen] = useState(false);
+  const [packOpen, setPackOpen] = useState(false);
   const loot = prof.lastChest === questKey ? prof.lastLoot : null;
   // The chronicle: written by the local AI from the saved workout + these facts.
   const [tale, setTale] = useState(null); // null = writing, '' = unavailable
@@ -438,6 +488,7 @@ function QuestChest({ exercises, questKey, workoutId }) {
             </div>
           ))}
         </div>
+        {prof.packs > 0 && <div className="mt-3"><PackPanel packs={prof.packs} onOpen={() => setPackOpen(true)} /></div>}
         {loot && (
           <div className="mt-3 flex items-center gap-3 p-3.5 rounded-[18px] bg-bg-2" style={{ boxShadow: `inset 0 0 0 1.5px ${loot.color}` }}>
             <div className="flex-1 min-w-0">
@@ -458,6 +509,7 @@ function QuestChest({ exercises, questKey, workoutId }) {
         )}
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
+      {packOpen && <QuestVault autoOpen onClose={() => setPackOpen(false)} />}
     </>
   );
 }

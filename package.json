@@ -1,5 +1,5 @@
 {
-  "name": "gains-cmd-hostess",
+  "name": "gains-cmd",
   "version": "2.3.0",
   "description": "Gains_CMD v2",
   "main": "server.js",
@@ -9,12 +9,11 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-session": "^1.18.1",
-    "jsonwebtoken": "^9.0.2",
     "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
     "pg": "^8.11.3"
   }
 }

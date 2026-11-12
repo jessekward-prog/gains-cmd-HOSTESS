@@ -1,7 +1,7 @@
 // Self-check for exercise-library matching + muscle heat — `node catalog.check.mjs`.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { norm, indexCatalog, resolve, candidates, regionsOf, muscleSets, sessionMuscles, topExerciseFor } from './src__lib__catalog.js';
+import { norm, indexCatalog, resolve, candidates, guess, MATCH_MIN, regionsOf, muscleSets, sessionMuscles, topExerciseFor } from './src__lib__catalog.js';
 
 const cat = indexCatalog(JSON.parse(readFileSync('src__lib__catalog.json', 'utf8')));
 assert.equal(cat.list.length, 1324);
@@ -24,7 +24,35 @@ assert.equal(resolve('Treadmill', {}, cat), null);
 const top = (n) => candidates(n, cat, 4).map((x) => x.n);
 assert.ok(top('Hammer Curls').includes('dumbbell hammer curl'));
 assert.ok(top('Seated row').includes('cable seated row'));
-assert.ok(top('Cable Crunches').includes('cable kneeling crunch'));
+// Five cable crunches tie on wording; which one leads is arbitrary, so this
+// asks that they are all the right movement, not that a named variant leads.
+assert.ok(top('Cable Crunches').every((n) => /^cable .*crunch$/.test(n)));
+
+// The best guess is the right MOVEMENT, not just a name sharing a word with it.
+// (Plain token overlap used to answer "chest dip" here, and "band bench press"
+// — the shortest name with every word — for the bench press.)
+const best = (n) => guess(n, {}, cat)?.n ?? null;
+assert.equal(best('Chest Flies'), 'dumbbell fly');
+assert.equal(best('Bench Press'), 'dumbbell bench press');
+assert.equal(best('Seated Cable Row'), 'cable seated row');
+assert.equal(best('Incline Dumbbell Press'), 'dumbbell incline bench press');
+assert.equal(best('Goblet Squat'), 'dumbbell goblet squat');
+// Named equipment is honoured over a better-worded entry with the wrong kit.
+assert.equal(guess('Smith Machine Bench Press', {}, cat).eq, 'smith machine');
+assert.equal(guess('Barbell Row', {}, cat).eq, 'barbell');
+// A variant nobody asked for loses to the plain movement.
+assert.ok(!/\bone\b/.test(best('Tricep Pushdown')));
+
+// Nothing beats a wrong animation: movements the library simply doesn't have
+// come back null rather than the nearest word-salad.
+assert.equal(best('Nordic Curl'), null);        // was "barbell curl"
+assert.equal(best('Cable Woodchop'), null);     // was "cable curl"
+assert.equal(best('Pec Deck'), null);           // was "back pec stretch"
+assert.equal(best('Face Pull'), null);
+assert.ok(MATCH_MIN > 0 && MATCH_MIN < 1);
+// A link still wins, and '' still means "the user said there is no match".
+assert.equal(guess('Nordic Curl', { 'Nordic Curl': bench.id }, cat), bench);
+assert.equal(guess('Chest Flies', { 'Chest Flies': '' }, cat), null);
 
 // Target counts 1 per completed set, secondaries ½; old and unfinished sets don't count.
 const r = regionsOf(bench);

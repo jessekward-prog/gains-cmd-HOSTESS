@@ -1,17 +1,21 @@
 import { useEffect } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import * as api from '../lib/api';
+import { QUEST_FX, questFxKey } from '../hooks/useQuest';
 
 // Theme, font, layout etc. live in localStorage (instant first paint, read by
 // ThemeContext at mount). This copies them to the account so they follow you
 // to other devices: newer-on-server → write locally and reload once;
 // changed locally → push.
 const KEYS = [
-  'gains-cmd-theme', 'gains-cmd-accent', 'gains-cmd-intensity', 'gains-cmd-font', 'gains-cmd-text-size',
-  'gains-cmd-banner-enabled', 'gains-cmd-banner-text', 'gains-cmd-scale-px', 'gains-cmd-workout-layout', 'gains-cmd-expand-mode',
-  'gains-cmd-waves', 'gains-cmd-greeting', 'gains-cmd-quest-tint', 'gains-cmd-quest-scanlines', 'gains-cmd-quest-scrolls',
+  'gains-beta-theme', 'gains-beta-accent', 'gains-beta-intensity', 'gains-beta-font', 'gains-beta-text-size',
+  'gains-beta-banner-enabled', 'gains-beta-banner-text', 'gains-beta-scale-px', 'gains-beta-workout-layout', 'gains-beta-expand-mode',
+  'gains-beta-waves', 'gains-beta-greeting', 'gains-beta-quest-tint', 'gains-beta-quest-scanlines', 'gains-beta-quest-scrolls',
+  'gains-beta-crt', 'gains-beta-vignette', 'gains-beta-roll', 'gains-beta-quest-theme', 'gains-beta-quest-crt', 'gains-beta-quest-roll',
+  'gains-beta-quest-accent', 'gains-beta-quest-intensity',
+  ...QUEST_FX.map(([id]) => questFxKey(id)),
 ];
-const AT_KEY = 'gains-cmd-appearance-at';
+const AT_KEY = 'gains-beta-appearance-at';
 
 function snapshot() {
   const values = {};
@@ -21,7 +25,7 @@ function snapshot() {
 
 export default function AppearanceSync() {
   const { settings } = useWorkout();
-  const server = settings?.appearance;
+  const server = settings?.appearanceBeta;
   const settingsLoaded = !!settings;
 
   useEffect(() => {
