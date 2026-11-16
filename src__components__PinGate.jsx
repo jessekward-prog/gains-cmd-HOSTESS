@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import WaveBackground from './WaveBackground';
+import { useAuth } from '../context/AuthContext';
 
 const MONO = 'var(--font-mono)';
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'];
@@ -23,6 +24,7 @@ function Gate({ children }) {
   const [pin, setPin] = useState('');
   const [first, setFirst] = useState('');
   const [error, setError] = useState('');
+  const { refresh } = useAuth();
 
   useEffect(() => {
     fetch('/api/pin', { credentials: 'include' })
@@ -42,9 +44,12 @@ function Gate({ children }) {
       } else {
         await post('/api/pin/unlock', pin);
       }
+      // The auth check ran before the PIN was entered and said 'not signed in'; re-run it, or the app
+      // underneath keeps showing this (now childless) gate — a blank page until a manual refresh.
+      await refresh();
       setState('open');
     } catch (e) { setError(e.message); setPin(''); }
-  }, [pin, first, state]);
+  }, [pin, first, state, refresh]);
 
   const press = useCallback((k) => {
     if (k === 'del') setPin((p) => p.slice(0, -1));
