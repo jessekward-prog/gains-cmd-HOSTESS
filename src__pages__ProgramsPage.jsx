@@ -20,6 +20,7 @@ import { supersetRows } from '../lib/supersets';
 import { estimateMinutes, daysAgo } from '../lib/focus';
 import { readGreeting, defaultGreeting } from '../lib/greeting';
 import WaveBackground from '../components/WaveBackground';
+import useRepStartPrompt from '../components/RepStartPrompt';
 
 const MONO = 'var(--font-mono)';
 
@@ -975,20 +976,24 @@ export default function ProgramsPage({ onNavigate }) {
     }
   }, [remixResult, remixTarget, remixName, selectedProgram, reloadPrograms, showToast, showCenterModal, resetRemix]);
 
-  const handleStartWorkout = useCallback(async (workoutIndex, program = selectedProgram) => {
+  const { offer: offerRepSensor, prompts: repPrompts } = useRepStartPrompt();
+
+  const handleStartWorkout = useCallback((workoutIndex, program = selectedProgram) => {
     if (activeWorkout) {
       showToast('Finish or cancel current workout first', 'warning');
       return;
     }
-    try {
-      await startWorkout(program, workoutIndex);
-      setSelectedProgram(null);
-      showHeaderMessage('Workout started');
-      onNavigate('workout');
-    } catch (e) {
-      showToast('Error starting workout: ' + e.message, 'error');
-    }
-  }, [selectedProgram, activeWorkout, startWorkout, showToast, onNavigate, showHeaderMessage]);
+    offerRepSensor(async () => {
+      try {
+        await startWorkout(program, workoutIndex);
+        setSelectedProgram(null);
+        showHeaderMessage('Workout started');
+        onNavigate('workout');
+      } catch (e) {
+        showToast('Error starting workout: ' + e.message, 'error');
+      }
+    });
+  }, [selectedProgram, activeWorkout, startWorkout, showToast, onNavigate, showHeaderMessage, offerRepSensor]);
 
   // "Up next": the workout after the one you did last, in that program's order.
   const sessions = useMemo(() => (workoutHistory || []).filter((w) => !isMarker(w)), [workoutHistory]);
@@ -1815,6 +1820,7 @@ export default function ProgramsPage({ onNavigate }) {
         </AnimatePresence>,
         document.body
       )}
+      {repPrompts}
     </motion.div>
   );
 }

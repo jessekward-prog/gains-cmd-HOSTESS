@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
-import { bloom } from '../../lib/bloom';
+import { bloom } from '../lib/bloom';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigation } from '../context/NavigationContext';
 import { motion, AnimatePresence } from 'framer-motion';

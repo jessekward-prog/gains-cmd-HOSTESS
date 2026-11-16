@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { bloom } from '../../lib/bloom';
+import { bloom } from '../lib/bloom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { staggerItem } from '../lib/variants';
 import * as api from '../lib/api';

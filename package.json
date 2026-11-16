@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "echo '=== GAINS_CMD BUILD ===' && rm -rf frontend/src dist && sh setup.sh && cd frontend && npm install --production=false && npx vite build && echo '=== BUILD COMPLETE ===' && ls -la ../dist/"
+    "check": "node imports.check.mjs",
+    "build": "node imports.check.mjs && echo '=== GAINS_CMD BUILD ===' && rm -rf frontend/src dist && sh setup.sh && cd frontend && npm install --production=false && npx vite build && echo '=== BUILD COMPLETE ===' && ls -la ../dist/"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

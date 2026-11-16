@@ -26,6 +26,10 @@ const writeKey = (v) => { try { localStorage.setItem(ALPHA_KEY, v); } catch { /*
 const GUIDED_KEY = 'gc.repGuidedQuest';
 const readGuided = () => { try { return localStorage.getItem(GUIDED_KEY); } catch { return null; } };
 const writeGuided = (v) => { try { localStorage.setItem(GUIDED_KEY, v); } catch { /* storage off */ } };
+// Auto accept / auto progress, remembered with the quest they were chosen for.
+const AUTO_KEY = 'gc.repAuto';
+const readAuto = () => { try { return JSON.parse(localStorage.getItem(AUTO_KEY) || 'null'); } catch { return null; } };
+const writeAuto = (v) => { try { localStorage.setItem(AUTO_KEY, JSON.stringify(v)); } catch { /* storage off */ } };
 
 export function RepSensorProvider({ children }) {
   const buf = useRef([]);
@@ -45,6 +49,9 @@ export function RepSensorProvider({ children }) {
   // of the rolling buffer before the tap. An explicit start anchors capture to
   // the set instead of to the tap, which is the actual defect.
   const [guided, setGuidedState] = useState(false);
+  // Auto accept: 5 s after a counted set ends it is logged with the count.
+  // Auto progress: from set 2 on, when rest ends, the next 5 s count-in starts.
+  const [auto, setAutoState] = useState({ accept: false, progress: false });
   const [phase, setPhaseState] = useState('idle'); // idle | hold | counting | done
   const [holdLeft, setHoldLeft] = useState(0);
   const [holdFailed, setHoldFailed] = useState(false);
@@ -58,7 +65,7 @@ export function RepSensorProvider({ children }) {
   guidedRef.current = guided;
   const setPhase = useCallback((p) => { phaseRef.current = p; setPhaseState(p); }, []);
   const { activeWorkout } = useWorkout();
-  const questKey = activeWorkout?.quest && activeWorkout.startTime ? String(activeWorkout.startTime) : null;
+  const questKey = activeWorkout?.startTime ? String(activeWorkout.startTime) : null;
   // An answer given in this page life: at the prompt, which runs before the
   // quest exists, or on the REC dot mid-quest. It is written down as soon as
   // there is a quest to key it to.
@@ -104,6 +111,15 @@ export function RepSensorProvider({ children }) {
     if (act.arm) setAlphaState(true);
     else if (act.store) { answered.current = false; writeKey(act.store); }
   }, [alpha, questKey, sensor.status]);
+
+  useEffect(() => {
+    if (!questKey) return;
+    const r = readAuto();
+    if (r?.k === questKey) setAutoState({ accept: !!r.accept, progress: !!r.progress });
+  }, [questKey]);
+  useEffect(() => {
+    if (questKey) writeAuto({ k: questKey, ...auto });
+  }, [auto, questKey]);
 
   // Guided mode is remembered for its own quest, so a reload mid-quest comes
   // back still guided rather than silently dropping to plain recording.
@@ -243,7 +259,7 @@ export function RepSensorProvider({ children }) {
   return (
     <Ctx.Provider value={{
       sensor, subscribe, alpha, setAlpha, commitSet, saved, inPlay,
-      guided, setGuided: setGuidedState, phase, holdLeft, holdFailed,
+      guided, setGuided: setGuidedState, auto, setAuto: setAutoState, phase, holdLeft, holdFailed,
       liveCount, startSet, nextSet, cancelSet, peek,
     }}>
       {children}

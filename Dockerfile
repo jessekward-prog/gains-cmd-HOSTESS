@@ -1,6 +1,7 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /app
 COPY . .
+RUN node imports.check.mjs
 RUN sh setup.sh
 RUN cd frontend && npm install && npx vite build
 

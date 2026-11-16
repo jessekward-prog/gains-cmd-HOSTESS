@@ -24,6 +24,7 @@ import { nextMemberForRound, roundOfSet, setIndexForRound, supersetRounds } from
 import { moodState } from '../lib/mood';
 import ExerciseInfo from './ExerciseInfo';
 import QuestStage from './QuestStage';
+import { AsciiReveal } from 'ascii-reveal';
 import RepScope, { RepTag, repTracking } from './RepScope';
 import useQuest, { readTint, readScanlines, readScrolls, readQuestFx } from '../hooks/useQuest';
 import {
@@ -605,6 +606,7 @@ function TimedBlock({ set, onPatch, onDone, big = false }) {
 // ── Interval phase block — same stamps + beeps as IntervalTimerBar ───
 function IntervalBlock({ set, onStamp, onDone }) {
   const work = set.intervalWork || 30, rest = set.intervalRest || 30, total = set.intervalTotal || 180;
+  const load = num(set.weight) > 0 ? `${fmtW(set.weight)} KG` : 'BODYWEIGHT';
   const cycle = work + rest;
   const rounds = Math.max(1, Math.ceil(total / cycle));
   const active = !!(set.intervalCountInStartMs || set.intervalTimerStartMs) && !set.completed;
@@ -644,6 +646,7 @@ function IntervalBlock({ set, onStamp, onDone }) {
       <div className="g-tab" style={{ font: `500 clamp(16px, 10cqh, 30px) ${MONO}`, marginTop: 4 }}>
         {mmss(running ? phaseRemaining + 0.999 : set.completed ? 0 : total)}
       </div>
+      <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', opacity: 0.75, marginTop: 4 }}>{load}</div>
       </div>
       <div className="h-1.5 rounded-[3px] overflow-hidden flex-shrink-0" style={{ background: 'rgba(0,0,0,.18)', marginTop: 'clamp(6px, 5cqh, 14px)' }}>
         <div className="h-full" style={{ background: 'currentColor', width: `${set.completed ? 100 : running ? Math.min(100, (elapsed / total) * 100) : 0}%`, transition: 'width .25s linear' }} />
@@ -1234,7 +1237,7 @@ export default function FocusWorkout({
       : fs && !fs.completed ? [{ xi: ei, si: fi }] : []
   ) : [];
   const gStep = gSteps[0] || null;
-  const guidedOn = !!(quest && repSensor?.guided && repSensor?.alpha && repSensor?.sensor?.status === 'linked');
+  const guidedOn = !!(repSensor?.guided && repSensor?.alpha && repSensor?.sensor?.status === 'linked');
   const gPhase = guidedOn ? repSensor.phase : 'idle';
   const gCard = guidedOn && (kind === 'normal' || kind === 'drop' || roundMode) && !dense && !!gStep;
   const gTarget = useRef(null); // the set the running count belongs to
@@ -1277,6 +1280,21 @@ export default function FocusWorkout({
     patchSet(g.xi, g.si, { reps: String(liveCount), ...(s.type === 'drop' ? { dropMode: 'fixed' } : {}) });
   }, [liveCount, gPhase, swapN]); // eslint-disable-line react-hooks/exhaustive-deps
   const startGuided = () => { if (!gStep) return; gTarget.current = { ...gStep, multi: gMulti }; haptics.tap(); repSensor.startSet(); };
+  // Auto accept: a single counted set logs itself 5 s after its count ends.
+  // Chains already advance on their own when the count ends, so they are left alone.
+  useEffect(() => {
+    if (gPhase !== 'done' || !repSensor?.auto?.accept || !gTarget.current || gTarget.current.multi) return undefined;
+    const id = setTimeout(advanceGuided, 5000);
+    return () => clearTimeout(id);
+  }, [gPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto progress: from set 2 on, when rest ends, the next count-in starts by itself.
+  const wasResting = useRef(timer.isRunning);
+  useEffect(() => {
+    const ended = wasResting.current && !timer.isRunning;
+    wasResting.current = timer.isRunning;
+    if (!ended || !repSensor?.auto?.progress || !gCard || gPhase !== 'idle' || gStep.si < 1) return;
+    startGuided();
+  }, [timer.isRunning]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Swipe ─────────────────────────────────────────────────────────
   const swipe = (dir) => {
@@ -1618,7 +1636,7 @@ export default function FocusWorkout({
             onClaim={qClear ? onQuestClear : null} />
   ) : null;
 
-  return (
+  const body = (
     <div className={`g-root flex flex-col ${dense ? 'min-h-full' : 'h-full'}`}>
       {/* Header */}
       <div className="px-5 pt-2 pb-2.5">
@@ -1708,13 +1726,13 @@ export default function FocusWorkout({
                 <span className="g-label truncate">{isBossBlock ? 'WEEKLY BOSS · ONE SET TO FAILURE' : <>BLOCK {ci + 1} OF {blocks.length} · {kind === 'interval' ? 'INTERVAL' : kind === 'timed' ? `${mmss(fs?.timedSec || 60)} TIMED` : ex.targetReps}{ex.restSeconds ? ` · ${restLabel(ex.restSeconds)}` : ''}</>}</span>
               )}
               <span className="flex items-center gap-2 flex-shrink-0">
-                {quest && (kind === 'normal' || kind === 'drop' || roundMode)
-                  // With the rep tracker in play its state takes the tag slot: REST/BATTLE
-                  // is on the stage anyway, and the tracker needs somewhere you look.
-                  ? (repTracking(repSensor)
-                    ? <RepTag />
-                    : <span className="g-tag" style={{ '--tag': resting ? '#f59e0b' : '#ff2222' }}>{resting ? 'REST' : 'BATTLE'}</span>)
-                  : <Tag kind={kind} />}
+                {(kind === 'normal' || kind === 'drop' || roundMode) && repTracking(repSensor)
+                  // With the rep tracker in play its state takes the tag slot: the tracker
+                  // needs somewhere you look. In a quest REST/BATTLE stays on the stage.
+                  ? <RepTag />
+                  : quest && (kind === 'normal' || kind === 'drop' || roundMode)
+                    ? <span className="g-tag" style={{ '--tag': resting ? '#f59e0b' : '#ff2222' }}>{resting ? 'REST' : 'BATTLE'}</span>
+                    : <Tag kind={kind} />}
                 <button onClick={() => setEditOpen(true)} aria-label="Edit exercise" className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2" style={{ font: `700 16px ${MONO}` }}>⋯</button>
               </span>
             </div>
@@ -2084,6 +2102,13 @@ export default function FocusWorkout({
       )}
     </div>
   );
+  // Quest battles come in with a short glitch decode, the title screen's effect cut down.
+  return quest ? (
+    <AsciiReveal className={dense ? 'min-h-full' : 'h-full'} preset="terminal" origin="top-left" duration="fast"
+      media='[data-ascii="media"]' shimmer={false}>
+      {body}
+    </AsciiReveal>
+  ) : body;
 }
 
 function ToastPR({ text, label = 'NEW PR', onDone }) {
