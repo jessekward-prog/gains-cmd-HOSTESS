@@ -30,7 +30,12 @@
 
   <script>
     try {
-      if (localStorage.getItem('gains-cmd-banner-enabled') !== 'false') {
+      var deskPref = localStorage.getItem('gains-beta-desk');
+      var isDesk = localStorage.getItem('gains-cmd-beta') !== 'off' && (
+        deskPref === 'desk' ||
+        (deskPref !== 'phone' && (window.matchMedia ? window.matchMedia('(min-width: 980px)').matches : window.innerWidth >= 980))
+      );
+      if (!isDesk && localStorage.getItem('gains-cmd-banner-enabled') !== 'false') {
         var splash = document.createElement('iframe');
         splash.id = 'boot-splash';
         splash.title = 'Boot splash';

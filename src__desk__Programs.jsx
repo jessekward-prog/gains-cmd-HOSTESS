@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
+import useQuest from '../hooks/useQuest';
 import { aggressionOf } from '../lib/levelup';
 import { autoCapable, autoOn } from '../lib/autofail';
 import * as api from '../lib/api';
@@ -29,6 +30,11 @@ function withKind(e, k) {
 }
 const newExercise = () => ({ name: '', sets: 3, repRange: '8-12', restSeconds: 90, failureIndices: [] });
 const move = (arr, i, d) => { const a = [...arr]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; };
+const tidy = (list) => list.map((f) => {
+  if (!f.g || list.filter((x) => x.g === f.g).length > 1) return f;
+  const { g, ...rest } = f;
+  return rest;
+});
 
 function shortVariantLabel(workoutName, programName) {
   const wn = (workoutName || '').trim();
@@ -66,6 +72,7 @@ function Chip({ children, onClick, tone = 'neutral', title }) {
 export default function DeskPrograms() {
   const { programs, workoutHistory, settings, reloadPrograms } = useWorkout();
   const { showToast } = useToast();
+  const { prof, updProf } = useQuest();
   const agg = aggressionOf(settings);
   const [pid, setPid] = useState(programs?.[0]?.id ?? null);
   const program = programs.find((p) => p.id === pid) || null;
@@ -75,7 +82,9 @@ export default function DeskPrograms() {
   const [search, setSearch] = useState('');
   const [expandedIdx, setExpandedIdx] = useState(null);
   const [expandedAll, setExpandedAll] = useState(false);
+  const [nickEdit, setNickEdit] = useState(null);
   const focusNewRef = useRef(false);
+  const skipNickBlurRef = useRef(false);
   const nameRefs = useRef([]);
 
   const savedDraft = useMemo(() => (program ? { id: program.id, name: program.name, workouts: parseW(program) } : null), [program]);
@@ -85,14 +94,87 @@ export default function DeskPrograms() {
   useEffect(() => { if (!forProgram || !dirty) setDraft(clone(savedDraft)); }, [savedDraft, forProgram]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!program && programs.length) setPid(programs[0].id); }, [programs, program]);
 
+  const questFavMap = useMemo(
+    () => new Map((prof.favs || []).map((f) => [JSON.stringify([f.p, f.w]), f])),
+    [prof.favs],
+  );
+  const questFavOf = (pName, wName) => (pName && wName ? questFavMap.get(JSON.stringify([pName, wName])) || null : null);
+
   const names = useMemo(() => allNames(programs, workoutHistory), [programs, workoutHistory]);
   const filteredPrograms = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? programs.filter((p) => (p.name || '').toLowerCase().includes(q)) : programs;
-  }, [programs, search]);
+    if (!q) return programs;
+    return programs.filter((p) => {
+      if ((p.name || '').toLowerCase().includes(q)) return true;
+      return parseW(p).some((x) => {
+        if ((x.name || '').toLowerCase().includes(q)) return true;
+        const alias = questFavMap.get(JSON.stringify([p.name, x.name]))?.alias;
+        return !!alias && alias.toLowerCase().includes(q);
+      });
+    });
+  }, [programs, search, questFavMap]);
 
   const ws = viewDraft?.workouts || [];
   const w = ws[wi] || null;
+  const activeQuestFav = program && w ? questFavOf(program.name, w.name) : null;
+  const canQuestFav = !!(program && w?.name?.trim() && (savedDraft?.workouts || []).some((x) => x.name === w.name));
+  const nickKey = `${program?.id ?? ''}:${wi}:${activeQuestFav?.alias || ''}`;
+  const nickDraft = nickEdit?.key === nickKey ? nickEdit.val : (activeQuestFav?.alias || '');
+
+  const toggleQuestFav = async () => {
+    if (!canQuestFav) return;
+    const wasFav = !!activeQuestFav;
+    try {
+      await updProf((pr) => {
+        const list = pr.favs || [];
+        return {
+          ...pr,
+          favs: wasFav
+            ? tidy(list.filter((f) => !(f.p === program.name && f.w === w.name)))
+            : [...list, { p: program.name, w: w.name }],
+        };
+      });
+      showToast(wasFav ? 'Removed from Quest favourites' : 'Added to Quest favourites', 'success');
+    } catch (e) { showToast('Could not update Quest favourite: ' + e.message, 'error'); }
+  };
+
+  const commitNickname = async () => {
+    if (!program || !w || !activeQuestFav) return;
+    const trimmed = nickDraft.trim();
+    const nextAlias = trimmed && trimmed !== w.name ? trimmed : undefined;
+    const curAlias = activeQuestFav.alias || undefined;
+    if (nextAlias === curAlias) {
+      if (nickEdit) setNickEdit(null);
+      return;
+    }
+    try {
+      await updProf((pr) => ({
+        ...pr,
+        favs: (pr.favs || []).map((f) => (f.p === program.name && f.w === w.name ? { ...f, alias: nextAlias } : f)),
+      }));
+      setNickEdit(null);
+      showToast(nextAlias ? 'Quest nickname updated' : 'Quest nickname cleared', 'success');
+    } catch (e) { showToast('Could not update nickname: ' + e.message, 'error'); }
+  };
+
+  const nickInputProps = {
+    type: 'text',
+    value: nickDraft,
+    onChange: (e) => setNickEdit({ key: nickKey, val: e.target.value }),
+    onBlur: () => {
+      if (skipNickBlurRef.current) { skipNickBlurRef.current = false; return; }
+      commitNickname();
+    },
+    onKeyDown: (e) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+      if (e.key === 'Escape') {
+        skipNickBlurRef.current = true;
+        setNickEdit(null);
+        e.currentTarget.blur();
+      }
+    },
+    'aria-label': 'Quest nickname',
+  };
   const patchDraft = (fn) => setDraft((d) => fn(d && savedDraft && d.id === savedDraft.id ? d : clone(savedDraft)));
   const setW = (fn) => patchDraft((d) => ({ ...d, workouts: d.workouts.map((x, k) => (k === wi ? fn(x) : x)) }));
   const setEx = (i, patch) => setW((x) => ({ ...x, exercises: x.exercises.map((e, k) => (k === i ? (typeof patch === 'function' ? patch(e) : { ...e, ...patch }) : e)) }));
@@ -219,9 +301,9 @@ export default function DeskPrograms() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search programs…"
-              aria-label="Search programs"
-              className="w-full bg-bg-1 border border-border rounded-lg pl-8 pr-7 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent/60 transition-colors"
+              placeholder="Search name or nickname…"
+              aria-label="Search programs or nicknames"
+              className={`w-full bg-bg-1 border border-border rounded-lg pl-8 ${search ? 'pr-7' : 'pr-3'} py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent/60 transition-colors`}
             />
             {search && (
               <button
@@ -240,19 +322,31 @@ export default function DeskPrograms() {
           {filteredPrograms.map((p) => {
             const on = p.id === pid;
             const pWorkouts = parseW(p);
-            const hasFav = pWorkouts.some((x) => x.favorite);
+            const hasNormalFav = pWorkouts.some((x) => x.favorite);
+            const qFavs = pWorkouts.map((x) => questFavOf(p.name, x.name)).filter(Boolean);
+            const hasQuestFav = qFavs.length > 0;
+            const nicknames = qFavs.map((f) => f.alias).filter(Boolean);
+            const tip = nicknames.length ? `${p.name || 'Untitled'} · ${nicknames.join(', ')}` : (p.name || 'Untitled');
             return (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => pickProgram(p.id)}
-                title={p.name}
-                className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${on ? 'bg-bg-2 text-text-primary font-semibold' : 'text-text-secondary hover:bg-bg-1 hover:text-text-primary'}`}
+                title={tip}
+                className={`w-full text-left px-2.5 py-2 rounded-lg flex flex-col items-stretch cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${on ? 'bg-bg-2 text-text-primary font-semibold' : 'text-text-secondary hover:bg-bg-1 hover:text-text-primary'}`}
                 style={on ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
               >
-                <span className="truncate flex-1 min-w-0 text-[13px]">{p.name || 'Untitled'}</span>
-                {hasFav && <span className="text-accent text-[10px] shrink-0" title="Has favourite workout">★</span>}
-                <span className="text-[11px] font-mono text-text-tertiary tabular-nums shrink-0">{pWorkouts.length}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="truncate flex-1 min-w-0 text-[13px]">{p.name || 'Untitled'}</span>
+                  {hasNormalFav && <span className="text-accent text-[10px] shrink-0" title="Favourite in Normal mode">★</span>}
+                  {hasQuestFav && <span className="text-[#fbbf24] text-[10px] shrink-0" title="Favourite in Quest mode">★</span>}
+                  <span className="text-[11px] font-mono text-text-tertiary tabular-nums shrink-0">{pWorkouts.length}</span>
+                </span>
+                {nicknames.length > 0 && (
+                  <span className="block truncate text-[10px] font-mono font-normal text-[#fbbf24]/85 mt-0.5">
+                    {nicknames.join(' · ')}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -295,32 +389,77 @@ export default function DeskPrograms() {
             </header>
 
             {/* Variants Selector Strip */}
-            <div className="py-4">
-              <div className="text-text-tertiary uppercase" style={{ font: `600 10px ${MONO}`, letterSpacing: '.14em' }}>
-                {hasVars ? 'Base & variants' : 'Workouts'}
-              </div>
-              {ws.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {ws.map((x, k) => {
-                    const on = k === wi;
-                    const label = shortVariantLabel(x.name, viewDraft.name);
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => pickVariant(k)}
-                        title={x.name}
-                        className={`px-3 py-1.5 rounded-lg border text-[12px] flex items-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${on ? 'bg-bg-3 text-text-primary border-accent/60 font-semibold' : 'bg-bg-1 text-text-secondary border-border hover:bg-bg-2 hover:text-text-primary'}`}
-                      >
-                        {x.favorite && <span className="text-accent text-[10px]">★</span>}
-                        <span className="max-w-[210px] truncate">{label}</span>
-                        <span className="text-[10px] font-mono text-text-tertiary tabular-nums">{(x.exercises || []).length}</span>
-                      </button>
-                    );
-                  })}
+            {(() => {
+              const anyNormalFav = ws.some((x) => x.favorite);
+              const anyQuestFav = ws.some((x) => !!questFavOf(program.name, x.name));
+              return (
+                <div className="py-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="text-text-tertiary uppercase" style={{ font: `600 10px ${MONO}`, letterSpacing: '.14em' }}>
+                      {hasVars ? 'Base & variants' : 'Workouts'}
+                    </div>
+                    {(anyNormalFav || anyQuestFav) && (
+                      <div className="flex items-center gap-3 text-[10px] font-mono text-text-tertiary">
+                        {anyNormalFav && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-accent">★</span>Normal
+                          </span>
+                        )}
+                        {anyQuestFav && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-[#fbbf24]">★</span>Quest
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {ws.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {ws.map((x, k) => {
+                        const on = k === wi;
+                        const isNormalFav = !!x.favorite;
+                        const qFav = questFavOf(program.name, x.name);
+                        const isQuestFav = !!qFav;
+                        const alias = qFav?.alias || null;
+                        const baseLabel = shortVariantLabel(x.name, viewDraft.name);
+                        const modeTip = [isNormalFav && 'Normal fav', isQuestFav && 'Quest fav'].filter(Boolean).join(' + ');
+                        const tip = [alias ? `${alias} (${x.name})` : x.name, modeTip].filter(Boolean).join(' · ');
+                        const pillCls = on
+                          ? (isQuestFav && !isNormalFav
+                            ? 'bg-bg-3 text-text-primary border-[#fbbf24]/80 ring-1 ring-[#fbbf24]/35 font-semibold'
+                            : 'bg-bg-3 text-text-primary border-accent/70 ring-1 ring-accent/35 font-semibold')
+                          : isQuestFav
+                            ? 'bg-[#fbbf24]/[0.06] text-text-primary border-[#fbbf24]/35 hover:bg-[#fbbf24]/[0.12]'
+                            : isNormalFav
+                              ? 'bg-accent/[0.06] text-text-primary border-accent/35 hover:bg-accent/[0.12]'
+                              : 'bg-bg-1 text-text-secondary border-border hover:bg-bg-2 hover:text-text-primary';
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => pickVariant(k)}
+                            title={tip}
+                            className={`px-3 py-1.5 rounded-lg border text-[12px] flex items-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${pillCls}`}
+                          >
+                            {isNormalFav && <span className="text-accent text-[10px]" aria-label="Normal favourite">★</span>}
+                            {isQuestFav && <span className="text-[#fbbf24] text-[10px]" aria-label="Quest favourite">★</span>}
+                            {alias ? (
+                              <>
+                                <span className="max-w-[200px] truncate font-semibold">{alias}</span>
+                                <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[110px]">{baseLabel}</span>
+                              </>
+                            ) : (
+                              <span className="max-w-[210px] truncate">{baseLabel}</span>
+                            )}
+                            <span className="text-[10px] font-mono text-text-tertiary tabular-nums">{(x.exercises || []).length}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Selected Variant Editor Card */}
             {!w ? (
@@ -331,17 +470,52 @@ export default function DeskPrograms() {
             ) : (
               <div className="rounded-[14px] bg-bg-1 border border-border overflow-hidden">
                 {/* Variant Toolbar */}
-                <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-wrap">
-                  <div className="flex-1 min-w-[220px]">
-                    <input
-                      type="text"
-                      value={w.name}
-                      onChange={(e) => setW((x) => ({ ...x, name: e.target.value }))}
-                      aria-label="Workout name"
-                      className="text-[15px] font-bold bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-lg px-2 py-1 -ml-2 w-full max-w-[480px] outline-none focus:ring-1 focus:ring-accent/60 transition-colors"
-                    />
+                <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-[240px]">
+                    {activeQuestFav?.alias ? (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[#fbbf24] text-[13px] shrink-0" title="Quest nickname">★</span>
+                          <input
+                            {...nickInputProps}
+                            placeholder="Quest nickname…"
+                            className="text-[16px] font-extrabold tracking-tight text-text-primary bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-lg px-2 py-0.5 -ml-1 w-full max-w-[460px] outline-none focus:ring-1 focus:ring-[#fbbf24]/60 transition-colors"
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono uppercase tracking-[.1em] text-text-tertiary shrink-0">Workout</span>
+                          <input
+                            type="text"
+                            value={w.name}
+                            onChange={(e) => setW((x) => ({ ...x, name: e.target.value }))}
+                            aria-label="Workout name"
+                            className="text-[12px] font-mono text-text-secondary bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-md px-1.5 py-0.5 w-full max-w-[420px] outline-none focus:ring-1 focus:ring-accent/60 transition-colors"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={w.name}
+                          onChange={(e) => setW((x) => ({ ...x, name: e.target.value }))}
+                          aria-label="Workout name"
+                          className="text-[15px] font-bold bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-lg px-2 py-1 -ml-2 w-full max-w-[480px] outline-none focus:ring-1 focus:ring-accent/60 transition-colors"
+                        />
+                        {activeQuestFav && (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono text-[#fbbf24]/85 shrink-0">★ Quest nickname</span>
+                            <input
+                              {...nickInputProps}
+                              placeholder="Add nickname…"
+                              className="text-[12px] font-mono text-text-primary placeholder:text-text-tertiary bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-md px-2 py-0.5 w-56 outline-none focus:ring-1 focus:ring-[#fbbf24]/60 transition-colors"
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
                     {w.variationOf && (
-                      <p className="mt-0.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>
+                      <p className="mt-1 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>
                         Variation of {w.variationOf}{w.variationChanges ? ` · ${w.variationChanges}` : ''}
                       </p>
                     )}
@@ -350,8 +524,17 @@ export default function DeskPrograms() {
                     <Btn
                       onClick={() => setW((x) => ({ ...x, favorite: !x.favorite }))}
                       className={w.favorite ? 'border-accent/50 text-accent' : ''}
+                      title="Normal mode favourite (saves with program)"
                     >
-                      {w.favorite ? '★ Favourite' : '☆ Favourite'}
+                      {w.favorite ? '★ Normal' : '☆ Normal'}
+                    </Btn>
+                    <Btn
+                      onClick={toggleQuestFav}
+                      disabled={!canQuestFav}
+                      className={activeQuestFav ? 'border-[#fbbf24]/50 text-[#fbbf24]' : ''}
+                      title={canQuestFav ? 'Quest mode favourite (saves immediately)' : 'Save program first to favourite in Quest mode'}
+                    >
+                      {activeQuestFav ? '★ Quest' : '☆ Quest'}
                     </Btn>
                     <Btn onClick={() => { setWs((a) => move(a, wi, -1)); setWi(Math.max(0, wi - 1)); setExpandedIdx(null); }} disabled={wi === 0} title="Move variant earlier">←</Btn>
                     <Btn onClick={() => { setWs((a) => move(a, wi, 1)); setWi(Math.min(ws.length - 1, wi + 1)); setExpandedIdx(null); }} disabled={wi === ws.length - 1} title="Move variant later">→</Btn>
