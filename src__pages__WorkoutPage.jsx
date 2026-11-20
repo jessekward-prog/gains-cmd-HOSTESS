@@ -665,7 +665,7 @@ export default function WorkoutPage({ onNavigate }) {
       return {
         name: ex.name,
         sets: hasBFR || hasInterval || hasVariableType || timedSet ? (ex.sets || []).filter(s => s.type !== 'drop').length : normalSets.length || ex.sets?.filter?.(s => s.type !== 'drop').length || 4,
-        repRange: ex.targetReps || ex.repRange || '8-12',
+        repRange: ex.programRepRange || ex.targetReps || ex.repRange || '8-12',
         restSeconds: ex.restSeconds || 90,
         hasDrops,
         numDrops: inferredNumDrops,

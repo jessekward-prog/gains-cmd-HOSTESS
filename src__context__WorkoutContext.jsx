@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import * as api from '../lib/api';
 import { localDate as toLocalDate, cleanWeight } from '../lib/history';
 import { aggressionOf } from '../lib/levelup';
-import { autoWeight, autoOn, incrementFor, parseRange } from '../lib/autofail';
+import { autoWeight, autoOn, exerciseConfig } from '../lib/autofail';
 
 const WorkoutContext = createContext(null);
 const LS_KEY = 'gains_active_workout';
@@ -295,13 +295,15 @@ export function WorkoutProvider({ children }) {
 
         // Auto weight: every working set goes to failure, its weight set from
         // its own last counted reps. A Level Up accepted since then wins.
-        const autoRange = autoOn(ex, agg) && !useBFR && !useInterval && !useTimed && parseRange(ex.repRange);
+        // Range, step and rules can be set per exercise in the desktop planner (/desk → Rules).
+        const cfg = exerciseConfig(ex.name, agg, ex.repRange);
+        const autoRange = autoOn(ex, agg) && !useBFR && !useInterval && !useTimed && cfg.range;
         if (autoRange) {
-          const inc = incrementFor(ex.name, agg);
+          const inc = cfg.inc;
           let n = 0;
           sets.forEach((s, k) => {
             if (s.type === 'drop') return;
-            const r = milestoneWeight === null ? autoWeight(workoutHistory, ex.name, n, autoRange, inc) : null;
+            const r = milestoneWeight === null ? autoWeight(workoutHistory, ex.name, n, autoRange, inc, cfg.rules) : null;
             n++;
             sets[k] = { ...s, reps: 'failure', ...(r ? { weight: cleanWeight(r.weight), ...(r.d ? { auto: { d: r.d, why: r.why } } : {}) } : {}) };
           });
@@ -310,8 +312,8 @@ export function WorkoutProvider({ children }) {
         return {
           name: ex.name,
           targetSets: numSets,
-          targetReps: ex.repRange || '8-12',
-          repRange: ex.repRange || '8-12',
+          targetReps: (autoRange && cfg.rules.range) || ex.repRange || '8-12',
+          repRange: (autoRange && cfg.rules.range) || ex.repRange || '8-12',
           restSeconds,
           sets,
           notes: [],
@@ -325,6 +327,8 @@ export function WorkoutProvider({ children }) {
           ...(failureIndices.length > 0 ? { failureIndices } : {}),
           // autoApplied: the finish diff and variation save leave this exercise's failure sets alone.
           ...(autoRange ? { autoApplied: true } : {}),
+          // The planner's range is for this session; saving a variation keeps the program's own.
+          ...(autoRange && cfg.rules.range ? { programRepRange: ex.repRange } : {}),
           ...(ex.autoWeight !== undefined ? { autoWeight: ex.autoWeight } : {}),
         };
       }),

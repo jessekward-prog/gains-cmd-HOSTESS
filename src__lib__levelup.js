@@ -85,6 +85,7 @@ export function aggressionOf(settings) {
     lowerIsolatedIncrement: a.lowerIsolatedIncrement ?? a.lowerIncrement ?? 5,
     coachingTone: a.coachingTone ?? 'encouraging',
     autoFailure: !!a.autoFailure,
+    autoRules: a.autoRules || {},
   };
 }
 

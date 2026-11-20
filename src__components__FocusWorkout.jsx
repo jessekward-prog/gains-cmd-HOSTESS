@@ -40,6 +40,7 @@ import * as api from '../lib/api';
 import { useWorkout } from '../context/WorkoutContext';
 import { useTheme } from '../context/ThemeContext';
 import { aggressionOf, acceptLevelUp, snoozeLevelUp } from '../lib/levelup';
+import { exerciseConfig, nextSetNow } from '../lib/autofail';
 
 const MONO = 'var(--font-mono)';
 const letter = (k) => 'ABCD'[k] || String(k + 1);
@@ -1190,6 +1191,13 @@ export default function FocusWorkout({
     const ev = s.qe?.st === 'accepted' ? s.qe : null;
     const evOk = ev ? eventDone(ev.k, x, { ...s, reps, completed: true }, stats[x.name] && { lw: stats[x.name].lw, lr: stats[x.name].lr }) : false;
     patchSet(xi, si, { completed: true, reps: reps ?? '', ...(chain ? { weight: shownWeight(x.sets, si) } : {}), ...(ev ? { qe: { ...ev, ok: evOk } } : {}) });
+    // Within-session rules (desk → Rules): a set way over or under its range moves the next set now.
+    if (x.autoApplied && s.type !== 'drop') {
+      const cfg = exerciseConfig(x.name, aggressionOf(wsSettings), x.repRange);
+      const j = x.sets.findIndex((t, k) => k > si && t.type !== 'drop' && !t.completed);
+      const nx = j >= 0 && cfg.range ? nextSetNow(x.name, reps, shownWeight(x.sets, j), cfg.range, cfg.inc, cfg.rules) : null;
+      if (nx) patchSet(xi, j, { weight: String(nx.weight), auto: { d: nx.d, why: nx.why } });
+    }
     // Alpha rep tracker: the motion since the last logged set, labelled with
     // the reps just typed. No-ops unless the quest opted in and the sensor is
     // linked, and it can never block the set being logged.

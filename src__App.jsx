@@ -31,6 +31,7 @@ import CoachPage from './pages/CoachPage';
 import SettingsPage from './pages/SettingsPage';
 import RecommendationsPage from './pages/RecommendationsPage';
 import AggressionPage from './pages/AggressionPage';
+import DeskApp from './desk/DeskApp';
 
 function AppShell() {
   const { activeWorkout } = useWorkout();
@@ -168,6 +169,9 @@ function AppContent() {
   if (!user) {
     return <PinGate />;
   }
+
+  // The desktop planner: same account and data, its own big-screen layout.
+  if (window.location.pathname.startsWith('/desk')) return <DeskApp />;
 
   return (
     <NavigationProvider

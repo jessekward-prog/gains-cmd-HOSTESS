@@ -90,14 +90,17 @@ export default function AggressionPage() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await api.updateAggression(aggression);
+      // Keep what this page doesn't edit (the desktop planner's rules) — the save replaces the whole object.
+      const raw = settings?.aggressionSettings;
+      const saved = typeof raw === 'string' ? JSON.parse(raw) : raw || {};
+      await api.updateAggression({ ...saved, ...aggression });
       await reloadSettings(); // Progress reads these from context
       showHeaderMessage('Settings saved');
     } catch (e) {
       showToast('Error saving: ' + e.message, 'error');
     }
     setSaving(false);
-  }, [aggression, showToast, showHeaderMessage, reloadSettings]);
+  }, [aggression, settings, showToast, showHeaderMessage, reloadSettings]);
 
   const set = (key) => (e) =>
     setAggression((a) => ({ ...a, [key]: parseFloat(e.target.value) || e.target.value }));
@@ -107,6 +110,7 @@ export default function AggressionPage() {
       <div className="px-4 pt-4 pb-2">
         <h1 className="font-display font-bold text-xl text-text-primary">Training Settings</h1>
         <p className="text-xs text-text-secondary mt-0.5">Configure how aggressively you progress</p>
+        <a href="/desk" className="inline-block mt-2 text-xs text-accent font-mono">Fine-tune Auto weight rules on a computer: /desk ›</a>
       </div>
 
       <div className="px-4 flex flex-col gap-3">
