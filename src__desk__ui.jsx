@@ -2,6 +2,7 @@
 import { useState } from 'react';
 
 export const MONO = 'var(--font-mono)';
+export const SIDEBAR_W = 188;
 export const fmt = (n) => (n == null || n === '' || Number.isNaN(+n) ? '' : String(Math.round(+n * 100) / 100));
 export const parseW = (p) => { try { return (typeof p?.workouts === 'string' ? JSON.parse(p.workouts) : p?.workouts) || []; } catch { return []; } };
 export const exsOf = (h) => { try { return (typeof h?.exercises === 'string' ? JSON.parse(h.exercises) : h?.exercises) || []; } catch { return []; } };
@@ -39,21 +40,34 @@ export function Panel({ title, note, right, children, className = '', pad = true
 
 export function Btn({ kind = 'plain', className = '', ...p }) {
   const k = {
-    plain: 'border border-border hover:bg-bg-2',
+    plain: 'border border-border hover:bg-bg-2 text-text-primary',
     primary: 'bg-accent font-bold hover:bg-accent-hover',
     danger: 'border border-error/40 text-error hover:bg-error/10',
-    ghost: 'hover:bg-bg-2 text-text-secondary',
+    ghost: 'hover:bg-bg-2 text-text-secondary hover:text-text-primary',
   }[kind];
-  return <button type="button" {...p} className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-40 disabled:pointer-events-none transition-colors ${k} ${className}`}
-    style={kind === 'primary' ? { color: 'var(--color-on-accent)', ...p.style } : p.style} />;
+  return (
+    <button
+      type="button"
+      {...p}
+      className={`px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,border-color,transform] duration-150 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${k} ${className}`}
+      style={kind === 'primary' ? { color: 'var(--color-on-accent)', ...p.style } : p.style}
+    />
+  );
 }
 
 const field = 'bg-bg-0 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-accent/60 min-w-0';
 const ring = { boxShadow: 'inset 0 0 0 1px var(--color-border-strong)' };
 export const TextIn = ({ className = '', ...p }) => <input type="text" {...p} className={`${field} ${className}`} style={{ ...ring, ...p.style }} />;
-export const NumIn = ({ className = '', value, onChange, ...p }) => (
-  <input type="number" {...p} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-    className={`${field} text-right ${className}`} style={{ ...ring, fontVariantNumeric: 'tabular-nums', ...p.style }} />
+export const NumIn = ({ className = '', value, onChange, onFocus, ...p }) => (
+  <input
+    type="number"
+    {...p}
+    value={value ?? ''}
+    onFocus={(e) => { e.target.select(); onFocus?.(e); }}
+    onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+    className={`${field} text-right ${className}`}
+    style={{ ...ring, fontVariantNumeric: 'tabular-nums', ...p.style }}
+  />
 );
 export const Sel = ({ className = '', children, ...p }) => <select {...p} className={`${field} ${className}`} style={{ ...ring, ...p.style }}>{children}</select>;
 
@@ -64,13 +78,24 @@ export function ConfirmBtn({ label = 'Delete', confirm = 'Tap again to delete', 
     onClick={() => (armed ? (setArmed(false), onConfirm()) : setArmed(true))}>{armed ? confirm : label}</Btn>;
 }
 
-export function SaveBar({ dirty, saving, onSave, onDiscard, idle = 'All changes saved', label = 'Save' }) {
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+
+export function SaveBar({ dirty, saving, onSave, onDiscard, idle = 'All changes saved', label = 'Save', autoHide = false, shortcut = false }) {
+  if (autoHide && !dirty && !saving) return null;
   return (
-    <div className="fixed bottom-0 right-0 z-20 border-t border-border bg-bg-1/95 backdrop-blur px-8 py-3 flex items-center gap-3"
-      style={{ left: 220, paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
-      <span className={`flex-1 ${dirty ? 'text-text-primary' : 'text-text-tertiary'}`} style={{ font: `500 12px ${MONO}` }}>{dirty ? 'Unsaved changes' : idle}</span>
+    <div className="fixed bottom-0 right-0 z-20 border-t border-border bg-bg-1/95 backdrop-blur px-7 py-3 flex items-center gap-3"
+      style={{ left: SIDEBAR_W, paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+      <span className={`flex-1 flex items-center gap-2 ${dirty ? 'text-text-primary' : 'text-text-tertiary'}`} style={{ font: `500 12px ${MONO}` }}>
+        {dirty && <span className="w-2 h-2 rounded-full bg-accent shrink-0" />}
+        <span>{dirty ? 'Unsaved changes' : idle}</span>
+      </span>
       <Btn disabled={!dirty || saving} onClick={onDiscard}>Discard</Btn>
-      <Btn kind="primary" disabled={!dirty || saving} onClick={onSave} className="px-5">{saving ? 'Saving…' : label}</Btn>
+      <Btn kind="primary" disabled={!dirty || saving} onClick={onSave} className="px-4 flex items-center gap-2">
+        <span>{saving ? 'Saving…' : label}</span>
+        {shortcut && !saving && (
+          <kbd className="text-[10px] opacity-75 font-mono font-normal">{isMac ? '⌘S' : 'Ctrl+S'}</kbd>
+        )}
+      </Btn>
     </div>
   );
 }

@@ -1,15 +1,21 @@
-// Desk → Programs: every program, its workouts, and each workout's exercises
-// edited as a table: kind, sets, reps, rest, failure sets, supersets, per-set
-// weights and Auto weight. Saved per program, like the phone app does.
-import { useEffect, useMemo, useState } from 'react';
+// Desk → Programs: searchable programs directory on the left, clean variant pills
+// and single-line scannable exercise rows with an expandable tuning tray on the right.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { useToast } from '../context/ToastContext';
 import { aggressionOf } from '../lib/levelup';
 import { autoCapable, autoOn } from '../lib/autofail';
 import * as api from '../lib/api';
-import { MONO, PageHead, Panel, Btn, TextIn, NumIn, Sel, ConfirmBtn, SaveBar, parseW, clone, allNames, NamesList } from './ui';
+import { MONO, Btn, TextIn, NumIn, Sel, ConfirmBtn, SaveBar, parseW, clone, allNames, NamesList } from './ui';
 
-const KINDS = [['normal', 'Normal'], ['drops', 'Drop sets'], ['bfr', 'BFR'], ['interval', 'Interval'], ['timed', 'Timed'], ['cardio', 'Cardio']];
+const KINDS = [
+  ['normal', 'Normal'],
+  ['drops', 'Drop sets'],
+  ['bfr', 'BFR'],
+  ['interval', 'Interval'],
+  ['timed', 'Timed'],
+  ['cardio', 'Cardio'],
+];
 const kindOf = (e) => (e.type === 'cardio' ? 'cardio' : e.isBFR ? 'bfr' : e.isInterval ? 'interval' : e.isTimed ? 'timed' : e.hasDrops ? 'drops' : 'normal');
 function withKind(e, k) {
   const base = { ...e, type: undefined, isBFR: false, isInterval: false, isTimed: false, hasDrops: false };
@@ -24,172 +30,690 @@ function withKind(e, k) {
 const newExercise = () => ({ name: '', sets: 3, repRange: '8-12', restSeconds: 90, failureIndices: [] });
 const move = (arr, i, d) => { const a = [...arr]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; };
 
+function shortVariantLabel(workoutName, programName) {
+  const wn = (workoutName || '').trim();
+  const pn = (programName || '').trim();
+  if (!wn) return 'Untitled';
+  if (pn && wn.toLowerCase() === pn.toLowerCase()) return 'Base';
+  if (pn && wn.toLowerCase().startsWith(pn.toLowerCase())) {
+    let rest = wn.slice(pn.length).trim().replace(/^[—–\-:]+\s*/, '').trim();
+    if (rest.startsWith('(') && rest.endsWith(')')) rest = rest.slice(1, -1).trim();
+    if (rest) return rest;
+  }
+  return wn;
+}
+
+const inlineField = 'bg-transparent hover:bg-bg-2/70 focus:bg-bg-0 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-accent/60 transition-colors min-w-0';
+
+function Chip({ children, onClick, tone = 'neutral', title }) {
+  const styles = {
+    neutral: 'bg-bg-2 text-text-secondary border-border hover:border-border-strong',
+    accent: 'bg-accent/12 text-accent border-accent/35 hover:border-accent/60',
+    ss: 'bg-[#4f8fe0]/12 text-[#7cb3f4] border-[#4f8fe0]/35 hover:border-[#4f8fe0]/60',
+  }[tone];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`px-1.5 py-0.5 rounded border text-[10px] font-mono leading-none cursor-pointer transition-colors whitespace-nowrap ${styles}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function DeskPrograms() {
   const { programs, workoutHistory, settings, reloadPrograms } = useWorkout();
   const { showToast } = useToast();
   const agg = aggressionOf(settings);
   const [pid, setPid] = useState(programs?.[0]?.id ?? null);
   const program = programs.find((p) => p.id === pid) || null;
-  const [draft, setDraft] = useState(null); // { name, workouts }
+  const [draft, setDraft] = useState(null); // { id, name, workouts }
   const [wi, setWi] = useState(0);
   const [saving, setSaving] = useState(false);
-  const savedDraft = useMemo(() => (program ? { name: program.name, workouts: parseW(program) } : null), [program]);
-  const dirty = !!draft && JSON.stringify(draft) !== JSON.stringify(savedDraft);
-  useEffect(() => { if (!dirty) setDraft(clone(savedDraft)); }, [savedDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [search, setSearch] = useState('');
+  const [expandedIdx, setExpandedIdx] = useState(null);
+  const [expandedAll, setExpandedAll] = useState(false);
+  const focusNewRef = useRef(false);
+  const nameRefs = useRef([]);
+
+  const savedDraft = useMemo(() => (program ? { id: program.id, name: program.name, workouts: parseW(program) } : null), [program]);
+  const forProgram = !!(draft && savedDraft && draft.id === savedDraft.id);
+  const viewDraft = forProgram ? draft : savedDraft;
+  const dirty = forProgram && JSON.stringify(draft) !== JSON.stringify(savedDraft);
+  useEffect(() => { if (!forProgram || !dirty) setDraft(clone(savedDraft)); }, [savedDraft, forProgram]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!program && programs.length) setPid(programs[0].id); }, [programs, program]);
+
   const names = useMemo(() => allNames(programs, workoutHistory), [programs, workoutHistory]);
+  const filteredPrograms = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? programs.filter((p) => (p.name || '').toLowerCase().includes(q)) : programs;
+  }, [programs, search]);
 
-  const ws = draft?.workouts || [];
+  const ws = viewDraft?.workouts || [];
   const w = ws[wi] || null;
-  const setW = (fn) => setDraft((d) => ({ ...d, workouts: d.workouts.map((x, k) => (k === wi ? fn(x) : x)) }));
+  const patchDraft = (fn) => setDraft((d) => fn(d && savedDraft && d.id === savedDraft.id ? d : clone(savedDraft)));
+  const setW = (fn) => patchDraft((d) => ({ ...d, workouts: d.workouts.map((x, k) => (k === wi ? fn(x) : x)) }));
   const setEx = (i, patch) => setW((x) => ({ ...x, exercises: x.exercises.map((e, k) => (k === i ? (typeof patch === 'function' ? patch(e) : { ...e, ...patch }) : e)) }));
-  const setWs = (fn) => setDraft((d) => ({ ...d, workouts: fn(d.workouts) }));
+  const setWs = (fn) => patchDraft((d) => ({ ...d, workouts: fn(d.workouts) }));
 
-  const pick = (id) => { if (dirty) return; setPid(id); setWi(0); };
+  useEffect(() => {
+    if (focusNewRef.current && w?.exercises?.length) {
+      focusNewRef.current = false;
+      const el = nameRefs.current[w.exercises.length - 1];
+      if (el) { el.focus(); el.scrollIntoView({ block: 'nearest' }); }
+    }
+  }, [w?.exercises?.length]);
+
+  const pickProgram = (id) => {
+    if (id === pid) return;
+    if (dirty) { showToast('Save or discard changes before switching programs', 'info'); return; }
+    setPid(id);
+    setWi(0);
+    setExpandedIdx(null);
+  };
+
+  const pickVariant = (idx) => {
+    setWi(idx);
+    setExpandedIdx(null);
+  };
+
   const save = async () => {
+    if (!program || !viewDraft) return;
     setSaving(true);
     try {
-      const clean = draft.workouts.map((x) => ({ ...x, exercises: (x.exercises || []).filter((e) => e.name.trim()) }));
-      await api.updateProgram(program.id, draft.name.trim() || program.name, clean);
+      const cleanName = viewDraft.name.trim() || program.name;
+      const clean = viewDraft.workouts.map((x) => ({ ...x, exercises: (x.exercises || []).filter((e) => e.name.trim()) }));
+      await api.updateProgram(program.id, cleanName, clean);
+      setDraft({ id: program.id, name: cleanName, workouts: clone(clean) });
       await reloadPrograms();
       showToast('Program saved', 'success');
     } catch (e) { showToast('Could not save: ' + e.message, 'error'); }
     setSaving(false);
   };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && dirty && !saving) {
+        e.preventDefault();
+        save();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const newProgram = async () => {
-    try { const r = await api.createProgram('New program', [{ name: 'Workout A', exercises: [] }]); await reloadPrograms(); if (r?.program?.id) { setPid(r.program.id); setWi(0); } }
-    catch (e) { showToast('Could not create: ' + e.message, 'error'); }
-  };
-  const delProgram = async () => {
-    try { await api.deleteProgram(program.id); setPid(null); await reloadPrograms(); showToast('Program deleted', 'success'); }
-    catch (e) { showToast('Could not delete: ' + e.message, 'error'); }
+    if (dirty) { showToast('Save or discard changes before creating a program', 'info'); return; }
+    try {
+      const r = await api.createProgram('New program', [{ name: 'Workout A', exercises: [] }]);
+      await reloadPrograms();
+      if (r?.program?.id) { setPid(r.program.id); setWi(0); setExpandedIdx(null); }
+    } catch (e) { showToast('Could not create: ' + e.message, 'error'); }
   };
 
-  const exNames = (w?.exercises || []).map((e) => e.name).filter(Boolean);
+  const delProgram = async () => {
+    if (!program) return;
+    try {
+      await api.deleteProgram(program.id);
+      setPid(null);
+      setExpandedIdx(null);
+      await reloadPrograms();
+      showToast('Program deleted', 'success');
+    } catch (e) { showToast('Could not delete: ' + e.message, 'error'); }
+  };
+
+  const addVariant = () => {
+    const nextIdx = ws.length;
+    setWs((a) => [...a, { name: `Workout ${String.fromCharCode(65 + a.length)}`, exercises: [] }]);
+    setWi(nextIdx);
+    setExpandedIdx(null);
+  };
+
+  const moveEx = (i, d) => {
+    setW((x) => ({ ...x, exercises: move(x.exercises, i, d) }));
+    if (expandedIdx === i) setExpandedIdx(i + d);
+    else if (expandedIdx === i + d) setExpandedIdx(i);
+  };
+
+  const removeEx = (i) => {
+    setW((x) => ({ ...x, exercises: x.exercises.filter((_, k) => k !== i) }));
+    if (expandedIdx === i) setExpandedIdx(null);
+    else if (expandedIdx != null && expandedIdx > i) setExpandedIdx(expandedIdx - 1);
+  };
+
+  const exList = w?.exercises || [];
+  const exNames = exList.map((e) => e.name).filter(Boolean);
+  const supersetPartnerMap = useMemo(() => {
+    const m = new Map();
+    for (const ex of exList) {
+      if (ex.name && ex.supersetWith) {
+        m.set(ex.name, ex.supersetWith);
+        if (!m.has(ex.supersetWith)) m.set(ex.supersetWith, ex.name);
+      }
+    }
+    return m;
+  }, [exList]);
+
+  const hasVars = ws.some((x) => x.variationOf);
 
   return (
-    <div className="pb-28">
-      <PageHead eyebrow="PROGRAMS" title="Programs and workouts">
-        Build and edit every workout on a big screen. Changes save per program with the button at the bottom, and show up in the phone app straight away.
-      </PageHead>
+    <div className="min-h-dvh grid" style={{ gridTemplateColumns: '236px minmax(0, 1fr)' }}>
       <NamesList id="desk-names" names={names} />
 
-      <div className="grid gap-6 px-8 pt-6" style={{ gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)' }}>
-        {/* Workouts */}
-        <div className="min-w-0 flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-1"><span className="flex-1 text-text-tertiary" style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>PROGRAM</span><Btn kind="ghost" onClick={newProgram} disabled={dirty}>+ New</Btn></div>
-          <Sel value={pid ?? ''} onChange={(e) => pick(Number(e.target.value))} disabled={dirty} title={dirty ? 'Save or discard first' : ''}>
-            {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {parseW(p).length} workout{parseW(p).length === 1 ? "" : "s"}</option>)}
-          </Sel>
-          {draft && (<>
-            <TextIn value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} className="font-extrabold text-[17px] px-3 py-2" aria-label="Program name" />
-            <div className="flex items-center justify-between px-1 pt-1"><span className="text-text-tertiary" style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>WORKOUTS</span>
-              <Btn kind="ghost" onClick={() => { setWs((a) => [...a, { name: `Workout ${String.fromCharCode(65 + a.length)}`, exercises: [] }]); setWi(ws.length); }}>+ New</Btn></div>
-            <div className="flex flex-col gap-1 max-h-[64vh] overflow-y-auto pr-1">
-              {ws.map((x, k) => {
-                const c = (x.exercises || []).filter(autoCapable);
-                return (
-                  <button key={k} onClick={() => setWi(k)} className={`text-left px-3 py-2 rounded-lg ${k === wi ? 'bg-bg-3' : 'hover:bg-bg-2'}`}
-                    style={k === wi ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}>
-                    <span className="flex items-baseline gap-2"><span className="flex-1 min-w-0 truncate text-[14px] font-semibold">{x.name || 'Untitled'}</span>{x.favorite && <span className="text-accent">★</span>}</span>
-                    <span className="block text-text-tertiary truncate" style={{ font: `400 10px ${MONO}` }}>
-                      {(x.exercises || []).length} exercises{c.length ? ` · AUTO ${c.filter((e) => autoOn(e, agg)).length}/${c.length}` : ''}{x.variationOf ? ' · variation' : ''}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {dirty && <p className="px-1 text-text-tertiary" style={{ font: `400 10px/1.5 ${MONO}` }}>Save or discard to switch program.</p>}
-            <ConfirmBtn label="Delete program" confirm="Tap again: delete program" onConfirm={delProgram} className="mt-3 self-start" />
-          </>)}
+      {/* Left Pane: Programs Directory */}
+      <aside className="border-r border-border bg-bg-0 sticky top-0 h-dvh flex flex-col">
+        <div className="px-4 pt-5 pb-3 border-b border-border/60">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[15px] font-bold tracking-tight">Programs</h2>
+            <span className="text-[11px] font-mono text-text-tertiary tabular-nums flex-1">{programs.length}</span>
+            <Btn kind="plain" onClick={newProgram} disabled={dirty} className="px-2.5 py-1 text-[12px]">+ New</Btn>
+          </div>
+          <div className="relative mt-2.5">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search programs…"
+              aria-label="Search programs"
+              className="w-full bg-bg-1 border border-border rounded-lg pl-8 pr-7 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent/60 transition-colors"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary cursor-pointer text-xs px-1"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Workout editor */}
-        <div className="min-w-0">
-          {!w ? <Panel><p className="text-text-tertiary">This program has no workouts. Add one with + New.</p></Panel> : (
-            <Panel pad={false}
-              title={<TextIn value={w.name} onChange={(e) => setW((x) => ({ ...x, name: e.target.value }))} className="font-extrabold text-[18px] w-[min(520px,100%)]" aria-label="Workout name" />}
-              right={<div className="flex gap-1.5 flex-wrap">
-                <Btn onClick={() => setW((x) => ({ ...x, favorite: !x.favorite }))}>{w.favorite ? '★ Favourite' : '☆ Favourite'}</Btn>
-                <Btn onClick={() => { setWs((a) => move(a, wi, -1)); setWi(Math.max(0, wi - 1)); }} disabled={wi === 0}>↑</Btn>
-                <Btn onClick={() => { setWs((a) => move(a, wi, 1)); setWi(Math.min(ws.length - 1, wi + 1)); }} disabled={wi === ws.length - 1}>↓</Btn>
-                <Btn onClick={() => { setWs((a) => [...a.slice(0, wi + 1), { ...clone(w), name: `${w.name} (copy)`, favorite: false }, ...a.slice(wi + 1)]); setWi(wi + 1); }}>Duplicate</Btn>
-                <ConfirmBtn label="Delete" confirm="Tap again" onConfirm={() => { setWs((a) => a.filter((_, k) => k !== wi)); setWi(Math.max(0, wi - 1)); }} />
-              </div>}>
-              {w.variationOf && <p className="px-4 pt-3 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>Variation of {w.variationOf}{w.variationChanges ? ` · ${w.variationChanges}` : ''}</p>}
-              <div className="overflow-x-auto">
-                <table className="w-full text-[14px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  <thead><tr className="text-text-tertiary text-left" style={{ font: `500 10px ${MONO}`, letterSpacing: '.08em' }}>
-                    <th className="px-3 py-2 font-medium w-8">#</th><th className="px-2 py-2 font-medium min-w-[170px] w-full">EXERCISE</th><th className="px-2 py-2 font-medium">KIND</th>
-                    <th className="px-2 py-2 font-medium">SETS</th><th className="px-2 py-2 font-medium">REPS</th><th className="px-2 py-2 font-medium">REST</th>
-                    <th className="px-3 py-2" />
-                  </tr></thead>
-                  <tbody>
-                    {(w.exercises || []).map((e, i) => {
-                      const kind = kindOf(e), cardio = kind === 'cardio', n = Math.max(1, Math.min(12, Number(e.sets) || 1));
-                      const fails = e.failureIndices || [];
-                      return [
-                        <tr key={i} className="border-t border-border align-top">
-                          <td className="px-3 py-2.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{i + 1}</td>
-                          <td className="px-2 py-2"><TextIn list="desk-names" value={e.name} placeholder="Exercise name" onChange={(ev) => setEx(i, { name: ev.target.value })} className="w-full" /></td>
-                          <td className="px-2 py-2"><Sel value={kind} onChange={(ev) => setEx(i, (x) => withKind(x, ev.target.value))}>{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Sel></td>
-                          <td className="px-2 py-2">{cardio ? <span className="text-text-tertiary">1</span> : <NumIn value={e.sets} min={1} max={12} onChange={(v) => setEx(i, { sets: v ?? 1, failureIndices: fails.filter((f) => f < (v ?? 1)) })} className="w-14" />}</td>
-                          <td className="px-2 py-2">{cardio ? <span className="flex items-center gap-1"><NumIn value={Math.round((e.targetDurationSec || 0) / 60)} min={1} onChange={(v) => setEx(i, { targetDurationSec: (v ?? 0) * 60 })} className="w-16" /><span className="text-text-tertiary text-xs">min</span></span>
-                            : <TextIn value={e.repRange || ''} onChange={(ev) => setEx(i, { repRange: ev.target.value })} className="w-20 text-center" placeholder="8-12" />}</td>
-                          <td className="px-2 py-2">{cardio ? null : <span className="flex items-center gap-1"><NumIn value={e.restSeconds} min={0} step={15} onChange={(v) => setEx(i, { restSeconds: v })} className="w-16" /><span className="text-text-tertiary text-xs">s</span></span>}</td>
-                          <td className="px-1 py-2 whitespace-nowrap">
-                            <Btn kind="ghost" onClick={() => setW((x) => ({ ...x, exercises: move(x.exercises, i, -1) }))} disabled={i === 0}>↑</Btn>
-                            <Btn kind="ghost" onClick={() => setW((x) => ({ ...x, exercises: move(x.exercises, i, 1) }))} disabled={i === w.exercises.length - 1}>↓</Btn>
-                            <Btn kind="ghost" onClick={() => setW((x) => ({ ...x, exercises: x.exercises.filter((_, k) => k !== i) }))} title="Remove">✕</Btn>
-                          </td>
-                        </tr>,
-                        <tr key={`${i}-x`} className="align-top">
-                          <td />
-                          <td colSpan={6} className="px-2 pb-3">
-                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-text-secondary text-[13px]">
-                              {['normal', 'drops'].includes(kind) && <span className="flex items-center gap-2">To failure <span className="flex gap-1">{Array.from({ length: n }, (_, k) => {
-                              const on = fails.includes(k);
-                              return <button key={k} onClick={() => setEx(i, { failureIndices: on ? fails.filter((f) => f !== k) : [...fails, k].sort((a, b) => a - b) })}
-                                className={`w-7 h-7 rounded-md text-xs font-bold ${on ? 'bg-accent' : 'bg-bg-3 text-text-secondary'}`} style={on ? { color: 'var(--color-on-accent)' } : undefined} title={`Set ${k + 1} to failure`}>{k + 1}</button>;
-                            })}</span></span>}
-                              {!cardio && <label className="flex items-center gap-2">Superset with <Sel value={e.supersetWith || ''} onChange={(ev) => setEx(i, { supersetWith: ev.target.value || null })} className="max-w-[200px]">
-                                <option value="">—</option>{exNames.filter((x) => x !== e.name).map((x) => <option key={x} value={x}>{x}</option>)}</Sel></label>}
-                              {autoCapable(e) && <label className="flex items-center gap-2">Auto weight <Sel value={e.autoWeight === undefined ? '' : e.autoWeight ? 'on' : 'off'}
-                                onChange={(ev) => setEx(i, (x) => { const y = { ...x }; if (ev.target.value === '') delete y.autoWeight; else y.autoWeight = ev.target.value === 'on'; return y; })}>
-                                <option value="">Default ({agg.autoFailure ? 'on' : 'off'})</option><option value="on">On</option><option value="off">Off</option></Sel></label>}
-                              {kind === 'drops' && <label className="flex items-center gap-2">Drops after each set <NumIn value={e.numDrops} min={1} max={4} onChange={(v) => setEx(i, { numDrops: v ?? 1 })} className="w-14" /></label>}
-                              {kind === 'bfr' && <label className="flex items-center gap-2">Cuff time <NumIn value={e.bfrSeconds} min={10} step={5} onChange={(v) => setEx(i, { bfrSeconds: v })} className="w-16" /> s</label>}
-                              {kind === 'interval' && <>
-                                <label className="flex items-center gap-2">Work <NumIn value={e.intervalWork} min={5} step={5} onChange={(v) => setEx(i, { intervalWork: v })} className="w-16" /> s</label>
-                                <label className="flex items-center gap-2">Rest <NumIn value={e.intervalRest} min={0} step={5} onChange={(v) => setEx(i, { intervalRest: v })} className="w-16" /> s</label>
-                                <label className="flex items-center gap-2">Total <NumIn value={e.intervalTotal} min={30} step={30} onChange={(v) => setEx(i, { intervalTotal: v })} className="w-20" /> s</label></>}
-                              {kind === 'timed' && <label className="flex items-center gap-2">Each set lasts <NumIn value={e.timedSec} min={10} step={5} onChange={(v) => setEx(i, { timedSec: v })} className="w-16" /> s</label>}
-                              {['normal', 'drops'].includes(kind) && (
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input type="checkbox" checked={!!e.isVariable} style={{ accentColor: 'var(--color-accent)' }}
-                                    onChange={(ev) => setEx(i, (x) => ({ ...x, isVariable: ev.target.checked, variableSets: ev.target.checked ? Array.from({ length: n }, (_, k) => x.variableSets?.[k] || { weight: '', repRange: x.repRange }) : undefined }))} />
-                                  Weight per set</label>)}
-                              {e.isVariable && ['normal', 'drops'].includes(kind) && Array.from({ length: n }, (_, k) => {
-                                const vs = e.variableSets?.[k] || {};
-                                const setVs = (patch) => setEx(i, (x) => { const a = Array.from({ length: n }, (_, j) => ({ ...(x.variableSets?.[j] || { weight: '', repRange: x.repRange }) })); a[k] = { ...a[k], ...patch }; return { ...x, variableSets: a }; });
-                                return <span key={k} className="flex items-center gap-1.5 bg-bg-2 rounded-lg px-2 py-1"><span className="text-text-tertiary" style={{ font: `500 10px ${MONO}` }}>S{k + 1}</span>
-                                  <NumIn value={vs.weight === '' ? undefined : Number(vs.weight)} step={0.5} min={0} onChange={(v) => setVs({ weight: v == null ? '' : String(v) })} className="w-16" />kg
-                                  <TextIn value={vs.repRange || ''} onChange={(ev) => setVs({ repRange: ev.target.value })} className="w-16 text-center" /></span>;
-                              })}
-                            </div>
-                          </td>
-                        </tr>,
-                      ];
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-4 py-3 border-t border-border"><Btn onClick={() => setW((x) => ({ ...x, exercises: [...(x.exercises || []), newExercise()] }))}>+ Add exercise</Btn></div>
-            </Panel>
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 flex flex-col gap-0.5">
+          {filteredPrograms.map((p) => {
+            const on = p.id === pid;
+            const pWorkouts = parseW(p);
+            const hasFav = pWorkouts.some((x) => x.favorite);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => pickProgram(p.id)}
+                title={p.name}
+                className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${on ? 'bg-bg-2 text-text-primary font-semibold' : 'text-text-secondary hover:bg-bg-1 hover:text-text-primary'}`}
+                style={on ? { boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
+              >
+                <span className="truncate flex-1 min-w-0 text-[13px]">{p.name || 'Untitled'}</span>
+                {hasFav && <span className="text-accent text-[10px] shrink-0" title="Has favourite workout">★</span>}
+                <span className="text-[11px] font-mono text-text-tertiary tabular-nums shrink-0">{pWorkouts.length}</span>
+              </button>
+            );
+          })}
+          {filteredPrograms.length === 0 && (
+            <p className="px-3 py-6 text-center text-[12px] text-text-tertiary">No programs match “{search}”.</p>
           )}
         </div>
-      </div>
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setDraft(clone(savedDraft))} label="Save program" idle="Program saved" />
+      </aside>
+
+      {/* Right Pane: Program & Variant Studio */}
+      <section className="min-w-0 px-6 py-6 pb-24 max-w-[1140px]">
+        {!program || !viewDraft ? (
+          <div className="rounded-[14px] bg-bg-1 border border-border p-8 text-center">
+            <p className="text-text-secondary text-sm">No program selected.</p>
+            <Btn kind="primary" onClick={newProgram} className="mt-4">+ Create first program</Btn>
+          </div>
+        ) : (
+          <>
+            {/* Program Header */}
+            <header className="pb-4 border-b border-border flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-[240px]">
+                <input
+                  type="text"
+                  value={viewDraft.name}
+                  onChange={(e) => patchDraft((d) => ({ ...d, name: e.target.value }))}
+                  aria-label="Program name"
+                  className="text-[22px] font-extrabold tracking-tight bg-transparent hover:bg-bg-1 focus:bg-bg-1 rounded-lg px-2 py-0.5 -ml-2 w-full max-w-[520px] outline-none focus:ring-1 focus:ring-accent/60 transition-colors"
+                />
+                <div className="mt-1 flex items-center gap-2 text-[11px] font-mono text-text-tertiary">
+                  <span>{ws.length} {ws.length === 1 ? 'workout' : hasVars ? 'variants' : 'workouts'}</span>
+                  {w && <span>· {exList.length} {exList.length === 1 ? 'exercise' : 'exercises'}</span>}
+                  <span>·</span>
+                  <span className={dirty ? 'text-accent font-medium' : 'text-text-tertiary'}>{dirty ? 'Unsaved' : 'Saved'}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Btn onClick={addVariant}>+ New {hasVars ? 'variant' : 'workout'}</Btn>
+                <ConfirmBtn label="Delete program" confirm="Confirm delete" onConfirm={delProgram} />
+              </div>
+            </header>
+
+            {/* Variants Selector Strip */}
+            <div className="py-4">
+              <div className="text-text-tertiary uppercase" style={{ font: `600 10px ${MONO}`, letterSpacing: '.14em' }}>
+                {hasVars ? 'Base & variants' : 'Workouts'}
+              </div>
+              {ws.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {ws.map((x, k) => {
+                    const on = k === wi;
+                    const label = shortVariantLabel(x.name, viewDraft.name);
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => pickVariant(k)}
+                        title={x.name}
+                        className={`px-3 py-1.5 rounded-lg border text-[12px] flex items-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${on ? 'bg-bg-3 text-text-primary border-accent/60 font-semibold' : 'bg-bg-1 text-text-secondary border-border hover:bg-bg-2 hover:text-text-primary'}`}
+                      >
+                        {x.favorite && <span className="text-accent text-[10px]">★</span>}
+                        <span className="max-w-[210px] truncate">{label}</span>
+                        <span className="text-[10px] font-mono text-text-tertiary tabular-nums">{(x.exercises || []).length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Variant Editor Card */}
+            {!w ? (
+              <div className="rounded-[14px] bg-bg-1 border border-border p-8 text-center">
+                <p className="text-text-tertiary text-sm">This program has no workouts yet.</p>
+                <Btn onClick={addVariant} className="mt-3">+ Add workout</Btn>
+              </div>
+            ) : (
+              <div className="rounded-[14px] bg-bg-1 border border-border overflow-hidden">
+                {/* Variant Toolbar */}
+                <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-wrap">
+                  <div className="flex-1 min-w-[220px]">
+                    <input
+                      type="text"
+                      value={w.name}
+                      onChange={(e) => setW((x) => ({ ...x, name: e.target.value }))}
+                      aria-label="Workout name"
+                      className="text-[15px] font-bold bg-transparent hover:bg-bg-2 focus:bg-bg-0 rounded-lg px-2 py-1 -ml-2 w-full max-w-[480px] outline-none focus:ring-1 focus:ring-accent/60 transition-colors"
+                    />
+                    {w.variationOf && (
+                      <p className="mt-0.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>
+                        Variation of {w.variationOf}{w.variationChanges ? ` · ${w.variationChanges}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    <Btn
+                      onClick={() => setW((x) => ({ ...x, favorite: !x.favorite }))}
+                      className={w.favorite ? 'border-accent/50 text-accent' : ''}
+                    >
+                      {w.favorite ? '★ Favourite' : '☆ Favourite'}
+                    </Btn>
+                    <Btn onClick={() => { setWs((a) => move(a, wi, -1)); setWi(Math.max(0, wi - 1)); setExpandedIdx(null); }} disabled={wi === 0} title="Move variant earlier">←</Btn>
+                    <Btn onClick={() => { setWs((a) => move(a, wi, 1)); setWi(Math.min(ws.length - 1, wi + 1)); setExpandedIdx(null); }} disabled={wi === ws.length - 1} title="Move variant later">→</Btn>
+                    <Btn onClick={() => { setWs((a) => [...a.slice(0, wi + 1), { ...clone(w), name: `${w.name} (copy)`, favorite: false }, ...a.slice(wi + 1)]); setWi(wi + 1); setExpandedIdx(null); }}>Duplicate</Btn>
+                    <ConfirmBtn label="Delete" confirm="Confirm" onConfirm={() => { setWs((a) => a.filter((_, k) => k !== wi)); setWi(Math.max(0, wi - 1)); setExpandedIdx(null); }} />
+                  </div>
+                </div>
+
+                {/* Column Header Bar */}
+                <div className="px-4 py-2 bg-bg-0/40 border-b border-border/70 flex items-center gap-2 text-[10px] font-mono tracking-[.12em] text-text-tertiary uppercase">
+                  <span className="w-6 text-center">#</span>
+                  <span className="flex-1 min-w-0">Exercise</span>
+                  <span className="w-12 text-right">Sets</span>
+                  <span className="w-16 text-center">Reps</span>
+                  <span className="w-[62px] text-right">Rest</span>
+                  <span className="w-[122px]" />
+                </div>
+
+                {/* Exercise Rows */}
+                <div className="divide-y divide-border/60">
+                  {exList.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm text-text-tertiary">
+                      No exercises in this variant yet.
+                    </div>
+                  ) : exList.map((e, i) => {
+                    const kind = kindOf(e);
+                    const cardio = kind === 'cardio';
+                    const n = Math.max(1, Math.min(12, Number(e.sets) || 1));
+                    const fails = e.failureIndices || [];
+                    const open = expandedAll || expandedIdx === i;
+                    const toggleOpen = () => {
+                      if (expandedAll) { setExpandedAll(false); setExpandedIdx(i); }
+                      else setExpandedIdx(expandedIdx === i ? null : i);
+                    };
+                    const partner = e.supersetWith || supersetPartnerMap.get(e.name);
+                    const isSuperset = !cardio && !!partner;
+                    const partnerIdx = e.supersetWith ? exList.findIndex((x) => x.name === e.supersetWith) : -1;
+
+                    const kindLabel = kind === 'drops' ? `DROP ×${e.numDrops || 1}`
+                      : kind === 'bfr' ? `BFR ${e.bfrSeconds || 45}s`
+                        : kind === 'interval' ? 'INTERVAL'
+                          : kind === 'timed' ? `TIMED ${e.timedSec || 60}s`
+                            : kind === 'cardio' ? 'CARDIO' : null;
+                    const failLabel = ['normal', 'drops'].includes(kind) && fails.length > 0
+                      ? (fails.length >= n ? 'FAIL ALL' : `FAIL ${fails.map((f) => f + 1).join(',')}`)
+                      : null;
+                    const autoLabel = autoCapable(e) && e.autoWeight !== undefined
+                      ? (e.autoWeight ? 'AUTO ON' : 'AUTO OFF')
+                      : null;
+
+                    return (
+                      <div key={i} style={isSuperset ? { boxShadow: 'inset 2px 0 0 var(--g-ss, #4f8fe0)' } : undefined}>
+                        {/* Main single-line row */}
+                        <div className="group px-4 py-2 flex items-center gap-2 hover:bg-bg-2/40 transition-colors">
+                          <span className="w-6 text-center text-[11px] font-mono text-text-tertiary tabular-nums shrink-0">{i + 1}</span>
+
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <input
+                              ref={(el) => { nameRefs.current[i] = el; }}
+                              type="text"
+                              list="desk-names"
+                              value={e.name}
+                              placeholder="Exercise name"
+                              onChange={(ev) => setEx(i, { name: ev.target.value })}
+                              className={`flex-1 min-w-[200px] text-[14px] font-medium text-text-primary ${inlineField} -ml-2`}
+                            />
+                            <div className="shrink-0 flex items-center gap-1">
+                              {kindLabel && <Chip onClick={toggleOpen} title="Exercise mode">{kindLabel}</Chip>}
+                              {e.supersetWith && (
+                                <Chip tone="ss" onClick={toggleOpen} title={`Superset with ${e.supersetWith}`}>
+                                  {partnerIdx >= 0 ? `SS · #${partnerIdx + 1}` : 'SS'}
+                                </Chip>
+                              )}
+                              {failLabel && <Chip tone="accent" onClick={toggleOpen} title="Sets to failure">{failLabel}</Chip>}
+                              {autoLabel && <Chip onClick={toggleOpen} title="Auto weight override">{autoLabel}</Chip>}
+                              {e.isVariable && ['normal', 'drops'].includes(kind) && <Chip onClick={toggleOpen} title="Custom weight/reps per set">PER-SET</Chip>}
+                            </div>
+                          </div>
+
+                          <div className="w-12 shrink-0 flex justify-end">
+                            {cardio ? (
+                              <span className="text-text-tertiary font-mono text-[13px] pr-2">1</span>
+                            ) : (
+                              <input
+                                type="number"
+                                min={1}
+                                max={12}
+                                value={e.sets ?? ''}
+                                onFocus={(ev) => ev.target.select()}
+                                onChange={(ev) => {
+                                  const v = ev.target.value === '' ? undefined : Number(ev.target.value);
+                                  setEx(i, { sets: v ?? 1, failureIndices: fails.filter((f) => f < (v ?? 1)) });
+                                }}
+                                aria-label={`Sets for ${e.name || 'exercise'}`}
+                                className={`w-12 text-right text-[13px] font-mono tabular-nums ${inlineField}`}
+                              />
+                            )}
+                          </div>
+
+                          <div className="w-16 shrink-0 flex items-center justify-center">
+                            {cardio ? (
+                              <span className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={Math.round((e.targetDurationSec || 0) / 60)}
+                                  onFocus={(ev) => ev.target.select()}
+                                  onChange={(ev) => setEx(i, { targetDurationSec: (ev.target.value === '' ? 0 : Number(ev.target.value)) * 60 })}
+                                  className={`w-11 text-right text-[13px] font-mono tabular-nums ${inlineField}`}
+                                />
+                                <span className="text-text-tertiary text-[11px] font-mono">m</span>
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={e.repRange || ''}
+                                placeholder="8-12"
+                                onChange={(ev) => setEx(i, { repRange: ev.target.value })}
+                                aria-label={`Reps for ${e.name || 'exercise'}`}
+                                className={`w-16 text-center text-[13px] font-mono tabular-nums ${inlineField}`}
+                              />
+                            )}
+                          </div>
+
+                          <div className="w-[62px] shrink-0 flex items-center justify-end gap-0.5">
+                            {cardio ? null : (
+                              <>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={15}
+                                  value={e.restSeconds ?? ''}
+                                  onFocus={(ev) => ev.target.select()}
+                                  onChange={(ev) => setEx(i, { restSeconds: ev.target.value === '' ? undefined : Number(ev.target.value) })}
+                                  aria-label={`Rest seconds for ${e.name || 'exercise'}`}
+                                  className={`w-[48px] text-right text-[13px] font-mono tabular-nums ${inlineField}`}
+                                />
+                                <span className="text-text-tertiary text-[11px] font-mono">s</span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="w-[122px] shrink-0 flex items-center justify-end gap-0.5">
+                            <button
+                              type="button"
+                              onClick={toggleOpen}
+                              aria-expanded={open}
+                              aria-label="Tune exercise"
+                              className={`px-2 py-1 rounded-md text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-colors ${open ? 'bg-bg-3 text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-2'}`}
+                            >
+                              <span>Tune</span>
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+                                className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M4 6l4 4 4-4" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveEx(i, -1)}
+                              disabled={i === 0}
+                              title="Move up"
+                              className="w-6 h-7 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-3 opacity-45 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer disabled:opacity-15 disabled:pointer-events-none text-xs"
+                            >↑</button>
+                            <button
+                              type="button"
+                              onClick={() => moveEx(i, 1)}
+                              disabled={i === exList.length - 1}
+                              title="Move down"
+                              className="w-6 h-7 rounded-md flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-3 opacity-45 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer disabled:opacity-15 disabled:pointer-events-none text-xs"
+                            >↓</button>
+                            <button
+                              type="button"
+                              onClick={() => removeEx(i)}
+                              title="Remove"
+                              className="w-6 h-7 rounded-md flex items-center justify-center text-text-tertiary hover:text-error hover:bg-error/10 opacity-45 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer text-xs"
+                            >✕</button>
+                          </div>
+                        </div>
+
+                        {/* Expandable Tuning Tray */}
+                        {open && (
+                          <div className="bg-bg-0/65 border-t border-border/50 px-6 py-4 flex flex-col gap-4">
+                            {/* Row 1: Type + kind-specific params */}
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary">Type</span>
+                                <div className="inline-flex flex-wrap gap-1 p-1 rounded-lg bg-bg-1 border border-border">
+                                  {KINDS.map(([k, l]) => {
+                                    const active = kind === k;
+                                    return (
+                                      <button
+                                        key={k}
+                                        type="button"
+                                        onClick={() => setEx(i, (x) => withKind(x, k))}
+                                        className={`px-2.5 py-1 rounded-md text-[12px] cursor-pointer transition-colors ${active ? 'bg-bg-3 text-text-primary border border-border-strong font-semibold' : 'text-text-secondary hover:text-text-primary border border-transparent'}`}
+                                      >
+                                        {l}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 flex-wrap text-[12px] text-text-secondary">
+                                {kind === 'drops' && (
+                                  <label className="flex items-center gap-2">Drops per set <NumIn value={e.numDrops} min={1} max={4} onChange={(v) => setEx(i, { numDrops: v ?? 1 })} className="w-14" /></label>
+                                )}
+                                {kind === 'bfr' && (
+                                  <label className="flex items-center gap-2">Cuff time <NumIn value={e.bfrSeconds} min={10} step={5} onChange={(v) => setEx(i, { bfrSeconds: v })} className="w-16" /> s</label>
+                                )}
+                                {kind === 'interval' && (
+                                  <>
+                                    <label className="flex items-center gap-2">Work <NumIn value={e.intervalWork} min={5} step={5} onChange={(v) => setEx(i, { intervalWork: v })} className="w-16" /> s</label>
+                                    <label className="flex items-center gap-2">Rest <NumIn value={e.intervalRest} min={0} step={5} onChange={(v) => setEx(i, { intervalRest: v })} className="w-16" /> s</label>
+                                    <label className="flex items-center gap-2">Total <NumIn value={e.intervalTotal} min={30} step={30} onChange={(v) => setEx(i, { intervalTotal: v })} className="w-20" /> s</label>
+                                  </>
+                                )}
+                                {kind === 'timed' && (
+                                  <label className="flex items-center gap-2">Each set <NumIn value={e.timedSec} min={10} step={5} onChange={(v) => setEx(i, { timedSec: v })} className="w-16" /> s</label>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Row 2: Failure sets | Superset partner | Auto weight */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-3 border-t border-border/40">
+                              {['normal', 'drops'].includes(kind) ? (
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary">Failure sets</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEx(i, { failureIndices: fails.length >= n ? [] : Array.from({ length: n }, (_, k) => k) })}
+                                      className="text-[10px] font-mono text-text-tertiary hover:text-text-primary cursor-pointer"
+                                    >
+                                      {fails.length >= n ? 'None' : 'All'}
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {Array.from({ length: n }, (_, k) => {
+                                      const on = fails.includes(k);
+                                      return (
+                                        <button
+                                          key={k}
+                                          type="button"
+                                          onClick={() => setEx(i, { failureIndices: on ? fails.filter((f) => f !== k) : [...fails, k].sort((a, b) => a - b) })}
+                                          className={`px-2 h-7 rounded-md text-[11px] font-mono cursor-pointer transition-colors ${on ? 'bg-accent font-bold' : 'bg-bg-2 text-text-secondary hover:bg-bg-3'}`}
+                                          style={on ? { color: 'var(--color-on-accent)' } : undefined}
+                                        >
+                                          S{k + 1}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : <div />}
+
+                              {!cardio ? (
+                                <div>
+                                  <div className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary mb-2">Superset partner</div>
+                                  <Sel value={e.supersetWith || ''} onChange={(ev) => setEx(i, { supersetWith: ev.target.value || null })} className="w-full text-[13px]">
+                                    <option value="">None</option>
+                                    {exNames.filter((x) => x !== e.name).map((x) => <option key={x} value={x}>{x}</option>)}
+                                  </Sel>
+                                </div>
+                              ) : <div />}
+
+                              {autoCapable(e) ? (
+                                <div>
+                                  <div className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary mb-2">Auto weight</div>
+                                  <div className="inline-flex gap-1 p-1 rounded-lg bg-bg-1 border border-border">
+                                    {[
+                                      ['', `Default (${agg.autoFailure ? 'on' : 'off'})`],
+                                      ['on', 'On'],
+                                      ['off', 'Off'],
+                                    ].map(([val, lbl]) => {
+                                      const cur = e.autoWeight === undefined ? '' : e.autoWeight ? 'on' : 'off';
+                                      const on = cur === val;
+                                      return (
+                                        <button
+                                          key={val || 'def'}
+                                          type="button"
+                                          onClick={() => setEx(i, (x) => { const y = { ...x }; if (val === '') delete y.autoWeight; else y.autoWeight = val === 'on'; return y; })}
+                                          className={`px-2.5 py-1 rounded-md text-[12px] cursor-pointer transition-colors ${on ? 'bg-bg-3 text-text-primary font-semibold border border-border-strong' : 'text-text-secondary hover:text-text-primary border border-transparent'}`}
+                                        >
+                                          {lbl}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : <div />}
+                            </div>
+
+                            {/* Row 3: Custom per-set weight / reps */}
+                            {['normal', 'drops'].includes(kind) && (
+                              <div className="pt-3 border-t border-border/40 flex flex-col gap-3">
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={!!e.isVariable}
+                                  onClick={() => setEx(i, (x) => ({
+                                    ...x,
+                                    isVariable: !x.isVariable,
+                                    variableSets: !x.isVariable ? Array.from({ length: n }, (_, k) => x.variableSets?.[k] || { weight: '', repRange: x.repRange }) : undefined,
+                                  }))}
+                                  className="self-start flex items-center gap-2.5 cursor-pointer"
+                                >
+                                  <span className="w-9 h-5 rounded-full relative transition-colors shrink-0" style={{ background: e.isVariable ? 'var(--color-accent)' : 'var(--color-bg-3)' }}>
+                                    <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: e.isVariable ? 18 : 2 }} />
+                                  </span>
+                                  <span className="text-[12px] text-text-secondary">Custom weight / reps per set</span>
+                                </button>
+
+                                {e.isVariable && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {Array.from({ length: n }, (_, k) => {
+                                      const vs = e.variableSets?.[k] || {};
+                                      const setVs = (patch) => setEx(i, (x) => {
+                                        const a = Array.from({ length: n }, (_, j) => ({ ...(x.variableSets?.[j] || { weight: '', repRange: x.repRange }) }));
+                                        a[k] = { ...a[k], ...patch };
+                                        return { ...x, variableSets: a };
+                                      });
+                                      return (
+                                        <span key={k} className="flex items-center gap-1.5 bg-bg-1 border border-border rounded-lg px-2.5 py-1.5 text-[12px]">
+                                          <span className="text-text-tertiary font-mono text-[10px]">S{k + 1}</span>
+                                          <NumIn value={vs.weight === '' ? undefined : Number(vs.weight)} step={0.5} min={0} onChange={(v) => setVs({ weight: v == null ? '' : String(v) })} className="w-16 py-0.5 text-[12px]" />
+                                          <span className="text-text-tertiary text-[11px] font-mono">kg</span>
+                                          <TextIn value={vs.repRange || ''} onChange={(ev) => setVs({ repRange: ev.target.value })} className="w-16 py-0.5 text-center text-[12px]" />
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Card Footer */}
+                <div className="px-4 py-2.5 border-t border-border/60 flex items-center justify-between">
+                  <Btn onClick={() => { focusNewRef.current = true; setW((x) => ({ ...x, exercises: [...(x.exercises || []), newExercise()] })); }}>+ Add exercise</Btn>
+                  {exList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setExpandedAll((v) => !v); setExpandedIdx(null); }}
+                      className="text-[11px] font-mono text-text-tertiary hover:text-text-primary cursor-pointer"
+                    >
+                      {expandedAll ? 'Collapse all' : 'Expand all'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setDraft(clone(savedDraft))} label="Save program" idle="Program saved" autoHide shortcut />
     </div>
   );
 }

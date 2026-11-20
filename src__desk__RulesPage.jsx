@@ -8,6 +8,7 @@ import { aggressionOf } from '../lib/levelup';
 import { DEFAULT_RULES, autoCapable, incrementFor, parseRange, replay } from '../lib/autofail';
 import { isMarker } from '../lib/history';
 import * as api from '../lib/api';
+import { SIDEBAR_W } from './ui';
 
 const MONO = 'var(--font-mono)';
 const fmt = (n) => (n == null || n === '' ? '' : String(Math.round(n * 100) / 100));
@@ -266,7 +267,7 @@ export default function RulesPage() {
 
       {/* Save bar */}
       <div className="fixed bottom-0 right-0 z-20 border-t border-border bg-bg-1/95 backdrop-blur px-8 py-3 flex items-center gap-3"
-        style={{ left: 220, paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+        style={{ left: SIDEBAR_W, paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
         <span className={`flex-1 ${dirty ? 'text-text-primary' : 'text-text-tertiary'}`} style={{ font: `500 12px ${MONO}` }}>
           {dirty ? 'Unsaved rule changes' : 'Rules saved · they apply from the next workout you start'}
         </span>
