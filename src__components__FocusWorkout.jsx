@@ -606,7 +606,7 @@ function TimedBlock({ set, onPatch, onDone, big = false }) {
 }
 
 // ── Interval phase block — same stamps + beeps as IntervalTimerBar ───
-function IntervalBlock({ set, onStamp, onDone }) {
+function IntervalBlock({ set, onStamp, onDone, onStepWeight, onKeypad }) {
   const work = set.intervalWork || 30, rest = set.intervalRest || 30, total = set.intervalTotal || 180;
   const load = num(set.weight) > 0 ? `${fmtW(set.weight)} KG` : 'BODYWEIGHT';
   const cycle = work + rest;
@@ -648,7 +648,17 @@ function IntervalBlock({ set, onStamp, onDone }) {
       <div className="g-tab" style={{ font: `500 clamp(16px, 10cqh, 30px) ${MONO}`, marginTop: 4 }}>
         {mmss(running ? phaseRemaining + 0.999 : set.completed ? 0 : total)}
       </div>
-      <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', opacity: 0.75, marginTop: 4 }}>{load}</div>
+      {/* Load is editable until the block starts: − / + step it, the number opens the keypad. */}
+      {onStepWeight && !active && !set.completed ? (
+        <div className="flex items-center justify-center gap-2" style={{ marginTop: 6 }}>
+          <button onClick={() => onStepWeight(-2.5)} aria-label="Less weight" className="w-9 h-8 rounded-[10px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 18px ${MONO}` }}>−</button>
+          <button onClick={onKeypad} aria-label="Type weight" className="px-2 h-8 rounded-[10px] underline decoration-dotted underline-offset-4"
+            style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em' }}>{load}</button>
+          <button onClick={() => onStepWeight(2.5)} aria-label="More weight" className="w-9 h-8 rounded-[10px] bg-bg-3 text-text-primary active:scale-95 transition-transform" style={{ font: `500 18px ${MONO}` }}>+</button>
+        </div>
+      ) : (
+        <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', opacity: 0.75, marginTop: 4 }}>{load}</div>
+      )}
       </div>
       <div className="h-1.5 rounded-[3px] overflow-hidden flex-shrink-0" style={{ background: 'rgba(0,0,0,.18)', marginTop: 'clamp(6px, 5cqh, 14px)' }}>
         <div className="h-full" style={{ background: 'currentColor', width: `${set.completed ? 100 : running ? Math.min(100, (elapsed / total) * 100) : 0}%`, transition: 'width .25s linear' }} />
@@ -2032,7 +2042,9 @@ export default function FocusWorkout({
                 <div className={dense ? '' : 'flex-1 min-h-0'} style={dense ? undefined : { containerType: 'size' }}>
                   <IntervalBlock key={`${ei}-${fi}`} set={fs}
                     onStamp={(p) => patchSet(ei, fi, p)}
-                    onDone={() => complete(ei, fi)} />
+                    onDone={() => complete(ei, fi)}
+                    onStepWeight={(d) => step(ei, fi, 'weight', d)}
+                    onKeypad={() => setKpad('')} />
                 </div>
               </>
             )}

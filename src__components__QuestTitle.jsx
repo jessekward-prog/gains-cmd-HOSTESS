@@ -14,6 +14,7 @@ import { buildBlocks } from '../lib/focus';
 import { lvTitle, tierOf } from '../lib/quest';
 import BossPanel from './BossPanel';
 import TypewriterName from './TypewriterName';
+import Ticker from './Ticker';
 import { usePageH, stageScale } from '../lib/fit';
 import { aggressionOf } from '../lib/levelup';
 import { autoCapable, autoOn, setAutoWeight } from '../lib/autofail';
@@ -254,6 +255,7 @@ export default function QuestTitle({ onNavigate }) {
     const sets = exs.reduce((a, e) => a + (Number(e.sets) || 0), 0);
     const name = alias || w.name;
     const autoN = exs.filter((e) => autoOn(e, agg)).length, autoOf = exs.filter(autoCapable).length;
+    const info = `${alias ? `${w.name} · ` : ''}${buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters${sets ? ` · ${sets} sets` : ''}${autoN ? ` · AUTO ${autoN}/${autoOf}` : ''} · ${exs.map((e) => e.name).join(' · ')}`;
     return (
       <div key={`${keyPrefix}${pg.id}-${i}`} className="flex items-stretch gap-2">
         <button onClick={() => setPick({ programId: pg.id, index: i })} className="flex-1 min-w-0 flex items-center gap-2 px-4 py-3.5 rounded-[18px] text-left"
@@ -261,9 +263,10 @@ export default function QuestTitle({ onNavigate }) {
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: on ? 'var(--color-accent)' : '#333' }} />
           <span className="flex-1 min-w-0">
             <span className="block truncate" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{name}</span>
-            <span className="block mt-0.5 truncate text-text-secondary" style={{ font: `400 11px ${MONO}` }}>
-              {nextUp && <span className="text-accent">UP NEXT · </span>}
-              {alias ? `${w.name} · ` : ''}{buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters{sets ? ` · ${sets} sets` : ''}{autoN ? ` · AUTO ${autoN}/${autoOf}` : ''} · {exs.map((e) => e.name).join(' · ')}
+            {/* The picked row scrolls its whole line like a ticker tape; the rest truncate. */}
+            <span className={`mt-0.5 text-text-secondary ${on ? 'flex min-w-0' : 'block truncate'}`} style={{ font: `400 11px ${MONO}` }}>
+              {nextUp && <span className="text-accent flex-shrink-0 whitespace-pre">UP NEXT · </span>}
+              {on ? <Ticker>{info}</Ticker> : info}
             </span>
           </span>
         </button>
