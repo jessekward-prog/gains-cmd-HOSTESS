@@ -767,16 +767,7 @@ export default function DeskPrograms() {
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-3 border-t border-border/40">
                               {['normal', 'drops'].includes(kind) ? (
                                 <div>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary">Failure sets</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEx(i, { failureIndices: fails.length >= n ? [] : Array.from({ length: n }, (_, k) => k) })}
-                                      className="text-[10px] font-mono text-text-tertiary hover:text-text-primary cursor-pointer"
-                                    >
-                                      {fails.length >= n ? 'None' : 'All'}
-                                    </button>
-                                  </div>
+                                  <div className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary mb-2">Failure sets</div>
                                   <div className="flex flex-wrap gap-1">
                                     {Array.from({ length: n }, (_, k) => {
                                       const on = fails.includes(k);
@@ -792,6 +783,14 @@ export default function DeskPrograms() {
                                         </button>
                                       );
                                     })}
+                                    <button
+                                      type="button"
+                                      onClick={() => setEx(i, { failureIndices: fails.length >= n ? [] : Array.from({ length: n }, (_, k) => k) })}
+                                      className={`px-2.5 h-7 rounded-md text-[11px] font-mono cursor-pointer transition-colors ${fails.length >= n ? 'bg-accent font-bold' : 'bg-bg-2 text-text-secondary hover:bg-bg-3'}`}
+                                      style={fails.length >= n ? { color: 'var(--color-on-accent)' } : undefined}
+                                    >
+                                      Fail all
+                                    </button>
                                   </div>
                                 </div>
                               ) : <div />}
@@ -883,8 +882,30 @@ export default function DeskPrograms() {
                 </div>
 
                 {/* Card Footer */}
-                <div className="px-4 py-2.5 border-t border-border/60 flex items-center justify-between">
-                  <Btn onClick={() => { focusNewRef.current = true; setW((x) => ({ ...x, exercises: [...(x.exercises || []), newExercise()] })); }}>+ Add exercise</Btn>
+                <div className="px-4 py-2.5 border-t border-border/60 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Btn onClick={() => { focusNewRef.current = true; setW((x) => ({ ...x, exercises: [...(x.exercises || []), newExercise()] })); }}>+ Add exercise</Btn>
+                    {exList.some((e) => ['normal', 'drops'].includes(kindOf(e))) && (() => {
+                      const eligible = exList.filter((e) => ['normal', 'drops'].includes(kindOf(e)));
+                      const allFail = eligible.every((e) => (e.failureIndices || []).length >= Math.max(1, Math.min(12, Number(e.sets) || 1)));
+                      return (
+                        <Btn
+                          onClick={() => setW((x) => ({
+                            ...x,
+                            exercises: (x.exercises || []).map((e) => {
+                              if (!['normal', 'drops'].includes(kindOf(e))) return e;
+                              const nSets = Math.max(1, Math.min(12, Number(e.sets) || 1));
+                              return { ...e, failureIndices: allFail ? [] : Array.from({ length: nSets }, (_, k) => k) };
+                            }),
+                          }))}
+                          className={allFail ? 'border-accent/50 text-accent' : ''}
+                          title={allFail ? 'Clear failure sets on all exercises' : 'Set every set to failure on all exercises'}
+                        >
+                          {allFail ? '✓ Fail all' : 'Fail all'}
+                        </Btn>
+                      );
+                    })()}
+                  </div>
                   {exList.length > 0 && (
                     <button
                       type="button"
