@@ -9,6 +9,7 @@ import BattleGround from '../quest/ground/BattleGround';
 import { getGround } from '../quest/ground/registry';
 import { requestGround, peekGround, keyOf } from '../quest/ground/cache';
 import { hexToRGB } from '../quest/ground/blit';
+import { MINI_CARD_W } from '../lib/fit';
 
 const MONO = "'DM Mono', var(--font-mono), monospace";
 // With no skin picked the stage runs on BASE, which IS what it drew before: the
@@ -173,7 +174,7 @@ export function stageArt({ theme = 'fantasy', hero, pet: petKey, tint = 'amber',
 }
 
 export default function QuestStage({ phase, start = 0, aura = null, monster, hit, area = 0, heroName = 'Warlord', petKey = null, lvl, xp, tint = 'amber', scanlines = true, msg = '', title, card, theme = 'fantasy',
-  fx = {}, charge = null, react = null, lastStand = false, dozing = false, dayK = 0, combo = 0, rest = null, gauntlet = null, gauntletEx = false, chase = null, taunt = null }) {
+  fx = {}, charge = null, react = null, lastStand = false, dozing = false, dayK = 0, combo = 0, rest = null, gauntlet = null, gauntletEx = false, chase = null, taunt = null, scale = 1 }) {
   const frame = useFrame();
   const t = start ? Math.max(0, (Date.now() - start) / 1000) : 9;
   const [wf, setWf] = useState(0);
@@ -413,12 +414,25 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
   ));
   const hpCol = K.hp === 'classic' ? (hpFrac > 0.5 ? '#22c55e' : hpFrac > 0.2 ? '#f59e0b' : '#ef4444') : K.hp;
 
+  // On a short screen the whole stage scales down as one piece (lib/fit
+  // stageScale), so the controls under it stay on screen. Inside, nothing
+  // changes: the scene is still laid out 340 tall, just wider by 1/k so it still
+  // fills the width once scaled. The wrapper is always there, so a change of
+  // scale never remounts the scene.
+  const k = Math.min(1, Math.max(0.5, Number(scale) || 1));
+  // Its text panels shrink by √k rather than k, so they stay readable while the
+  // scene gets small. Each grows back from the corner it's pinned to; the
+  // message box only gets bigger type (its box keeps its height, so it doesn't
+  // ride up over the hero).
+  const tk = 1 / Math.sqrt(k);
+  const grow = (origin) => (k < 1 ? { transform: `scale(${tk})`, transformOrigin: origin } : null);
   return (
     // z-index 2 keeps the stage above the page's own layers.
     // The stage stays 340 under a bezel too (the handoff shrank it to 316 to
     // keep the outer box the same): at 316 the message box rides up over the
     // hero on the title screen, and a skin is not supposed to move the scene.
-    <div className="relative flex-shrink-0 overflow-hidden" style={{ height: 340, background: ST.bg, borderRadius: ST.rad, border: ST.border, fontFamily: MONO, color: ST.txt, zIndex: 2 }}>
+    <div className="relative flex-shrink-0" style={{ height: 340 * k, zIndex: 2 }}>
+    <div className="absolute left-0 top-0 overflow-hidden" style={{ width: `${100 / k}%`, height: 340, transform: k < 1 ? `scale(${k})` : undefined, transformOrigin: '0 0', background: ST.bg, borderRadius: ST.rad, border: ST.border, fontFamily: MONO, color: ST.txt }}>
       {/* zIndex 0 makes this a stacking context permanently (today it only is one
           while the shake transform is set), so nothing inside it — the canvas
           included — can ever paint above a later sibling. No visual change. */}
@@ -451,15 +465,18 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
       {ST.vig && <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 60%, transparent 45%, ${ST.vig} 100%)` }} />}
 
       {(phase === 'walk' || phase === 'title') && (
-        <div className="absolute z-[5]" style={{ top: 14, left: 14, font: `500 10px ${MONO}`, letterSpacing: '.14em', ...K.chip }}>
+        <div className="absolute z-[5]" style={{ top: 14, left: 14, font: `500 10px ${MONO}`, letterSpacing: '.14em', ...K.chip, ...grow('0 0') }}>
           AREA {Math.min(area, LANDS.length - 1) + 1} · {land.name.toUpperCase()}
         </div>
       )}
       {phase === 'title' && title && (
-        <div className="absolute z-[5] text-center pointer-events-none" style={{ top: 56, left: 0, width: '52%' }}>
-          <div style={{ fontFamily: K.title.font, fontSize: K.title.size, fontWeight: K.title.weight, fontStyle: K.title.italic ? 'italic' : 'normal', letterSpacing: K.title.track, lineHeight: 0.95, color: K.title.color, textShadow: K.title.shadow,
+        // The left half, but never under the hero card (MINI_CARD_W, 14 px in
+        // from the right) on a narrow stage. The words shrink to the width left
+        // rather than run under it: ~3.4em is the widest skin's "QUEST".
+        <div className="absolute z-[5] text-center pointer-events-none" style={{ top: 56, left: 0, width: `min(52%, calc(100% - ${MINI_CARD_W} - 22px))`, containerType: 'inline-size' }}>
+          <div style={{ fontFamily: K.title.font, fontSize: `min(${K.title.size}px, 29cqw)`, fontWeight: K.title.weight, fontStyle: K.title.italic ? 'italic' : 'normal', letterSpacing: K.title.track, lineHeight: 0.95, color: K.title.color, textShadow: K.title.shadow,
             ...(K.title.clip ? { backgroundImage: K.title.clip, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,.5))' } : {}) }}>{K.title.words[0]}<br />{K.title.words[1]}</div>
-          <div className="inline-block" style={{ marginTop: 10, font: `500 10px ${MONO}`, letterSpacing: '.14em', ...K.chip, color: questSkin ? K.lvCol : title.color }}>{title.line}</div>
+          <div className="inline-block max-w-full" style={{ marginTop: 10, font: `500 10px ${MONO}`, letterSpacing: '.14em', textWrap: 'balance', ...K.chip, color: questSkin ? K.lvCol : title.color }}>{title.line}</div>
         </div>
       )}
       {/* The card draws its own dithered art on a clock of its own — the glyph
@@ -477,7 +494,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
 
       {isBattle && monster && (
         <>
-          <div className="absolute" style={{ top: 14, left: 14, width: 172, padding: '10px 12px', ...box, opacity: ent, zIndex: isBoss ? 3 : undefined }}>
+          <div className="absolute" style={{ top: 14, left: 14, width: 172, padding: '10px 12px', ...box, opacity: ent, zIndex: isBoss ? 3 : undefined, ...grow('0 0') }}>
             <div className="flex justify-between items-baseline gap-1.5">
               <Ticker retype style={nameStyle}>{isBoss ? monster.name : titleCase(monster.species)}</Ticker>
               <span className="flex-shrink-0" style={lvStyle}>Lv{monster.lv}</span>
@@ -650,7 +667,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
             <div className="absolute pointer-events-none" style={{ right: 14, bottom: 160, ...K.chip, padding: '3px 8px', color: '#fbbf24', font: `700 10px ${MONO}`, letterSpacing: '.14em' }}>COMBO ×{combo}</div>
           )}
 
-          <div className="absolute" style={{ right: 14, bottom: 82, width: 150, padding: '10px 12px', ...box }}>
+          <div className="absolute" style={{ right: 14, bottom: 82, width: 150, padding: '10px 12px', ...box, ...grow('100% 100%') }}>
             <div className="flex justify-between items-baseline">
               <span style={nameStyle}>{heroName}</span>
               <span style={lvStyle}>Lv{lvl}</span>
@@ -695,12 +712,13 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
         </div>
       )}
 
-      <div className="absolute z-10 flex gap-1.5 items-start" style={{ left: 12, right: 12, bottom: 12, minHeight: 52, padding: '10px 14px', font: `500 13px/1.45 ${MONO}`, ...K.msg }}>
+      <div className="absolute z-10 flex gap-1.5 items-start" style={{ left: 12, right: 12, bottom: 12, minHeight: 52, padding: '10px 14px', font: `500 ${+(13 * tk).toFixed(2)}px/1.45 ${MONO}`, ...K.msg }}>
         <span className="flex-shrink-0" style={{ color: K.pre[1], opacity: K.pre[2] }}>{K.pre[0]}</span>
         <span className="flex-1 min-w-0" style={{ textWrap: 'pretty' }}><Typed text={msg} cursorCol={K.pre[1]} /></span>
       </div>
 
       {scanlines && ST.scan > 0 && <div className="absolute inset-0 z-30 pointer-events-none" style={{ background: `repeating-linear-gradient(0deg, rgba(0,0,0,${ST.scan}) 0px, rgba(0,0,0,${ST.scan}) 1px, transparent 1px, transparent 3px)` }} />}
+    </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import useQuestArt from '../hooks/useQuestArt';
 import DitherCard, { effCard } from './DitherCard';
 import QuestVault from './QuestVault';
 import Ticker from './Ticker';
+import { MINI_CARD_W } from '../lib/fit';
 import { CARDS, RAR, PAL } from '../lib/dither';
 import { useToast } from '../context/ToastContext';
 import {
@@ -40,8 +41,9 @@ export function MiniHeroCard({ onOpen }) {
   const bc = borderCss(equippedBorder(prof, prof.lvl)[0], frame);
   const pad = Math.max(1, Math.round(bc[1] * 0.6));
   return (
+    // Width-led (not top + bottom) so a narrow stage gets a smaller card, not a squashed one.
     <button onClick={onOpen} aria-label="Open hero card" className="absolute block z-[6]"
-      style={{ right: 14, top: 14, bottom: 100, aspectRatio: '5 / 7', padding: pad, borderRadius: 12 + pad, background: bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
+      style={{ right: 14, top: 14, width: MINI_CARD_W, aspectRatio: '5 / 7', padding: pad, borderRadius: 12 + pad, background: bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
       <div className="relative h-full overflow-hidden text-left" style={{ borderRadius: 12, background: '#0b0b0b' }}>
         {card ? <DitherCard card={card} img={art[feat.id]?.img} /> : (
           <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px', padding: '16px 14px 60px', font: `400 10px ${MONO}`, color: '#999' }}>Pick a card in your vault</div>

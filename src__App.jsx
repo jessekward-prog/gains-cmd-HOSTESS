@@ -19,6 +19,7 @@ import PinGate from './components/PinGate';
 import WaveBackground from './components/WaveBackground';
 import { useTheme } from './context/ThemeContext';
 import { workoutLayout } from './lib/focus';
+import { observePage } from './lib/fit';
 import { moodState } from './lib/mood';
 import { stageArt } from './components/QuestStage';
 import { warmQuestSprites } from './hooks/useQuestSprites';
@@ -85,6 +86,8 @@ function AppShell() {
   // of wherever the last page was scrolled to.
   const scrollRef = useRef(null);
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
+  // Screens that must fit in one view (the quest stage) size themselves to this.
+  useEffect(() => observePage(scrollRef.current), []);
 
   return (
     <div className="min-h-dvh">
@@ -100,7 +103,8 @@ function AppShell() {
         <AppHeader />
 
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-          <div className="max-w-2xl mx-auto h-full">
+          {/* A quest battle can go two columns on a wide screen; it keeps itself to max-w-2xl otherwise (FocusWorkout). */}
+          <div className={`${tab === 'workout' && activeWorkout?.quest ? 'max-w-4xl' : 'max-w-2xl'} mx-auto h-full`}>
           {/* No AnimatePresence: mode="wait" holds the next tab until the old
               page reports its exit finished, and rapid tab changes (or a page
               swapping its root mid-exit) could leave that report missing — the

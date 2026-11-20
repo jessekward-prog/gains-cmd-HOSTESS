@@ -22,6 +22,7 @@ import { workoutLayout as readLayout } from '../lib/focus';
 import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
 import { moodState } from '../lib/mood';
 import { GREETING_KEY, readGreeting, defaultGreeting } from '../lib/greeting';
+import { useScreenFit, MIN_W } from '../lib/fit';
 
 const MONO = 'var(--font-mono)';
 // Settings preview chips: each shows that mood for 2.8s.
@@ -180,6 +181,7 @@ export default function SettingsPage() {
             <Segmented value={textSizeId} onChange={setTextSize} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
             <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>UI SIZE</div>
             <Segmented value={uiScale} onChange={setScale} options={[[14, 'Small'], [16, 'Medium'], [18, 'Large']]} />
+            <ScreenFit />
           </Collapse>
         </Section>
 
@@ -340,6 +342,22 @@ function QuestAnimations() {
 
 // A row that shows its current value and opens to its options.
 // One line showing the current choice; the options open in a popup so the page never grows.
+// What the app measured this screen as, and what it did about it (lib/fit).
+function ScreenFit() {
+  const { deviceW, deviceH, scale } = useScreenFit();
+  if (!deviceW) return null;
+  return (
+    <>
+      <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>SCREEN</div>
+      <p className="text-text-tertiary" style={{ font: `400 11px/1.5 ${MONO}` }}>
+        {deviceW} × {deviceH} · {scale < 1
+          ? `narrower than ${MIN_W}, so the app is drawn at ${MIN_W} wide and shown at ${Math.round(scale * 100)}%`
+          : 'the app is drawn at full size'}. It refits itself when you rotate, fold or unfold.
+      </p>
+    </>
+  );
+}
+
 function Collapse({ label, summary, children, onOpen }) {
   const [open, setOpen] = useState(false);
   return (

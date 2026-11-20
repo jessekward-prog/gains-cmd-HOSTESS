@@ -157,3 +157,46 @@ export const EACH = 'each';
 
 export const supersetRestMode = (exercises, indices) =>
   indices.map((i) => exercises[i]?.supersetRest).find(Boolean) || SHARED;
+
+/**
+ * Pair exercises[index] with `partnerName`. If no exercise by that name is in
+ * the workout, a new one is inserted right after it with the same set count,
+ * rep target and rest, so a superset can be built with an exercise that wasn't
+ * planned. Any previous partner that pointed back here is unlinked first.
+ * Returns a new array; the input is not mutated.
+ */
+export function linkSuperset(exercises = [], index, partnerName) {
+  const name = (partnerName || '').trim();
+  const src = exercises[index];
+  if (!src || !name || norm(name) === norm(src.name)) return exercises;
+  const next = [...exercises];
+
+  // "Change pair": drop the old partner's link back to this exercise.
+  if (src.supersetWith && norm(src.supersetWith) !== norm(name)) {
+    next.forEach((ex, i) => {
+      if (i !== index && norm(ex?.supersetWith) === norm(src.name) && norm(ex?.name) === norm(src.supersetWith)) {
+        next[i] = { ...ex, supersetWith: undefined };
+      }
+    });
+  }
+
+  let partnerIdx = next.findIndex((ex, i) => i !== index && norm(ex?.name) === norm(name));
+  if (partnerIdx < 0) {
+    // Copy the set amounts (normal sets only — drops/BFR etc. are per-exercise).
+    const setCount = (src.sets || []).filter((s) => s.type !== 'drop').length || src.targetSets || 3;
+    next.splice(index + 1, 0, {
+      name,
+      targetSets: setCount,
+      ...(src.targetReps != null ? { targetReps: src.targetReps } : {}),
+      ...(src.repRange != null ? { repRange: src.repRange } : {}),
+      ...(src.restSeconds != null ? { restSeconds: src.restSeconds } : {}),
+      sets: Array.from({ length: setCount }, () => ({ reps: '', weight: '', completed: false })),
+      notes: [],
+    });
+    partnerIdx = index + 1;
+  }
+
+  next[index] = { ...next[index], supersetWith: next[partnerIdx].name };
+  next[partnerIdx] = { ...next[partnerIdx], supersetWith: next[index].name };
+  return next;
+}

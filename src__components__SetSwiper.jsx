@@ -50,16 +50,26 @@ function RestDock({ timer }) {
   );
 }
 
-function Stepper({ label, ps, value, placeholder, inputMode, onType, onDec, onInc, chip, done }) {
+function Stepper({ label, ps, value, placeholder, inputMode, onType, onDec, onInc, modes, done }) {
   const isText = isNaN(Number(value)) && value !== '';
   return (
     <div className="bg-bg-1 border border-border rounded-2xl px-2.5 pt-2.5 pb-2.5 flex flex-col items-center gap-1.5 min-w-0">
-      <div className="flex items-center gap-2 text-[10px] font-mono text-text-tertiary uppercase tracking-wider">
-        <span className={ps}>{label}</span>
-        {chip && (
-          <button onClick={chip.onClick} className="px-2 py-0.5 rounded-full bg-bg-3 text-text-secondary text-[9px] tracking-wider active:scale-95 transition-transform">{chip.label}</button>
-        )}
-      </div>
+      {modes ? (
+        // Mode switch: the active mode is solid accent, the other is dimmed accent.
+        <div role="radiogroup" aria-label={label} className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider">
+          {modes.map((m) => (
+            <button key={m.label} role="radio" aria-checked={m.on} onClick={m.on ? undefined : m.onClick}
+              className={`px-2 py-0.5 rounded-full tracking-wider transition-all active:scale-95 ${m.on ? 'bg-accent font-bold' : 'text-accent opacity-55 border border-accent/50'}`}
+              style={m.on ? { color: 'var(--color-on-accent, #fff)' } : undefined}>
+              <span className={ps}>{m.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-[10px] font-mono text-text-tertiary uppercase tracking-wider">
+          <span className={ps}>{label}</span>
+        </div>
+      )}
       {isText ? (
         <div className="h-14 flex items-center font-display font-extrabold text-3xl text-warning">{value}</div>
       ) : (
@@ -158,7 +168,10 @@ export default function SetSwiper({ exercise, exerciseIndex, onUpdate, onDelete,
                   <Stepper label="REPS" ps="ps-o" value={s.reps} placeholder={String(lowRep(exercise.repRange || exercise.targetReps))} inputMode="numeric" done={s.completed}
                     onType={(v) => patch({ reps: v })}
                     onDec={() => stepReps(-1)} onInc={() => stepReps(1)}
-                    chip={{ label: isFailure ? 'TO REPS' : 'TO FAIL', onClick: () => patch({ reps: isFailure ? '' : 'failure' }) }} />
+                    modes={[
+                      { label: 'REPS', on: !isFailure, onClick: () => patch({ reps: '' }) },
+                      { label: 'FAIL', on: isFailure, onClick: () => patch({ reps: 'failure' }) },
+                    ]} />
                 </div>
                 <motion.button whileTap={{ scale: 0.98 }} onClick={complete}
                   className={`mt-2.5 w-full h-14 rounded-2xl font-display font-bold text-base transition-colors ${

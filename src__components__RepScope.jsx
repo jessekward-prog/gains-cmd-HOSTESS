@@ -172,7 +172,7 @@ export default function RepScope() {
       : phase === 'counting' ? [String(ctx.liveCount), 'COUNTING', '#ff2222']
         : [String(ctx.liveCount), 'SET DONE', 'var(--color-accent)'];
     return (
-      <div className="absolute z-40 pointer-events-none flex items-end gap-3" style={{ left: 12, right: 12, bottom: 64, height: 46 }}>
+      <div className="absolute z-40 pointer-events-none flex items-end gap-3" style={{ left: 12, right: 12, bottom: 'calc(64px * var(--stage-k, 1))', height: 46 }}>
         <button type="button" onClick={() => (phase === 'done' ? ctx.startSet() : ctx.cancelSet())}
           aria-label={phase === 'done' ? 'Start another set' : 'Stop counting this set'}
           className="pointer-events-auto flex-shrink-0 flex items-baseline gap-1.5 font-mono text-left">
@@ -186,7 +186,7 @@ export default function RepScope() {
   }
 
   return (
-    <div className="absolute z-40 pointer-events-none flex items-center gap-2" style={{ left: 12, right: 12, bottom: 64, height: 18 }}>
+    <div className="absolute z-40 pointer-events-none flex items-center gap-2" style={{ left: 12, right: 12, bottom: 'calc(64px * var(--stage-k, 1))', height: 18 }}>
       {linked ? (
         // Same thumb-sized hit area as the reconnect dot, drawn as a dot.
         <button type="button" onClick={() => ctx.setAlpha(!recording)} aria-pressed={recording}

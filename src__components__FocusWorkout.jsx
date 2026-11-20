@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo, useRef, useEffect, useCallback, useId } from 'react';
+import { Fragment, useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useGlobalTimer } from '../context/TimerContext';
@@ -7,6 +7,7 @@ import { useRepSensorCtx } from '../context/RepSensorContext';
 import useBackHandler from '../hooks/useBackHandler';
 import CardioCard from './CardioCard';
 import Modal from './Modal';
+import { stageScale, STAGE_H, STAGE_EASY_K, STAGE_MIN_K, TWO_COL_W } from '../lib/fit';
 import RestPickerModal from './RestPickerModal';
 import SpecialSetModal from './SpecialSetModal';
 import SubstituteModal from './SubstituteModal';
@@ -957,6 +958,40 @@ export default function FocusWorkout({
   // no exercise can come out a different size from the one before it.
   const cardH = dense ? 0 : CARD_H[quest ? 'quest' : 'focus'];
   const cardMin = dense ? 0 : CARD_MIN[quest ? 'quest' : 'focus'];
+  // A quest battle fits the screen without scrolling where it can (lib/fit).
+  // Room is the page less the header, the finish row and the gaps; the stage
+  // and the card at its floor have to fit in what's left. On a wide screen
+  // (a fold's inner screen, a tablet, 4:3) that's too short for them stacked,
+  // they go side by side. Otherwise the stage scales down, to a readable floor,
+  // before the page has to scroll. Measured from layout sizes only, so a
+  // toast or sheet poking out of the page can't squeeze anything.
+  const fitBody = useRef(null), fitStage = useRef(null), fitFoot = useRef(null);
+  const [qFit, setQFit] = useState({ k: 1, two: false });
+  const stageK = quest ? qFit.k : 1;
+  const twoCol = quest && !dense && qFit.two;
+  useLayoutEffect(() => {
+    const body = fitBody.current;
+    if (!quest || dense || !body || typeof ResizeObserver === 'undefined') return undefined;
+    const fit = () => {
+      const st = fitStage.current, ft = fitFoot.current, head = body.firstElementChild;
+      if (!st || !ft || !head || !body.clientHeight) return;
+      const cs = getComputedStyle(st.parentElement);
+      const gap = parseFloat(cs.rowGap) || 0;
+      // A skin's bezel around the stage doesn't scale with it.
+      const bezel = st.offsetHeight - (st.firstElementChild?.offsetHeight ?? st.offsetHeight);
+      const fixed = head.offsetHeight + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) + ft.offsetHeight + bezel;
+      const page = body.clientHeight, wide = (body.parentElement?.clientWidth || 0) >= TWO_COL_W;
+      const stacked = page - fixed - 2 * gap - cardMin; // the stage's room in one column
+      // Side by side only once stacking would shrink the stage noticeably.
+      const two = wide && stacked < STAGE_H * STAGE_EASY_K;
+      const k = stageScale(two ? page - fixed - gap : stacked, STAGE_MIN_K);
+      setQFit((cur) => (cur.k === k && cur.two === two ? cur : { k, two }));
+    };
+    const ro = new ResizeObserver(fit);
+    [body, body.parentElement, body.firstElementChild, fitFoot.current].forEach((el) => el && ro.observe(el));
+    fit();
+    return () => ro.disconnect();
+  }, [quest, dense, cardMin]);
   const { prof, updProf } = useQuest();
   const { questSkin: qSkin } = useTheme();
   const heroN = prof.hero || 'Warlord';
@@ -1638,7 +1673,7 @@ export default function FocusWorkout({
   ) : null;
 
   const body = (
-    <div className={`g-root flex flex-col ${dense ? 'min-h-full' : 'h-full'}`}>
+    <div ref={fitBody} className={`g-root flex flex-col w-full mx-auto ${twoCol ? 'max-w-4xl' : 'max-w-2xl'} ${dense ? 'min-h-full' : 'h-full'}`}>
       {/* Header */}
       <div className="px-5 pt-2 pb-2.5">
         <div className="flex justify-between items-end gap-3">
@@ -1663,10 +1698,11 @@ export default function FocusWorkout({
         </div>
       </div>
 
-      <div className={`flex-1 px-3.5 pb-2 flex flex-col gap-2${dense ? '' : ' min-h-0'}`}>
+      <div className={`flex-1 px-3.5 pb-2 gap-2 ${twoCol ? 'grid content-start' : 'flex flex-col'}${dense ? '' : ' min-h-0'}`}
+        style={twoCol ? { gridTemplateColumns: 'minmax(0, 1.08fr) minmax(0, 1fr)' } : undefined}>
         {quest && (
-          <div className={`relative flex-shrink-0 overflow-hidden rounded-[28px]${qSkin?.st.bezel ? ' q-bezel' : ''}`}>
-          <QuestStage phase={qPhase} start={qStart} monster={mon} hit={qHit} area={Math.min(ci, lands.length - 1)} theme={prof.theme}
+          <div ref={fitStage} className={`relative flex-shrink-0 overflow-hidden rounded-[28px]${qSkin?.st.bezel ? ' q-bezel' : ''}`} style={{ '--stage-k': stageK, ...(twoCol ? { alignSelf: 'start' } : {}) }}>
+          <QuestStage phase={qPhase} scale={stageK} start={qStart} monster={mon} hit={qHit} area={Math.min(ci, lands.length - 1)} theme={prof.theme}
             heroName={prof.hero} petKey={prof.pet} lvl={qShown.lvl} xp={qShown.xp}
             tint={readTint()} scanlines={readScanlines()} msg={qMsg}
             aura={(qPhase === 'battle' || qPhase === 'encounter') ? (isBossBlock ? '#fbbf24' : evKey ? EVENTS[evKey].color : lastStand ? '#ef4444' : null) : null}
@@ -2065,7 +2101,7 @@ export default function FocusWorkout({
             <button onClick={onCancel} aria-label="Cancel workout" className="w-[50px] h-[50px] rounded-[18px] text-error" style={{ font: `600 15px ${MONO}`, background: 'color-mix(in srgb, var(--color-error) 14%, var(--color-bg-1))' }}>✕</button>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-2 h-[56px] flex-shrink-0">
+          <div ref={fitFoot} className="grid grid-cols-3 gap-2 h-[56px] flex-shrink-0" style={twoCol ? { gridColumn: '1 / -1' } : undefined}>
             <button onClick={() => upNext >= 0 && openBlock(upNext)} className="min-w-0 rounded-[18px] bg-bg-1 px-3 flex flex-col justify-center text-left">
               <span className="g-label ps-t" style={{ fontSize: quest ? 9 : 8 }}>{upNext >= 0 ? 'UP NEXT' : 'AFTER THIS'}</span>
               <span className="mt-0.5 flex min-w-0" style={{ fontSize: 13, fontWeight: 700 }}>

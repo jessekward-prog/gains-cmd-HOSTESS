@@ -1,3 +1,5 @@
+// First: fits the viewport to this screen before anything is laid out.
+import './lib/fit';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

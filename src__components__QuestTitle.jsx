@@ -14,6 +14,7 @@ import { buildBlocks } from '../lib/focus';
 import { lvTitle, tierOf } from '../lib/quest';
 import BossPanel from './BossPanel';
 import TypewriterName from './TypewriterName';
+import { usePageH, stageScale } from '../lib/fit';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
@@ -99,6 +100,23 @@ export default function QuestTitle({ onNavigate }) {
       document.removeEventListener('scroll', fit, true);
     };
   }, []);
+
+  // Begin quest is pinned to the bottom of the screen, so the stage gives up
+  // height on a short screen to keep some of the list in view between them.
+  const pageH = usePageH();
+  const headRef = useRef(null);
+  const [chrome, setChrome] = useState(null); // header + pinned bar, px
+  useEffect(() => {
+    const els = [headRef.current, barRef.current].filter(Boolean);
+    if (typeof ResizeObserver === 'undefined' || !els.length) return undefined;
+    const read = () => setChrome(els.reduce((a, el) => a + el.offsetHeight, 0));
+    const ro = new ResizeObserver(read);
+    els.forEach((el) => ro.observe(el));
+    read();
+    return () => ro.disconnect();
+  }, []);
+  const LIST_PEEK = 112; // the top of the boss panel or the first favourite
+  const stageK = stageScale(pageH && chrome != null ? pageH - chrome - LIST_PEEK : null);
 
   // Favourites: pinned in order, with an optional quest-only alias and an
   // optional group id `g`. Drop any whose program or workout has since been
@@ -259,19 +277,19 @@ export default function QuestTitle({ onNavigate }) {
     <AsciiReveal className="g-root flex flex-col min-h-full" preset="terminal" origin="top-left" duration="cinematic"
       media='[data-ascii="media"]' loading={settling} shimmer={false}
       style={settling ? { visibility: 'hidden' } : undefined}>
-      <div className="px-5 pt-3 pb-3">
+      <div ref={headRef} className="px-5 pt-3 pb-3">
         <div className="g-label truncate ps-x">{program ? `${program.name} · QUEST` : 'QUEST'}</div>
         <div className="mt-1 truncate q-head" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>
           {/* Retypes with the cursor whenever you pick a different quest (and now and then on its own). */}
           <TypewriterName text={headerAlias || headerName || 'Gains Quest'} />
         </div>
       </div>
-      <div className="flex-1 px-3.5 pb-6 flex flex-col gap-2.5">
+      <div className="flex-1 px-3.5 pb-2 flex flex-col gap-2.5">
         <div className={questSkin?.st.bezel ? 'q-bezel flex-shrink-0' : 'contents'}>
         <QuestStage phase="title" area={0} heroName={prof.hero} petKey={prof.pet} lvl={prof.lvl} xp={prof.xp} theme={prof.theme}
           tint={readTint()} scanlines={readScanlines()} msg={prof.theme === 'cyberpunk' ? 'The neon night hums. Choose your quest, HERO.' : 'A new day dawns over the meadow. Choose your quest, HERO.'}
           title={{ line: `LV ${prof.lvl} · ${lvTitle(prof.lvl).toUpperCase()}`, color: tier[2] }}
-          card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} />
+          card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} scale={stageK} />
         </div>
 
         <BossPanel />
@@ -312,7 +330,7 @@ export default function QuestTitle({ onNavigate }) {
             const total = groups.reduce((n, pg) => n + parse(pg).length, 0);
             const sel = ws[index]?.[0];
             return (
-              <button onClick={() => setAllOpen((o) => !o)} className="mt-4 w-full flex items-center gap-2 px-4 py-3.5 rounded-2xl bg-bg-2 text-left" style={{ marginBottom: allOpen ? 0 : 32 }}>
+              <button onClick={() => setAllOpen((o) => !o)} className="mt-4 w-full flex items-center gap-2 px-4 py-3.5 rounded-2xl bg-bg-2 text-left">
                 <span className="flex-1 min-w-0">
                   <span className="block" style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>All workouts</span>
                   {sel && !isFav(program.name, sel.name) && (
@@ -349,17 +367,19 @@ export default function QuestTitle({ onNavigate }) {
               </div>
             );
           })}
-          {/* Reverse vignette: the list fades to the card colour behind the buttons,
-              and each button casts a dark halo, so nothing busy shows through.
-              The wave is masked off here (barRef), so the labels can't decode
-              on it: they fade in with the bar instead. */}
-          <div ref={barRef} data-ascii="fade" className="flex gap-2 sticky bottom-0 -mx-5 px-5 pb-3" style={{ marginTop: -28, paddingTop: 44, borderRadius: '0 0 28px 28px', background: 'linear-gradient(to bottom, transparent, var(--color-bg-1) 38%)' }}>
-            <button data-ascii="skip" onClick={() => setCardOpen(true)} className="flex-1 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}, 0 0 28px 10px var(--color-bg-1)` }}>Hero card</button>
-            <button data-ascii="skip" onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] h-[62px] rounded-[20px] bg-accent q-cta font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)', boxShadow: '0 0 28px 10px var(--color-bg-1)' }}>
-              {!program ? 'Make a program' : isOngoing ? 'Continue quest' : activeWorkout ? 'Start new quest' : 'Begin quest'}
-            </button>
-          </div>
         </div>
+      </div>
+      {/* Pinned to the bottom of the screen, just above the nav, however long the
+          lists get: Begin quest never needs a scroll to reach. The page fades
+          out under it into the nav's own colour, so nothing busy shows behind
+          the buttons. The wave is masked off here (barRef), so the labels can't
+          decode on it: they fade in with the bar instead. */}
+      <div ref={barRef} data-ascii="fade" className="sticky bottom-0 z-10 flex gap-2 px-3.5 pb-3"
+        style={{ paddingTop: 22, marginTop: -6, background: 'linear-gradient(to bottom, transparent, var(--q-nav-bg, var(--color-bg-0)) 20px)' }}>
+        <button data-ascii="skip" onClick={() => setCardOpen(true)} className="flex-1 min-w-0 h-[62px] rounded-[20px] bg-bg-2 font-bold text-[15px]" style={{ boxShadow: `inset 0 0 0 1.5px ${tier[2]}` }}>Hero card</button>
+        <button data-ascii="skip" onClick={program ? begin : () => onNavigate('programs')} className="flex-[2] min-w-0 h-[62px] rounded-[20px] bg-accent q-cta font-extrabold text-[17px]" style={{ color: 'var(--color-on-accent)' }}>
+          {!program ? 'Make a program' : isOngoing ? 'Continue quest' : activeWorkout ? 'Start new quest' : 'Begin quest'}
+        </button>
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
 

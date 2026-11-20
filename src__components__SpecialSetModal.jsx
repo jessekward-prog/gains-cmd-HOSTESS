@@ -667,32 +667,48 @@ export default function SpecialSetModal({ open, onClose, exercise, allExercises,
                 <button onClick={() => setMode(null)} className="text-[11px] font-mono text-text-tertiary text-left">← back</button>
                 <div className="text-xs font-mono text-text-secondary">Pair {exercise?.name} with:</div>
 
-                <div className="flex flex-col gap-2 max-h-52 overflow-y-auto">
-                  {otherExercises.map((ex, i) => (
-                    <motion.button key={i} whileTap={{ scale: 0.97 }}
-                      onClick={() => { setSupersetTarget(ex.name); setCustomName(''); }}
-                      className={`w-full px-3 py-2.5 rounded-xl border text-left text-sm font-display transition-all ${
-                        supersetTarget === ex.name ? 'border-accent bg-accent-muted text-accent' : 'border-border text-text-primary bg-bg-2'}`}>
-                      {ex.name}
-                    </motion.button>
-                  ))}
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSupersetTarget('__custom__')}
-                    className={`w-full px-3 py-2.5 rounded-xl border text-left text-sm font-mono transition-all ${
-                      supersetTarget === '__custom__' ? 'border-accent bg-accent-muted text-accent' : 'border-border text-text-secondary bg-bg-2'}`}>
-                    + Enter a different exercise...
-                  </motion.button>
+                {/* Existing exercise in this workout, or a brand-new one added with the same sets */}
+                <div className="grid grid-cols-2 gap-1 p-1 bg-bg-2 border border-border rounded-xl">
+                  {[['existing', 'Existing exercise'], ['new', 'New exercise']].map(([k, label]) => {
+                    const on = k === 'new' ? supersetTarget === '__custom__' : supersetTarget !== '__custom__';
+                    return (
+                      <button key={k}
+                        onClick={() => setSupersetTarget(k === 'new' ? '__custom__' : '')}
+                        className={`py-2 rounded-lg text-xs font-mono transition-colors ${on ? 'bg-accent-muted text-accent' : 'text-text-secondary'}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {supersetTarget === '__custom__' && (
-                  <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
-                    placeholder="Exercise name" list={EXERCISE_LIST_ID} autoFocus
-                    className="w-full bg-bg-0 border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent/50" />
+                {supersetTarget === '__custom__' ? (
+                  <div className="flex flex-col gap-2">
+                    <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
+                      placeholder="Exercise name" list={EXERCISE_LIST_ID} autoFocus
+                      className="w-full bg-bg-0 border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent/50" />
+                    <div className="text-[11px] text-text-tertiary font-mono">
+                      Added after {exercise?.name} with {(exercise?.sets || []).filter(s => s.type !== 'drop').length || 3} sets.
+                    </div>
+                  </div>
+                ) : otherExercises.length ? (
+                  <div className="flex flex-col gap-2 max-h-52 overflow-y-auto">
+                    {otherExercises.map((ex, i) => (
+                      <motion.button key={i} whileTap={{ scale: 0.97 }}
+                        onClick={() => { setSupersetTarget(ex.name); setCustomName(''); }}
+                        className={`w-full px-3 py-2.5 rounded-xl border text-left text-sm font-display transition-all ${
+                          supersetTarget === ex.name ? 'border-accent bg-accent-muted text-accent' : 'border-border text-text-primary bg-bg-2'}`}>
+                        {ex.name}
+                      </motion.button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-text-tertiary font-mono">No other exercises yet — choose New exercise.</div>
                 )}
 
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleApplySuperset}
                   disabled={!supersetTarget || (supersetTarget === '__custom__' && !customName.trim())}
                   className="w-full py-3 bg-accent text-white rounded-xl font-mono font-semibold text-sm disabled:opacity-40">
-                  Link Superset
+                  {supersetTarget === '__custom__' ? 'Add & Link Superset' : 'Link Superset'}
                 </motion.button>
               </div>
             )}

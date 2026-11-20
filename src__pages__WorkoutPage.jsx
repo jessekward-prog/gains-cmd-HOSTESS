@@ -29,6 +29,7 @@ import { EXERCISE_LIST_ID } from '../components/ExerciseNameOptions';
 import {
   supersetRows, supersetMembersOf, supersetRestMode,
   roundOfSet, roundComplete, SHARED,
+  linkSuperset,
 } from '../lib/supersets';
 
 const CARDIO_FIELDS = [
@@ -473,23 +474,8 @@ export default function WorkoutPage({ onNavigate }) {
   }, [updateActiveWorkout]);
 
   const handleLinkSuperset = useCallback((exerciseIndex, partnerName) => {
-    updateActiveWorkout((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, exercises: [...prev.exercises] };
-      next.exercises[exerciseIndex] = {
-        ...next.exercises[exerciseIndex],
-        supersetWith: partnerName,
-      };
-      // Also link the partner if it exists in the list
-      const partnerIdx = next.exercises.findIndex(e => e.name === partnerName);
-      if (partnerIdx >= 0 && partnerIdx !== exerciseIndex) {
-        next.exercises[partnerIdx] = {
-          ...next.exercises[partnerIdx],
-          supersetWith: next.exercises[exerciseIndex].name,
-        };
-      }
-      return next;
-    });
+    // Links to an existing exercise, or adds a new one with the same set count.
+    updateActiveWorkout((prev) => prev && { ...prev, exercises: linkSuperset(prev.exercises, exerciseIndex, partnerName) });
   }, [updateActiveWorkout]);
 
   const handleUnlinkSuperset = useCallback((exerciseIndex) => {
@@ -715,6 +701,22 @@ export default function WorkoutPage({ onNavigate }) {
     } catch (e) { showToast('Error: ' + e.message, 'error'); }
   }, [programs, reloadPrograms, showToast]);
 
+  // Replace the original workout's exercises in place — same name, same slot
+  // in the program, so it keeps its history and any variations of it.
+  const overwriteWorkout = useCallback(async (vData) => {
+    try {
+      const program = programs.find((p) => p.id === vData.programId) || programs.find((p) => p.name === vData.programName);
+      if (!program) { showToast('Could not find program', 'error'); return; }
+      const workouts = typeof program.workouts === 'string' ? JSON.parse(program.workouts) : program.workouts || [];
+      const idx = workouts.findIndex((w) => w.name === vData.originalWorkoutName);
+      if (idx < 0) { showToast('Could not find workout to overwrite', 'error'); return; }
+      const updated = workouts.map((w, i) => (i === idx ? { ...w, exercises: vData.exercises } : w));
+      await api.updateProgram(program.id, program.name, updated);
+      await reloadPrograms();
+      showToast('Workout updated!', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }, [programs, reloadPrograms, showToast]);
+
   // The Focus finish flow opens before the save so its analysis screen can
   // pace itself to the request; the summary is taken first because
   // finishWorkout clears the active workout.
@@ -747,11 +749,13 @@ export default function WorkoutPage({ onNavigate }) {
     runFinish();
   }, [runFinish]);
 
-  const handleVariationDecision = useCallback(async (saveAsVar) => {
+  // choice: 'variation' | 'overwrite' | 'end'
+  const handleVariationDecision = useCallback(async (choice) => {
     const vData = variationData;
     setVariationData(null);
-    runFinish(saveAsVar && vData ? () => saveVariation(vData) : null);
-  }, [variationData, runFinish, saveVariation]);
+    const save = !vData ? null : choice === 'variation' ? saveVariation : choice === 'overwrite' ? overwriteWorkout : null;
+    runFinish(save ? () => save(vData) : null);
+  }, [variationData, runFinish, saveVariation, overwriteWorkout]);
 
   const handleCancel = useCallback(async () => {
     setShowCancel(false);
@@ -1076,12 +1080,13 @@ export default function WorkoutPage({ onNavigate }) {
         {variationData && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center px-4">
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-bg-1 border border-border rounded-2xl p-5 max-w-sm w-full">
-              <h3 className="font-display font-bold text-lg text-text-primary mb-2">Save as Variation?</h3>
+              <h3 className="font-display font-bold text-lg text-text-primary mb-2">Save Your Changes?</h3>
               <p className="text-sm text-text-secondary mb-1">You modified "{variationData.originalWorkoutName}":</p>
               <p className="text-xs text-accent font-mono mb-4">{variationData.changeDescription}</p>
               <div className="flex flex-col gap-2">
-                <Button variant="primary" onClick={() => handleVariationDecision(true)} className="w-full">Save as Variation</Button>
-                <Button variant="secondary" onClick={() => handleVariationDecision(false)} className="w-full">Just Finish</Button>
+                <Button variant="primary" onClick={() => handleVariationDecision('variation')} className="w-full">Save as Variation</Button>
+                <Button variant="secondary" onClick={() => handleVariationDecision('overwrite')} className="w-full">Overwrite Existing Workout</Button>
+                <Button variant="secondary" onClick={() => handleVariationDecision('end')} className="w-full">Just End</Button>
                 <Button variant="ghost" onClick={() => setVariationData(null)} className="w-full text-text-tertiary">Go Back</Button>
               </div>
             </motion.div>
