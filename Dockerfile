@@ -9,7 +9,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY server.js db.js timer-sound.mp3 sw.js manifest.json ./
+COPY server.js db.js timer-sound.mp3 slow-down.mp3 sw.js manifest.json ./
 COPY icons ./icons
 COPY quest ./quest
 COPY --from=frontend-build /app/dist ./dist

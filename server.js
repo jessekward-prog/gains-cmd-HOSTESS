@@ -181,6 +181,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 // Serve specific root static files (timer sound, sw.js, manifest, icons)
 app.use('/timer-sound.mp3', express.static(path.join(__dirname, 'timer-sound.mp3')));
+app.use('/slow-down.mp3', express.static(path.join(__dirname, 'slow-down.mp3')));
 app.get('/sw.js', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'sw.js'));

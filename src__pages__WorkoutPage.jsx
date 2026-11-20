@@ -609,7 +609,8 @@ export default function WorkoutPage({ onNavigate }) {
       const hasInterval = ex.sets.some(s => s.type === 'interval');
       const hasTimed = ex.sets.some(s => s.type === 'timed');
       const hasVariable = ex.sets.some(s => s.type === 'variable');
-      const failureIndices = ex.sets.map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
+      // Auto weight forced these to failure — that's not an edit to the workout.
+      const failureIndices = ex.autoApplied ? (orig.failureIndices || []) : ex.sets.map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
       const origHadDrops = orig.hasDrops || false;
       const origHadBFR = orig.isBFR || false;
       const origHadInterval = orig.isInterval || false;
@@ -658,7 +659,9 @@ export default function WorkoutPage({ onNavigate }) {
       const bfrSet = (ex.sets || []).find(s => s.type === 'bfr');
       const intervalSet = (ex.sets || []).find(s => s.type === 'interval');
       const varSets = (ex.sets || []).filter(s => s.type === 'variable');
-      const failureIndices = (ex.sets || []).map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
+      const failureIndices = ex.autoApplied
+        ? (activeWorkout.originalExercises?.find((o) => o.name === ex.name)?.failureIndices || [])
+        : (ex.sets || []).map((s, i) => s.reps === 'failure' ? i : -1).filter(i => i >= 0);
       return {
         name: ex.name,
         sets: hasBFR || hasInterval || hasVariableType || timedSet ? (ex.sets || []).filter(s => s.type !== 'drop').length : normalSets.length || ex.sets?.filter?.(s => s.type !== 'drop').length || 4,
@@ -677,6 +680,7 @@ export default function WorkoutPage({ onNavigate }) {
         variableSets: hasVariableType ? varSets.map(s => ({ weight: s.weight, repRange: s.variableRepRange })) : undefined,
         supersetWith: ex.supersetWith || null,
         ...(failureIndices.length > 0 ? { failureIndices } : {}),
+        ...(ex.autoWeight !== undefined ? { autoWeight: ex.autoWeight } : {}),
       };
     }) };
   }, [activeWorkout]);

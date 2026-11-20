@@ -29,7 +29,13 @@ export function parseRange(r) {
   return m && +m[1] <= +m[2] ? [+m[1], +m[2]] : null;
 }
 
-const stepsFor = (by) => Math.min(MAX_STEPS, Math.max(1, Math.round(by / 2.5)));
+/** Can Auto weight run this program exercise? Cardio, timed, interval and BFR sets have no reps to judge. */
+export const autoCapable = (ex) => !!ex && ex.type !== 'cardio' && !ex.isBFR && !ex.isInterval && !ex.isTimed && !!parseRange(ex.repRange);
+
+/** Is it on for this program exercise: its own switch (workout ⋮ → Auto weight), else the Training default. */
+export const autoOn = (ex, agg) => autoCapable(ex) && (ex.autoWeight ?? !!agg?.autoFailure);
+
+const stepsFor =(by) => Math.min(MAX_STEPS, Math.max(1, Math.round(by / 2.5)));
 
 /**
  * Next weight for set `i` (counting working sets only, drops skipped) of `name`.

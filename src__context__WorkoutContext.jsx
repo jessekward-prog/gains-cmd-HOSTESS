@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import * as api from '../lib/api';
 import { localDate as toLocalDate, cleanWeight } from '../lib/history';
 import { aggressionOf } from '../lib/levelup';
-import { autoWeight, incrementFor, parseRange } from '../lib/autofail';
+import { autoWeight, autoOn, incrementFor, parseRange } from '../lib/autofail';
 
 const WorkoutContext = createContext(null);
 const LS_KEY = 'gains_active_workout';
@@ -295,7 +295,7 @@ export function WorkoutProvider({ children }) {
 
         // Auto weight: every working set goes to failure, its weight set from
         // its own last counted reps. A Level Up accepted since then wins.
-        const autoRange = agg.autoFailure && !useBFR && !useInterval && !useTimed && parseRange(ex.repRange);
+        const autoRange = autoOn(ex, agg) && !useBFR && !useInterval && !useTimed && parseRange(ex.repRange);
         if (autoRange) {
           const inc = incrementFor(ex.name, agg);
           let n = 0;
@@ -322,13 +322,13 @@ export function WorkoutProvider({ children }) {
           ...(useTimed ? { isTimed: true, timedSec: sets.find(s => s.type === 'timed')?.timedSec || ex.timedSec || 60 } : {}),
           ...(useVariable ? { isVariable: true, variableSets: sets.filter(s => s.type === 'variable').map(s => ({ weight: s.weight, repRange: s.variableRepRange })) } : {}),
           ...(ex.supersetWith ? { supersetWith: ex.supersetWith } : {}),
-          ...(autoRange ? { failureIndices: sets.flatMap((s, k) => (s.reps === 'failure' ? [k] : [])) }
-            : failureIndices.length > 0 ? { failureIndices } : {}),
+          ...(failureIndices.length > 0 ? { failureIndices } : {}),
+          // autoApplied: the finish diff and variation save leave this exercise's failure sets alone.
+          ...(autoRange ? { autoApplied: true } : {}),
+          ...(ex.autoWeight !== undefined ? { autoWeight: ex.autoWeight } : {}),
         };
       }),
     };
-    // So the end-of-workout "save as variation?" diff doesn't count auto failure sets as a change.
-    if (agg.autoFailure) workout.originalExercises.forEach((o, i) => { o.failureIndices = workout.exercises[i].failureIndices || o.failureIndices; });
 
     setActiveWorkout(workout);
     await api.saveActiveWorkout(workout);

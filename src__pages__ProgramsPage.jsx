@@ -21,6 +21,8 @@ import { estimateMinutes, daysAgo } from '../lib/focus';
 import { readGreeting, defaultGreeting } from '../lib/greeting';
 import WaveBackground from '../components/WaveBackground';
 import useRepStartPrompt from '../components/RepStartPrompt';
+import { aggressionOf } from '../lib/levelup';
+import { autoCapable, autoOn } from '../lib/autofail';
 
 const MONO = 'var(--font-mono)';
 
@@ -770,7 +772,8 @@ function CreateExerciseCard({ exercise, index, allExercises, onChange, onRemove,
    ProgramsPage — main component
    ══════════════════════════════════════════════════════════════════════════ */
 export default function ProgramsPage({ onNavigate }) {
-  const { programs, startWorkout, reloadPrograms, activeWorkout, workoutHistory } = useWorkout();
+  const { programs, startWorkout, reloadPrograms, activeWorkout, workoutHistory, settings } = useWorkout();
+  const agg = aggressionOf(settings);
   const { user } = useAuth();
   const { showToast, showCenterModal } = useToast();
   const { showHeaderMessage } = useHeaderMessage();
@@ -784,6 +787,7 @@ export default function ProgramsPage({ onNavigate }) {
 
   // AI Remix state
   const [remixTarget, setRemixTarget] = useState(null); // { workout, index }
+  const [autoSheet, setAutoSheet] = useState(null); // { workout, index } — per-exercise Auto weight
   const [remixInstruction, setRemixInstruction] = useState('');
   const [remixMode, setRemixMode] = useState('trim'); // 'trim' | 'swap' | 'edit'
   const [remixLoading, setRemixLoading] = useState(false);
@@ -857,6 +861,23 @@ export default function ProgramsPage({ onNavigate }) {
       await api.updateProgram(selectedProgram.id, selectedProgram.name, workouts);
       await reloadPrograms();
       setSelectedProgram(prev => prev ? { ...prev, workouts } : prev);
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    }
+  }, [selectedProgram, reloadPrograms, showToast]);
+
+  // Per-exercise Auto weight, saved on the workout like ★ is. Shown at once, saved behind.
+  const handleSetAutoWeight = useCallback(async (workoutIndex, exIndexes, value) => {
+    if (!selectedProgram) return;
+    const workouts = typeof selectedProgram.workouts === 'string'
+      ? JSON.parse(selectedProgram.workouts) : [...(selectedProgram.workouts || [])];
+    const w = workouts[workoutIndex];
+    workouts[workoutIndex] = { ...w, exercises: (w.exercises || []).map((ex, i) => (exIndexes.includes(i) ? { ...ex, autoWeight: value } : ex)) };
+    setAutoSheet((s) => s && { ...s, workout: workouts[workoutIndex] });
+    setSelectedProgram((prev) => (prev ? { ...prev, workouts } : prev));
+    try {
+      await api.updateProgram(selectedProgram.id, selectedProgram.name, workouts);
+      await reloadPrograms();
     } catch (e) {
       showToast('Error: ' + e.message, 'error');
     }
@@ -1427,6 +1448,43 @@ export default function ProgramsPage({ onNavigate }) {
         </div>
       </Modal>
 
+      {/* ── Auto weight, per exercise (workout ⋮) ───────────────────── */}
+      <Modal open={!!autoSheet} onClose={() => setAutoSheet(null)} title="Auto weight">
+        {autoSheet && (() => {
+          const exs = autoSheet.workout.exercises || [];
+          const capable = exs.flatMap((ex, i) => (autoCapable(ex) ? [i] : []));
+          return (
+            <div className="p-4 flex flex-col gap-3">
+              <p className="text-xs text-text-secondary leading-relaxed">
+                <span className="text-text-primary font-semibold">{autoSheet.workout.name}</span>. Ticked exercises go to failure every set, and each set's weight moves by itself from the reps it hit last time. Untouched ones follow Training (currently {agg.autoFailure ? 'on' : 'off'}).
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" className="flex-1" onClick={() => handleSetAutoWeight(autoSheet.index, capable, true)}>All on</Button>
+                <Button variant="secondary" size="sm" className="flex-1" onClick={() => handleSetAutoWeight(autoSheet.index, capable, false)}>All off</Button>
+              </div>
+              <div className="flex flex-col border border-border rounded-xl overflow-hidden">
+                {exs.map((ex, i) => (autoCapable(ex) ? (
+                  <label key={i} className="flex items-center justify-between gap-3 px-3 py-3 border-b border-border/50 last:border-0 cursor-pointer">
+                    <span className="min-w-0">
+                      <span className="block text-sm text-text-primary truncate">{ex.name}</span>
+                      <span className="block text-[10px] font-mono text-text-muted">{ex.repRange} reps{ex.autoWeight === undefined ? ' · default' : ''}</span>
+                    </span>
+                    <input type="checkbox" checked={autoOn(ex, agg)}
+                      onChange={(e) => handleSetAutoWeight(autoSheet.index, [i], e.target.checked)}
+                      className="w-5 h-5 shrink-0" style={{ accentColor: 'var(--color-accent)' }} />
+                  </label>
+                ) : (
+                  <div key={i} className="px-3 py-3 border-b border-border/50 last:border-0">
+                    <span className="block text-sm text-text-muted truncate">{ex.name}</span>
+                    <span className="block text-[10px] font-mono text-text-muted">{ex.type === 'cardio' ? 'cardio' : 'timed'} · no reps to judge</span>
+                  </div>
+                )))}
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
       {/* ── AI Remix Modal ───────────────────────────────────────────── */}
       <Modal
         open={!!remixTarget}
@@ -1671,6 +1729,7 @@ export default function ProgramsPage({ onNavigate }) {
                   {[
                     { label: '▶  Start Workout', action: () => { setWorkoutMenu(null); handleStartWorkout(workoutMenu.index); }, color: 'text-accent' },
                     { label: `${workoutMenu.workout.favorite ? '★  Remove Favourite' : '☆  Add to Favourites'}`, action: () => { handleToggleFavorite(workoutMenu.index); setWorkoutMenu(null); }, color: workoutMenu.workout.favorite ? 'text-accent' : 'text-text-primary' },
+                    { label: (() => { const c = (workoutMenu.workout.exercises || []).filter(autoCapable); return `⟳  Auto weight · ${c.filter((ex) => autoOn(ex, agg)).length}/${c.length}`; })(), action: () => { setAutoSheet({ workout: workoutMenu.workout, index: workoutMenu.index }); setWorkoutMenu(null); }, color: 'text-text-primary' },
                     { label: '✦  AI Remix', action: () => { setRemixTarget({ workout: workoutMenu.workout, index: workoutMenu.index }); setRemixInstruction(''); setRemixMode('trim'); setRemixResult(null); setWorkoutMenu(null); }, color: 'text-text-primary' },
                     { label: '✎  Rename', action: () => { setRenamingWorkout({ index: workoutMenu.index, value: workoutMenu.workout.name }); setWorkoutMenu(null); }, color: 'text-text-primary' },
                     { label: shareLoading ? '⏳  Generating Code…' : '⇪  Share (get code)', action: () => !shareLoading && handleShareWorkout(workoutMenu.workout), color: 'text-text-primary' },

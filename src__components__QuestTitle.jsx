@@ -15,6 +15,8 @@ import { lvTitle, tierOf } from '../lib/quest';
 import BossPanel from './BossPanel';
 import TypewriterName from './TypewriterName';
 import { usePageH, stageScale } from '../lib/fit';
+import { aggressionOf } from '../lib/levelup';
+import { autoCapable, autoOn } from '../lib/autofail';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
@@ -51,7 +53,8 @@ const clearGroup = (list, gid) => list.map((f) => {
 // starred are pinned at the top with their quest-only alias. Favourites can be
 // grouped: a group is a progression, and the next member is queued for you.
 export default function QuestTitle({ onNavigate }) {
-  const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout } = useWorkout();
+  const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings } = useWorkout();
+  const agg = aggressionOf(settings);
   const { showToast } = useToast();
   const { prof, updProf } = useQuest();
   const { questSkin } = useTheme();
@@ -231,6 +234,7 @@ export default function QuestTitle({ onNavigate }) {
     const exs = w.exercises || [];
     const sets = exs.reduce((a, e) => a + (Number(e.sets) || 0), 0);
     const name = alias || w.name;
+    const autoN = exs.filter((e) => autoOn(e, agg)).length, autoOf = exs.filter(autoCapable).length;
     return (
       <div key={`${keyPrefix}${pg.id}-${i}`} className="flex items-stretch gap-2">
         <button onClick={() => setPick({ programId: pg.id, index: i })} className="flex-1 min-w-0 flex items-center gap-2 px-4 py-3.5 rounded-[18px] text-left"
@@ -240,7 +244,7 @@ export default function QuestTitle({ onNavigate }) {
             <span className="block truncate" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{name}</span>
             <span className="block mt-0.5 truncate text-text-secondary" style={{ font: `400 11px ${MONO}` }}>
               {nextUp && <span className="text-accent">UP NEXT · </span>}
-              {alias ? `${w.name} · ` : ''}{buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters{sets ? ` · ${sets} sets` : ''} · {exs.map((e) => e.name).join(' · ')}
+              {alias ? `${w.name} · ` : ''}{buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters{sets ? ` · ${sets} sets` : ''}{autoN ? ` · AUTO ${autoN}/${autoOf}` : ''} · {exs.map((e) => e.name).join(' · ')}
             </span>
           </span>
         </button>
