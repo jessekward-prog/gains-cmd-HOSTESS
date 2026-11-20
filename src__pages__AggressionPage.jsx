@@ -13,6 +13,7 @@ const INFO = {
   upperIsolatedIncrement: 'Weight increase for isolation upper body moves like curls, lateral raises, flyes, pushdowns.',
   lowerCompoundIncrement: 'Weight increase for big lower body movements like squat, leg press, hip thrust, deadlift.',
   lowerIsolatedIncrement: 'Weight increase for isolation lower body moves like leg curl, leg extension, calf raise.',
+  autoFailure: 'Uses each exercise\'s rep range. 3+ reps over the top: heavier next time, more the further over. Just over: heavier after it happens twice. In range: stays put. Under: lighter. Uses your increments below. Starts from your last weights, so give it a few sessions to settle.',
   coachingTone: 'How the AI coach communicates with you in chat and workout notes. Choose what motivates you best!',
 };
 
@@ -65,6 +66,7 @@ export default function AggressionPage() {
     upperCompoundIncrement: 5, upperIsolatedIncrement: 2.5,
     lowerCompoundIncrement: 5, lowerIsolatedIncrement: 5,
     coachingTone: 'encouraging',
+    autoFailure: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -80,6 +82,7 @@ export default function AggressionPage() {
         lowerCompoundIncrement: a.lowerCompoundIncrement ?? a.lowerIncrement ?? prev.lowerCompoundIncrement,
         lowerIsolatedIncrement: a.lowerIsolatedIncrement ?? a.lowerIncrement ?? prev.lowerIsolatedIncrement,
         coachingTone: a.coachingTone ?? prev.coachingTone,
+        autoFailure: !!a.autoFailure,
       }));
     }
   }, [settings]);
@@ -107,6 +110,22 @@ export default function AggressionPage() {
       </div>
 
       <div className="px-4 flex flex-col gap-3">
+        {/* Auto weight */}
+        <motion.section variants={staggerItem} className="bg-bg-2 border border-border rounded-xl p-3">
+          <label className="flex items-start justify-between gap-3 cursor-pointer">
+            <span>
+              <span className="flex items-center">
+                <span className="font-display font-semibold text-xs text-text-secondary uppercase tracking-wider">Auto Weight · Train to Failure</span>
+                <InfoTip text={INFO.autoFailure} />
+              </span>
+              <span className="block text-[10px] text-text-muted mt-1">Every lifting set goes to failure. Each set's weight moves by itself from the reps it hit last time.</span>
+            </span>
+            <input type="checkbox" checked={aggression.autoFailure}
+              onChange={(e) => setAggression((a) => ({ ...a, autoFailure: e.target.checked }))}
+              className="mt-0.5 w-5 h-5 shrink-0" style={{ accentColor: 'var(--color-accent)' }} />
+          </label>
+        </motion.section>
+
         {/* Progression Speed */}
         <motion.section variants={staggerItem} className="bg-bg-2 border border-border rounded-xl p-3">
           <div className="flex items-center mb-2">

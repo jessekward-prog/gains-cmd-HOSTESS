@@ -1395,6 +1395,7 @@ export default function FocusWorkout({
   const lastLine = kind === 'interval'
     ? `${fs?.intervalWork || 30}s on / ${fs?.intervalRest || 30}s off · ${mmss(fs?.intervalTotal || 180)} total`
     : kind === 'timed' ? `${ex.sets.length} × ${mmss(fs?.timedSec || 60)} · countdown per set, rest between`
+    : fs?.auto ? `Auto ${fs.auto.d > 0 ? 'up' : 'down'} ${fmtW(Math.abs(fs.auto.d))} kg · ${fs.auto.why}`
     : st?.lw != null ? `Last ${fmtW(st.lw)} × ${st.lr}${st.rangeBest != null ? ` · best ${fmtW(st.rangeBest)} × ${st.rangeBestReps}` : ''}` : 'First time — this sets your baseline';
   const finishedBtn = ex.sets[chainEnd].completed;
   const cardName = roundMode ? block.indices.map((i) => exercises[i].name).join(' + ') : ex.name;
@@ -1870,7 +1871,7 @@ export default function FocusWorkout({
                     )
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5 flex-1 min-h-0" style={{ containerType: 'size' }}>
-                      <Stepper label="KG" value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)}
+                      <Stepper label={fs.auto ? `KG ${fs.auto.d > 0 ? '▲' : '▼'}${fmtW(Math.abs(fs.auto.d))}` : 'KG'} value={fmtW(fs.weight)} onDec={() => step(ei, fi, 'weight', -2.5)} onInc={() => step(ei, fi, 'weight', 2.5)}
                         onKeypad={() => setKpad('')} />
                       <Stepper label="REPS" value={shownReps(ex, fs, st)} onDec={() => step(ei, fi, 'reps', -1)} onInc={() => step(ei, fi, 'reps', 1)}
                         live={gLiveHere && gPhase === 'counting'}
