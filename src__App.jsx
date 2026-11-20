@@ -142,6 +142,23 @@ function AppShell() {
   );
 }
 
+// /desk always opens the planner (and remembers that choice); /?phone switches
+// this device back to the phone app. With no choice made, a computer (wide
+// window, mouse or trackpad) gets the planner at the normal address too.
+const DESK_KEY = 'gains-beta-desk';
+function wantsDesk() {
+  const { pathname, search } = window.location;
+  let pref = null;
+  try {
+    if (pathname.startsWith('/desk')) localStorage.setItem(DESK_KEY, 'desk');
+    else if (new URLSearchParams(search).has('phone')) localStorage.setItem(DESK_KEY, 'phone');
+    pref = localStorage.getItem(DESK_KEY);
+  } catch { /* private mode: fall through to the screen check */ }
+  if (pathname.startsWith('/desk')) return true;
+  if (pref === 'phone') return false;
+  return window.innerWidth >= 1100 && window.matchMedia('(pointer: fine)').matches;
+}
+
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { loading: dataLoading, loadAll, activeWorkout } = useWorkout();
@@ -171,7 +188,7 @@ function AppContent() {
   }
 
   // The desktop planner: same account and data, its own big-screen layout.
-  if (window.location.pathname.startsWith('/desk')) return <DeskApp />;
+  if (wantsDesk()) return <DeskApp />;
 
   return (
     <NavigationProvider

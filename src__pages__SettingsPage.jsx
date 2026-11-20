@@ -206,6 +206,24 @@ export default function SettingsPage() {
 
         <LibrarySection />
 
+<<<<<<< hostess
+=======
+        <Section title="Desktop layout">
+          <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
+            A big-screen planner for programs, history, progress, exercises and Auto weight rules. Computers open it automatically; switch here on any device, and back with “Phone layout” in its sidebar.
+          </p>
+          <a href="/desk" className="w-full h-12 rounded-[15px] bg-bg-2 text-text-primary font-bold text-sm flex items-center justify-center">Switch to desktop layout</a>
+        </Section>
+
+        <Section title="Version 1.0">
+          <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
+            Version 1.0 is the old app, without Focus workouts or Quest Mode. Your workouts and programs are shared with it; only this look and its settings are separate.
+          </p>
+          <button onClick={() => { try { localStorage.setItem('gains-cmd-beta', 'off'); } catch { /* private mode */ } window.location.reload(); }}
+            className="w-full h-12 rounded-[15px] bg-bg-2 text-text-primary font-bold text-sm">Switch to version 1.0</button>
+        </Section>
+
+>>>>>>> gains-cmd
         {sensorSupported() && (
           <Section title="Rep sensor">
             <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
