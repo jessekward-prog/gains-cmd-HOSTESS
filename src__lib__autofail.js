@@ -4,7 +4,7 @@
 // Just over → heavier only after it happens N sessions running at that weight.
 // In range → hold. Under → lighter, scaled by the shortfall.
 //
-// Every number in that is a rule the desktop planner (/desk → Rules) can edit,
+// Every number in that is a rule the desktop planner (desktop planner → Rules) can edit,
 // globally and per exercise. They're kept in aggression_settings.autoRules:
 //   { ...global overrides, exercises: { [name]: { range?, step?, ...overrides } } }
 // Anything unset falls back to DEFAULT_RULES, which is the original behaviour.

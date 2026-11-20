@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useHeaderMessage } from '../context/HeaderMessageContext';
 import { pageVariants, staggerItem } from '../lib/variants';
 import Button from '../components/Button';
+import { toggleDeskLayout } from '../lib/fit';
 import * as api from '../lib/api';
 
 const INFO = {
@@ -110,7 +111,7 @@ export default function AggressionPage() {
       <div className="px-4 pt-4 pb-2">
         <h1 className="font-display font-bold text-xl text-text-primary">Training Settings</h1>
         <p className="text-xs text-text-secondary mt-0.5">Configure how aggressively you progress</p>
-        <a href="/desk" className="inline-block mt-2 text-xs text-accent font-mono">Fine-tune Auto weight rules on a computer: /desk ›</a>
+        <button type="button" onClick={() => toggleDeskLayout(true)} className="inline-block mt-2 text-xs text-accent font-mono">Fine-tune Auto weight rules in desktop layout ›</button>
       </div>
 
       <div className="px-4 flex flex-col gap-3">

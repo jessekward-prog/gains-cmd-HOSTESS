@@ -1,6 +1,7 @@
-// The desktop planner, at /desk: same account and data as the phone app, built
+// The desktop planner: same account and data as the phone app, built
 // for a big screen and for planning rather than lifting.
 import { useState } from 'react';
+import { toggleDeskLayout } from '../lib/fit';
 import RulesPage from './RulesPage';
 import DeskPrograms from './Programs';
 import DeskHistory from './History';
@@ -40,8 +41,8 @@ export default function DeskApp() {
           })}
         </nav>
         <div className="mt-auto px-5 pb-6 pt-4">
-          <a href="/?phone" className="text-text-secondary hover:text-text-primary" style={{ font: `500 12px ${MONO}` }}>‹ Phone layout</a>
-          <p className="mt-2 text-text-tertiary" style={{ font: `400 10px/1.5 ${MONO}` }}>For planning. Lift with the phone app. Open /desk to come back here.</p>
+          <button type="button" onClick={() => toggleDeskLayout(false)} className="text-text-secondary hover:text-text-primary cursor-pointer" style={{ font: `500 12px ${MONO}` }}>‹ Phone layout</button>
+          <p className="mt-2 text-text-tertiary" style={{ font: `400 10px/1.5 ${MONO}` }}>For planning. Lift with the phone app. Switch back anytime from Settings.</p>
         </div>
       </aside>
       <main className="min-w-0">

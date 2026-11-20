@@ -295,7 +295,7 @@ export function WorkoutProvider({ children }) {
 
         // Auto weight: every working set goes to failure, its weight set from
         // its own last counted reps. A Level Up accepted since then wins.
-        // Range, step and rules can be set per exercise in the desktop planner (/desk → Rules).
+        // Range, step and rules can be set per exercise in the desktop planner (desktop planner → Rules).
         const cfg = exerciseConfig(ex.name, agg, ex.repRange);
         const autoRange = autoOn(ex, agg) && !useBFR && !useInterval && !useTimed && cfg.range;
         if (autoRange) {

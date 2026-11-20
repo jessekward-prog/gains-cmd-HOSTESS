@@ -114,3 +114,53 @@ export const stageScale = (room, floor = STAGE_EASY_K) => (room == null || !Numb
 // screens, tablets, 4:3): there the two columns fit a short screen without
 // shrinking anything, where one column would have to.
 export const TWO_COL_W = 640;
+
+// Desktop planner threshold: above phone portrait/landscape widths (<=956px)
+// and foldables (<=884px), matching mobile "Desktop site" (~980px), landscape
+// tablets, and desktop/laptop windows.
+export const DESK_W = 980;
+const DESK_KEY = 'gains-beta-desk';
+const deskSubs = new Set();
+const notifyDesk = () => deskSubs.forEach((f) => f());
+
+function readDeskPref() {
+  try {
+    const v = localStorage.getItem(DESK_KEY);
+    return v === 'desk' || v === 'phone' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+const deskMql = typeof window !== 'undefined' && window.matchMedia
+  ? window.matchMedia(`(min-width: ${DESK_W}px)`)
+  : null;
+if (deskMql) {
+  if (deskMql.addEventListener) deskMql.addEventListener('change', notifyDesk);
+  else deskMql.addListener?.(notifyDesk);
+}
+
+export function isDeskViewport() {
+  return deskMql ? deskMql.matches : (typeof window !== 'undefined' && window.innerWidth >= DESK_W);
+}
+
+export function getDeskLayout() {
+  const pref = readDeskPref();
+  if (pref === 'desk') return true;
+  if (pref === 'phone') return false;
+  return isDeskViewport();
+}
+
+export function toggleDeskLayout(wantDesk) {
+  const want = !!wantDesk;
+  try {
+    if (want === isDeskViewport()) localStorage.removeItem(DESK_KEY);
+    else localStorage.setItem(DESK_KEY, want ? 'desk' : 'phone');
+  } catch { /* private mode */ }
+  notifyDesk();
+}
+
+export const useDeskLayout = () => useSyncExternalStore(
+  (f) => { deskSubs.add(f); return () => deskSubs.delete(f); },
+  getDeskLayout,
+);
