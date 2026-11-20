@@ -710,7 +710,7 @@ export default function DeskPrograms() {
                               onClick={() => removeEx(i)}
                               title="Remove"
                               aria-label={`Remove ${e.name || 'exercise'}`}
-                              className="w-6 h-7 rounded-md flex items-center justify-center text-text-tertiary hover:text-error hover:bg-error/10 opacity-45 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer"
+                              className="w-6 h-7 rounded-md flex items-center justify-center text-error/80 hover:text-error hover:bg-error/20 opacity-65 group-hover:opacity-100 group-focus-within:opacity-100 transition-[background-color,color,opacity] cursor-pointer"
                             >
                               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4.5 4.5l.7 8.5a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-8.5" />
