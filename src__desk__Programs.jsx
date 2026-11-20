@@ -70,10 +70,20 @@ function Chip({ children, onClick, tone = 'neutral', title }) {
 }
 
 export default function DeskPrograms() {
-  const { programs, workoutHistory, settings, reloadPrograms } = useWorkout();
+  const { programs, workoutHistory, settings, reloadPrograms, reloadSettings } = useWorkout();
   const { showToast } = useToast();
   const { prof, updProf } = useQuest();
   const agg = aggressionOf(settings);
+  const toggleAutoGlobal = async () => {
+    const raw = settings?.aggressionSettings;
+    const a = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch { return {}; } })() : (raw || {});
+    const next = !agg.autoFailure;
+    try {
+      await api.updateAggression({ ...a, autoFailure: next });
+      await reloadSettings();
+      showToast(next ? 'Auto weight default enabled' : 'Auto weight default disabled', 'success');
+    } catch (e) { showToast('Could not update auto weight: ' + e.message, 'error'); }
+  };
   const [pid, setPid] = useState(programs?.[0]?.id ?? null);
   const program = programs.find((p) => p.id === pid) || null;
   const [draft, setDraft] = useState(null); // { id, name, workouts }
@@ -382,7 +392,14 @@ export default function DeskPrograms() {
                   <span className={dirty ? 'text-accent font-medium' : 'text-text-tertiary'}>{dirty ? 'Unsaved' : 'Saved'}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <Btn
+                  onClick={toggleAutoGlobal}
+                  className={agg.autoFailure ? 'border-accent/50 text-accent' : ''}
+                  title="Global Auto weight default for every workout (saves immediately)"
+                >
+                  {agg.autoFailure ? '✓ Auto default: On' : 'Auto default: Off'}
+                </Btn>
                 <Btn onClick={addVariant}>+ New {hasVars ? 'variant' : 'workout'}</Btn>
                 <ConfirmBtn label="Delete program" confirm="Confirm delete" onConfirm={delProgram} />
               </div>
@@ -902,6 +919,22 @@ export default function DeskPrograms() {
                           title={allFail ? 'Clear failure sets on all exercises' : 'Set every set to failure on all exercises'}
                         >
                           {allFail ? '✓ Fail all' : 'Fail all'}
+                        </Btn>
+                      );
+                    })()}
+                    {exList.some(autoCapable) && (() => {
+                      const eligible = exList.filter(autoCapable);
+                      const allAuto = eligible.every((e) => autoOn(e, agg));
+                      return (
+                        <Btn
+                          onClick={() => setW((x) => ({
+                            ...x,
+                            exercises: (x.exercises || []).map((e) => (autoCapable(e) ? { ...e, autoWeight: !allAuto } : e)),
+                          }))}
+                          className={allAuto ? 'border-accent/50 text-accent' : ''}
+                          title={allAuto ? 'Turn Auto weight off for all exercises in this workout' : 'Turn Auto weight on for all exercises in this workout'}
+                        >
+                          {allAuto ? '✓ Auto all' : 'Auto all'}
                         </Btn>
                       );
                     })()}
