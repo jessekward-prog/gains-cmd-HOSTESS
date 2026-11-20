@@ -1,16 +1,19 @@
 // The desktop planner, at /desk: same account and data as the phone app, built
-// for a big screen and for planning rather than lifting. Rules is the first
-// section; the others are marked as coming.
+// for a big screen and for planning rather than lifting.
 import { useState } from 'react';
 import RulesPage from './RulesPage';
+import DeskPrograms from './Programs';
+import DeskHistory from './History';
+import DeskData from './Data';
+import DeskExercises from './Exercises';
 
 const MONO = 'var(--font-mono)';
 const SECTIONS = [
   ['rules', 'Rules', 'If this, then that'],
-  ['programs', 'Programs', 'Coming next'],
-  ['history', 'History', 'Coming next'],
-  ['data', 'Data', 'Coming next'],
-  ['exercises', 'Exercises', 'Coming next'],
+  ['programs', 'Programs', 'Workouts and exercises'],
+  ['history', 'History', 'Every session, editable'],
+  ['data', 'Data', 'Progress and best sets'],
+  ['exercises', 'Exercises', 'Rename and merge'],
 ];
 
 export default function DeskApp() {
@@ -24,7 +27,7 @@ export default function DeskApp() {
         </div>
         <nav className="flex flex-col gap-1 px-3">
           {SECTIONS.map(([id, label, sub]) => {
-            const live = id === 'rules';
+            const live = true;
             const on = section === id;
             return (
               <button key={id} disabled={!live} onClick={() => setSection(id)}
@@ -43,6 +46,10 @@ export default function DeskApp() {
       </aside>
       <main className="min-w-0">
         {section === 'rules' && <RulesPage />}
+        {section === 'programs' && <DeskPrograms />}
+        {section === 'history' && <DeskHistory />}
+        {section === 'data' && <DeskData />}
+        {section === 'exercises' && <DeskExercises />}
       </main>
     </div>
   );

@@ -33,6 +33,7 @@ export const deleteProgram = (id) => api.del(`/api/programs/${id}`);
 export const getWorkoutHistory = () => api.get('/api/workout-history');
 export const saveWorkout = (data) => api.post('/api/workout', data);
 export const deleteWorkoutHistory = (id) => api.del(`/api/workout-history/${id}`);
+export const updateWorkoutHistory = (id, data) => api.put(`/api/workout-history/${id}`, data);
 export const analyzeWorkout = (data) => api.post('/api/analyze-workout', data);
 
 // Active Workout
