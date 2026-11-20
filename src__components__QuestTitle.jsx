@@ -16,7 +16,8 @@ import BossPanel from './BossPanel';
 import TypewriterName from './TypewriterName';
 import { usePageH, stageScale } from '../lib/fit';
 import { aggressionOf } from '../lib/levelup';
-import { autoCapable, autoOn } from '../lib/autofail';
+import { autoCapable, autoOn, setAutoWeight } from '../lib/autofail';
+import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
@@ -30,7 +31,7 @@ const tidy = (list) => list.map((f) => {
 
 // Identity of a favourite in the saved list: [program, workout].
 const keyOf = (p, w) => JSON.stringify([p, w]);
-const SHEET_TITLE = { menu: 'Favourites', reorder: 'Reorder', group: 'Create group', editGroup: 'Edit group', rename: 'Rename workout', remove: 'Remove favourites' };
+const SHEET_TITLE = { quest: 'Quests', auto: 'Auto weight', menu: 'Favourites', reorder: 'Reorder', group: 'Create group', editGroup: 'Edit group', rename: 'Rename workout', remove: 'Remove favourites' };
 const FAV_ACTIONS = [['reorder', 'Reorder'], ['group', 'Create group'], ['editGroup', 'Edit group'], ['rename', 'Rename workout'], ['remove', 'Remove favourites']];
 // Moves the selected favourites together at the first selected one's place, all in `gid`.
 const placeTogether = (list, keys, gid) => {
@@ -53,7 +54,7 @@ const clearGroup = (list, gid) => list.map((f) => {
 // starred are pinned at the top with their quest-only alias. Favourites can be
 // grouped: a group is a progression, and the next member is queued for you.
 export default function QuestTitle({ onNavigate }) {
-  const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings } = useWorkout();
+  const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings, reloadPrograms, reloadSettings } = useWorkout();
   const agg = aggressionOf(settings);
   const { showToast } = useToast();
   const { prof, updProf } = useQuest();
@@ -202,6 +203,20 @@ export default function QuestTitle({ onNavigate }) {
   const saveGroup = (gid, keys) => updProf((pr) => ({ ...pr, favs: tidy(placeTogether(clearGroup(pr.favs || [], gid), keys, gid)) }));
   const removeFavs = (keys) => updProf((pr) => ({ ...pr, favs: tidy((pr.favs || []).filter((f) => !keys.includes(keyOf(f.p, f.w)))) }));
   const closeSheet = () => { setFavSheet(null); setSel([]); setEditGid(null); };
+
+  // Auto weight from the quest list (⋯ on Choose today's quest): the every-workout
+  // default (same setting as Training), and per exercise for the selected workout.
+  const selW = program ? parse(program)[index] : null;
+  const toggleAutoAll = async () => {
+    const raw = settings?.aggressionSettings;
+    const a = typeof raw === 'string' ? JSON.parse(raw) : raw || {};
+    try { await api.updateAggression({ ...a, autoFailure: !agg.autoFailure }); await reloadSettings(); }
+    catch (e) { showToast('Error: ' + e.message, 'error'); }
+  };
+  const setAuto = async (idxs, value) => {
+    try { await api.updateProgram(program.id, program.name, setAutoWeight(parse(program), index, idxs, value)); await reloadPrograms(); }
+    catch (e) { showToast('Error: ' + e.message, 'error'); }
+  };
   const toggleSel = (k) => setSel((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
 
   const tier = tierOf(prof.lvl);
@@ -325,7 +340,14 @@ export default function QuestTitle({ onNavigate }) {
           </div>
         )}
         <div data-ascii="surface" className={`flex-shrink-0 bg-bg-1 rounded-[28px] q-card p-5 ${favs.length > 0 ? 'mt-2' : ''}`}>
-          <div className="text-accent ps-t" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>
+          <div className="flex items-center justify-between">
+            <div className="text-accent ps-t" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>CHOOSE TODAY'S QUEST</div>
+            {program && (
+              <button onClick={() => setFavSheet('quest')} aria-label="Quest options"
+                className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2 flex items-center justify-center"
+                style={{ font: `700 16px ${MONO}` }}>⋯</button>
+            )}
+          </div>
           {!program && (
             <div className="mt-3 text-sm text-text-secondary">No program yet. Make one in Programs and it becomes your quest list.</div>
           )}
@@ -394,6 +416,58 @@ export default function QuestTitle({ onNavigate }) {
               <div className="text-accent truncate" style={{ font: `600 11px ${MONO}`, letterSpacing: '.16em' }}>{SHEET_TITLE[favSheet].toUpperCase()}</div>
               <button onClick={closeSheet} className="text-text-tertiary px-2 py-1" style={{ font: `700 13px ${MONO}` }}>Close</button>
             </div>
+            {favSheet === 'quest' && (
+              <>
+                <button role="checkbox" aria-checked={agg.autoFailure} onClick={toggleAutoAll}
+                  className="w-full flex items-center gap-3 text-left px-4 py-3.5 rounded-2xl bg-bg-2 mb-1.5">
+                  <span className="text-accent" style={{ font: `700 16px ${MONO}` }}>{agg.autoFailure ? '☑' : '☐'}</span>
+                  <span className="flex-1 min-w-0 font-bold">Auto weight for every workout</span>
+                </button>
+                {selW && (
+                  <button onClick={() => setFavSheet('auto')} className="w-full flex items-center gap-3 text-left px-4 py-3.5 rounded-2xl bg-bg-2 mb-1.5">
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-bold">Auto weight per exercise</span>
+                      <span className="block truncate text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>{aliasOf(program.name, selW.name) || selW.name}</span>
+                    </span>
+                    <span className="text-text-secondary" style={{ font: `500 11px ${MONO}` }}>{(selW.exercises || []).filter((e) => autoOn(e, agg)).length}/{(selW.exercises || []).filter(autoCapable).length} ›</span>
+                  </button>
+                )}
+                <p className="px-2 pt-2 text-text-tertiary" style={{ font: `400 10px/1.6 ${MONO}` }}>Auto weight sends every set to failure and moves each set's weight from the reps it hit last time.</p>
+              </>
+            )}
+
+            {favSheet === 'auto' && selW && (() => {
+              const exs = selW.exercises || [];
+              const capable = exs.flatMap((e, i) => (autoCapable(e) ? [i] : []));
+              return (
+                <>
+                  <p className="px-2 pb-3 text-text-secondary" style={{ font: `400 11px/1.6 ${MONO}` }}>
+                    {aliasOf(program.name, selW.name) || selW.name}. Untouched exercises follow “every workout” ({agg.autoFailure ? 'on' : 'off'}).
+                  </p>
+                  <div className="flex gap-1.5 mb-1.5">
+                    <button onClick={() => setAuto(capable, true)} className="flex-1 px-4 py-3 rounded-2xl bg-bg-2 font-bold">All on</button>
+                    <button onClick={() => setAuto(capable, false)} className="flex-1 px-4 py-3 rounded-2xl bg-bg-2 font-bold">All off</button>
+                  </div>
+                  {exs.map((e, i) => (autoCapable(e) ? (
+                    <button key={i} role="checkbox" aria-checked={autoOn(e, agg)} onClick={() => setAuto([i], !autoOn(e, agg))}
+                      className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-2xl bg-bg-2 mb-1.5">
+                      <span className="text-accent" style={{ font: `700 16px ${MONO}` }}>{autoOn(e, agg) ? '☑' : '☐'}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate font-bold">{e.name}</span>
+                        <span className="block text-text-tertiary" style={{ font: `400 10px ${MONO}` }}>{e.repRange} reps{e.autoWeight === undefined ? ' · default' : ''}</span>
+                      </span>
+                    </button>
+                  ) : (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-2xl mb-1.5 text-text-tertiary">
+                      <span style={{ font: `700 16px ${MONO}` }}>–</span>
+                      <span className="flex-1 min-w-0 truncate">{e.name}</span>
+                      <span style={{ font: `400 10px ${MONO}` }}>{e.type === 'cardio' ? 'CARDIO' : 'TIMED'}</span>
+                    </div>
+                  )))}
+                </>
+              );
+            })()}
+
             {favSheet === 'menu' && FAV_ACTIONS.map(([mode, label]) => (
               <button key={mode} onClick={() => { setSel([]); setEditGid(null); setFavSheet(mode); }}
                 className="w-full text-left px-4 py-3.5 rounded-2xl bg-bg-2 mb-1.5 font-bold">{label}</button>

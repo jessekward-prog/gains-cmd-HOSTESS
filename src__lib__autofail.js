@@ -35,7 +35,11 @@ export const autoCapable = (ex) => !!ex && ex.type !== 'cardio' && !ex.isBFR && 
 /** Is it on for this program exercise: its own switch (workout ⋮ → Auto weight), else the Training default. */
 export const autoOn = (ex, agg) => autoCapable(ex) && (ex.autoWeight ?? !!agg?.autoFailure);
 
-const stepsFor =(by) => Math.min(MAX_STEPS, Math.max(1, Math.round(by / 2.5)));
+/** A program's workouts with exercises `idxs` of workout `wi` switched on or off. */
+export const setAutoWeight = (workouts, wi, idxs, value) => workouts.map((w, k) => (k !== wi ? w
+  : { ...w, exercises: (w.exercises || []).map((ex, i) => (idxs.includes(i) ? { ...ex, autoWeight: value } : ex)) }));
+
+const stepsFor = (by) => Math.min(MAX_STEPS, Math.max(1, Math.round(by / 2.5)));
 
 /**
  * Next weight for set `i` (counting working sets only, drops skipped) of `name`.

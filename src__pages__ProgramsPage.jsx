@@ -22,7 +22,7 @@ import { readGreeting, defaultGreeting } from '../lib/greeting';
 import WaveBackground from '../components/WaveBackground';
 import useRepStartPrompt from '../components/RepStartPrompt';
 import { aggressionOf } from '../lib/levelup';
-import { autoCapable, autoOn } from '../lib/autofail';
+import { autoCapable, autoOn, setAutoWeight } from '../lib/autofail';
 
 const MONO = 'var(--font-mono)';
 
@@ -869,10 +869,8 @@ export default function ProgramsPage({ onNavigate }) {
   // Per-exercise Auto weight, saved on the workout like ★ is. Shown at once, saved behind.
   const handleSetAutoWeight = useCallback(async (workoutIndex, exIndexes, value) => {
     if (!selectedProgram) return;
-    const workouts = typeof selectedProgram.workouts === 'string'
-      ? JSON.parse(selectedProgram.workouts) : [...(selectedProgram.workouts || [])];
-    const w = workouts[workoutIndex];
-    workouts[workoutIndex] = { ...w, exercises: (w.exercises || []).map((ex, i) => (exIndexes.includes(i) ? { ...ex, autoWeight: value } : ex)) };
+    const workouts = setAutoWeight(typeof selectedProgram.workouts === 'string'
+      ? JSON.parse(selectedProgram.workouts) : selectedProgram.workouts || [], workoutIndex, exIndexes, value);
     setAutoSheet((s) => s && { ...s, workout: workouts[workoutIndex] });
     setSelectedProgram((prev) => (prev ? { ...prev, workouts } : prev));
     try {
