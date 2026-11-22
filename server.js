@@ -14,6 +14,9 @@ const PORT = process.env.PORT || 3001;
 const ENV_LM_URL = (process.env.LM_STUDIO_URL || 'http://localhost:1235').replace(/\/+$/, '');
 const ENV_LM_KEY = process.env.LM_STUDIO_API_KEY || '';
 const ENV_LM_MODEL = process.env.LM_STUDIO_MODEL || 'google/gemma-4-e4b';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
+const GEMINI_CHAT_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const SYNC_SECRET = process.env.SYNC_SECRET || '';
 let LM_URL = ENV_LM_URL;
 let LM_KEY = ENV_LM_KEY;
@@ -84,24 +87,30 @@ async function sessionSecret() {
   return secret;
 }
 
-// LM Studio (OpenAI-compatible) — replaces Anthropic. `messages` items may use
-// text content OR OpenAI parts (array of {type:'text'|'image_url'}) — see cardio-stats.
-async function llmOnce(openaiMessages, maxTokens, temperature, timeoutMs, responseFormat) {
+function chatUrl(base) {
+  const b = (base || '').replace(/\/+$/, '');
+  if (b.endsWith('/chat/completions')) return b;
+  if (b.endsWith('/v1') || b.endsWith('/openai')) return b + '/chat/completions';
+  return b + '/v1/chat/completions';
+}
+
+// OpenAI-compatible completion call against either Gemini or LM Studio.
+async function llmOnce(target, openaiMessages, maxTokens, temperature, timeoutMs, responseFormat) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(LM_URL + '/v1/chat/completions', {
+    const r = await fetch(target.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(LM_KEY ? { Authorization: 'Bearer ' + LM_KEY } : {})
+        ...(target.key ? { Authorization: 'Bearer ' + target.key } : {})
       },
-      body: JSON.stringify({ model: LM_MODEL, max_tokens: maxTokens, temperature, messages: openaiMessages, ...(responseFormat && { response_format: responseFormat }) }),
+      body: JSON.stringify({ model: target.model, max_tokens: maxTokens, temperature, messages: openaiMessages, ...(responseFormat && { response_format: responseFormat }) }),
       signal: ctrl.signal
     });
     if (!r.ok) {
       const err = await r.text();
-      throw new Error('LM Studio ' + r.status + ': ' + err.slice(0, 300));
+      throw new Error(target.label + ' ' + r.status + ': ' + err.slice(0, 300));
     }
     const data = await r.json();
     const choice = data.choices[0];
@@ -111,22 +120,37 @@ async function llmOnce(openaiMessages, maxTokens, temperature, timeoutMs, respon
   }
 }
 
-// Reasoning models spend a few hundred hidden "reasoning_content" tokens before
-// the visible reply, so a reply can be cut off at max_tokens — empty, or JSON
-// stopped mid-array. Any 'length' finish gets one retry with much more room.
-// `schema` asks LM Studio for grammar-constrained JSON (response_format
-// json_schema), which is what stops the malformed-JSON failures.
+async function runTarget(target, openaiMessages, maxTokens, temperature, timeoutMs, format) {
+  let result = await llmOnce(target, openaiMessages, maxTokens, temperature, timeoutMs, format);
+  if (result.finishReason === 'length') {
+    result = await llmOnce(target, openaiMessages, Math.max(maxTokens * 3, maxTokens + 2000), temperature, timeoutMs * 2, format);
+  }
+  return result.content;
+}
+
+// Gemini is the default when GEMINI_API_KEY is set; LM Studio acts as the
+// backup (or primary when GEMINI_API_KEY is unset, e.g. self-hosted Hostess).
 async function llm({ system, messages, maxTokens = 500, temperature = 0.7, timeoutMs = 90000, schema }) {
   const openaiMessages = [];
   if (system) openaiMessages.push({ role: 'system', content: system });
   for (const m of messages || []) openaiMessages.push(m);
   const format = schema && { type: 'json_schema', json_schema: { name: 'reply', strict: true, schema } };
 
-  let result = await llmOnce(openaiMessages, maxTokens, temperature, timeoutMs, format);
-  if (result.finishReason === 'length') {
-    result = await llmOnce(openaiMessages, Math.max(maxTokens * 3, maxTokens + 2000), temperature, timeoutMs * 2, format);
+  const targets = [];
+  if (GEMINI_API_KEY) targets.push({ label: 'Gemini', url: GEMINI_CHAT_URL, key: GEMINI_API_KEY, model: GEMINI_MODEL });
+  if (LM_URL) targets.push({ label: 'LM Studio', url: chatUrl(LM_URL), key: LM_KEY, model: LM_MODEL });
+  if (!targets.length) throw new Error('No AI provider configured');
+
+  let lastErr;
+  for (let i = 0; i < targets.length; i++) {
+    try {
+      return await runTarget(targets[i], openaiMessages, maxTokens, temperature, timeoutMs, format);
+    } catch (err) {
+      lastErr = err;
+      if (i < targets.length - 1) console.warn(`[llm] ${targets[i].label} failed (${err.message}); falling back to ${targets[i + 1].label}`);
+    }
   }
-  return result.content;
+  throw lastErr;
 }
 
 // JSON schemas for the structured endpoints.
