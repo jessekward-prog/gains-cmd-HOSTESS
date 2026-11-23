@@ -77,7 +77,8 @@ function useRoll(v, key, ms = 650) {
 /**
  * The quest scene (340px stage). Everything it shows comes from props; it only
  * keeps its own animation clock. `phase` is title | walk | encounter | battle |
- * attack | rest | victory; `start` is when that phase began (ms epoch, 0 = long ago),
+ * attack | rest | victory, or boss (the weekly boss's offer: it strides in and faces the
+ * hero) | banish (offer declined: a pulse throws it off); `start` is when that phase began (ms epoch, 0 = long ago),
  * so the stage times its own entrances and hits on its 100ms clock.
  *
  * monster: monsterOf() result · hit: { dmg, crit } for the attack float ·
@@ -95,10 +96,12 @@ const STARS = Array.from({ length: 14 }, (_, i) => [(i * 37 + 11) % 100, (i * 23
 const BOSS_BODY = 120; // px tall; a usual monster is ~100
 const bossSrc = (k, a, i) => `url(${ASSET}sprites/boss_${k}_${a}_${i}.png)`;
 const bossLoaded = new Set();
-const preloadBoss = (k) => {
+export const preloadBoss = (k) => {
   if (bossLoaded.has(k)) return; bossLoaded.add(k);
   Object.entries(BOSS_SPRITES[k].n).forEach(([a, n]) => { for (let i = 0; i < n; i++) { const im = new Image(); im.src = `${ASSET}sprites/boss_${k}_${a}_${i}.png`; } });
 };
+export const BANISH_MS = 1700;
+const PULSE_AT = 0.3, PULSE_HIT = 0.6; // s into a banish: the pulse leaves the hero, then reaches the boss
 const MOTES = [[18, 38], [57, 30], [83, 46]]; // three dust specks, start positions (%)
 // Cut-in speed streaks: [top %, thickness px, dash length px, seconds per loop].
 const STREAKS = Array.from({ length: 16 }, (_, i) => [(i * 37 + 3) % 100, 1 + (i % 3), 120 + ((i * 53) % 160), 1 + ((i * 7) % 5) * 0.25]);
@@ -268,7 +271,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
   // The gem lands on open ground mid-stage (clear of the hero box); the pet runs ~150px to it.
   if (loot && pet) petDash = gemT < 1.4 ? 0 : gemT < 2.0 ? ((gemT - 1.4) / 0.6) * 150 : gemT < 2.4 ? 150 : gemT < 3.4 ? 150 * (1 - (gemT - 2.4)) : 0;
   const breath = fx.ambient ? 1 + 0.018 * Math.sin(frame / 5) : 1;
-  const stomp = lastStand && (now / 1000) % 2.4 < 0.15;
+  const stomp = lastStand && phase === 'battle' && (now / 1000) % 2.4 < 0.15;
   const prShake = hit?.pr && phase === 'attack' && t >= 0.3 && t < 0.6;
   const chargeK = charge ? clamp01((now - charge.from) / charge.dur) : 0;
 
@@ -301,6 +304,17 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
       if (gm === 'spin') gSpin = act * 360; // one full whirl as it connects
     }
   }
+  const bk = BOSS_SPRITES[monster?.boss] ? monster.boss : monster?.boss ? 'dslime' : null;
+  const isBoss = !!bk, bs = bk && BOSS_SPRITES[bk];
+  // ── The weekly boss on the road: offered, or thrown off by the pulse.
+  const standing = isBoss && (phase === 'boss' || phase === 'banish' || phase === 'encounter');
+  const bt = phase === 'banish' ? t - PULSE_HIT : -1; // s since the pulse struck it
+  const bossIn = phase === 'boss' ? 1 - (1 - clamp01(t / 0.9)) ** 3 : 1;
+  const standX = (1 - bossIn) * 280 + (bt > 0 ? Math.min(1, bt / 0.15) * 26 + clamp01((bt - 0.15) / 0.75) ** 2 * 320 : 0);
+  const standOp = bt > 0.2 ? 1 - clamp01((bt - 0.2) / 0.7) : 1;
+  const jolt = !reducedMotion && ((phase === 'boss' && t >= 0.8 && t < 1.1) || (bt >= 0 && bt < 0.3));
+  const casting = phase === 'banish' && t < 0.7 && hn.atk;
+  const heroRoad = casting ? frameOf(`${hk}_atk`, Math.min(hn.atk - 1, Math.floor((t / 0.7) * hn.atk))) : heroWalk;
   const heroBattle = phase === 'attack' && !byPet && move === 'melee' && leapK > 0 && (swingT < 0 || swingT >= 0.33)
     ? frameOf(`${hk}_run`, frame % hn.run)
     : phase === 'attack' && !byPet && swingT >= 0 && swingT < (move === 'melee' ? 0.33 : 0.7)
@@ -310,8 +324,6 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
     ? (gAtk >= 0 && hn.atk ? frameOf(`${hk}_atk`, Math.min(hn.atk - 1, Math.floor(gAtk * hn.atk))) : frameOf(`${hk}_run`, wf % hn.run))
     : heroBattle;
   const monSrc = monster ? frameOf(monster.sprite, Math.floor(frame / (phase === 'rest' ? 4 : 2)) % 4, hitFlash) : BLANK;
-  const bk = BOSS_SPRITES[monster?.boss] ? monster.boss : monster?.boss ? 'dslime' : null;
-  const isBoss = !!bk, bs = bk && BOSS_SPRITES[bk];
   useEffect(() => { if (bk) preloadBoss(bk); }, [bk]);
   // When a monster first appears it waits 2 s, then plays its attack once, just
   // for show. Only the bosses have attack frames.
@@ -326,7 +338,9 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
     const { n } = bs;
     if (phase === 'victory') bossFrame = n.death ? bossSrc(bk, 'death', Math.min(n.death - 1, Math.floor((t / 2) * n.death))) : bossSrc(bk, 'idle', 0);
     else if (impacting) { bossFrame = n.hit ? bossSrc(bk, 'hit', frame % n.hit) : bossSrc(bk, 'idle', 0); bossFlash = !n.hit && frame % 2 === 1; }
-    else if (sinceIn >= 0 && sinceIn < n.atk * 0.1) bossFrame = bossSrc(bk, 'atk', Math.floor(sinceIn / 0.1));
+    else if (bt >= 0) { bossFrame = n.hit ? bossSrc(bk, 'hit', frame % n.hit) : bossSrc(bk, 'idle', 0); bossFlash = frame % 2 === 1 && bt < 0.5; }
+    else if (phase === 'boss' && t >= 1.4 && t - 1.4 < n.atk * 0.1) bossFrame = bossSrc(bk, 'atk', Math.floor((t - 1.4) / 0.1));
+    else if (phase === 'battle' && sinceIn >= 0 && sinceIn < n.atk * 0.1) bossFrame = bossSrc(bk, 'atk', Math.floor(sinceIn / 0.1));
     else bossFrame = bossSrc(bk, 'idle', Math.floor(frame / (dozing ? 3 : 1.5)) % n.idle);
   }
   const bScale = bs ? BOSS_BODY / bs.body : 1, bossW = bs ? Math.round(bs.w * bScale) : 0, bossH = bs ? Math.round(bs.h * bScale) : 0;
@@ -436,7 +450,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
       {/* zIndex 0 makes this a stacking context permanently (today it only is one
           while the shake transform is set), so nothing inside it — the canvas
           included — can ever paint above a later sibling. No visual change. */}
-      <div data-ascii="skip" className="absolute inset-0" style={{ zIndex: 0, background: ST.sky, transform: prShake ? `translate(${frame % 2 ? 6 : -6}px, ${frame % 2 ? -3 : 3}px)` : stomp ? 'translateY(3px)' : shake }}>
+      <div data-ascii="skip" className="absolute inset-0" style={{ zIndex: 0, background: ST.sky, transform: prShake ? `translate(${frame % 2 ? 6 : -6}px, ${frame % 2 ? -3 : 3}px)` : stomp ? 'translateY(3px)' : jolt ? `translateX(${frame % 2 ? 3 : -3}px)` : shake }}>
         {!(groundOn && ground.cover === 'full') && layers.map((l, i) => (
           <div key={i} className="absolute inset-0" style={{ backgroundImage: l.img, backgroundSize: l.size, backgroundRepeat: 'repeat-x', backgroundPosition: l.pos, imageRendering: 'pixelated', opacity: l.op, transition: 'background-position .1s linear' }} />
         ))}
@@ -464,7 +478,7 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
       {ST.overlay && <div className="absolute inset-0 pointer-events-none" style={{ background: ST.overlay }} />}
       {ST.vig && <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 60%, transparent 45%, ${ST.vig} 100%)` }} />}
 
-      {(phase === 'walk' || phase === 'title') && (
+      {(phase === 'walk' || phase === 'title' || phase === 'boss' || phase === 'banish') && (
         <div className="absolute z-[5]" style={{ top: 14, left: 14, font: `500 10px ${MONO}`, letterSpacing: '.14em', ...K.chip, ...grow('0 0') }}>
           AREA {Math.min(area, LANDS.length - 1) + 1} · {land.name.toUpperCase()}
         </div>
@@ -483,12 +497,36 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
           grid would just freeze a frame of it. */}
       {phase === 'title' && <span data-ascii="skip">{card}</span>}
 
-      {(phase === 'walk' || phase === 'title' || phase === 'encounter') && (
+      {(phase === 'walk' || phase === 'title' || phase === 'encounter' || phase === 'boss' || phase === 'banish') && (
         <>
           <div data-ascii="skip" className="absolute" style={{ left: 62, top: 200 + gy, width: 44, height: 10, borderRadius: '50%', background: K.shadow }} />
           {pet && <div data-ascii="skip" className="absolute" style={{ left: 18, top: 206 + gy - petH * 2.4 + (walking && wf % 4 < 2 ? -3 : 0), width: 16 * 2.4, height: petH * 2.4, backgroundImage: petSrc, backgroundSize: '100% 100%', imageRendering: 'pixelated', filter: glow }} />}
-          <div data-ascii="skip" className="absolute" style={{ left: 84 - hcx * hws, top: 206 + gy - hh * hws, width: hw * hws, height: hh * hws, backgroundImage: heroWalk, backgroundSize: '100% 100%', imageRendering: 'pixelated', filter: glow }} />
+          <div data-ascii="skip" className="absolute" style={{ left: 84 - hcx * hws, top: 206 + gy - hh * hws, width: hw * hws, height: hh * hws, backgroundImage: heroRoad, backgroundSize: '100% 100%', imageRendering: 'pixelated', filter: glow }} />
           {phase === 'encounter' && t < 1.7 && <div className="absolute" style={{ left: 70, top: 186 - hh * hws, background: K.P.battle, color: '#fff', font: `500 12px ${MONO}`, padding: '1px 6px', borderRadius: 4 }}>!</div>}
+        </>
+      )}
+
+      {standing && (
+        <div className="absolute flex flex-col items-center pointer-events-none" style={{ top: 206 - bossH + bossDrop, right: 0, transform: `translateX(${standX}px) rotate(${bt > 0 && !reducedMotion ? Math.min(14, bt * 22) : 0}deg)`, opacity: standOp, transition: 'transform .1s linear, opacity .1s linear' }}>
+          <div style={{ backgroundImage: bossFrame, backgroundSize: '100% 100%', width: bossW, height: bossH, imageRendering: 'pixelated', transform: `scaleY(${breath})`, transformOrigin: 'bottom',
+            filter: `drop-shadow(0 0 ${8 + (frame % 10 < 5 ? 4 : 0)}px ${bs.glow})${bossFlash ? ' brightness(2.2)' : ''}` }} />
+          <div style={{ width: 160, height: 14, marginTop: -8 - bossDrop, borderRadius: '50%', background: K.shadow, zIndex: -1 }} />
+        </div>
+      )}
+      {/* The banishing pulse: light gathers at the hero, then rings of it sweep the stage. */}
+      {phase === 'banish' && (
+        <>
+          {t < PULSE_AT && <div className="absolute pointer-events-none rounded-full" style={{ left: 84, top: 160, width: 8 + t * 80, height: 8 + t * 80, transform: 'translate(-50%, -50%)', background: '#fff', boxShadow: `0 0 16px ${fxCol}, 0 0 32px ${fxCol}` }} />}
+          {[0, 0.12, 0.24].map((d) => {
+            const q = (t - PULSE_AT - d) / 0.8;
+            if (q <= 0 || q >= 1) return null;
+            const size = 30 + q * 1100;
+            return <div key={d} className="absolute pointer-events-none rounded-full" style={{ left: 84, top: 160, width: size, height: size, transform: 'translate(-50%, -50%)', border: `${d ? 2 : 5}px solid ${d ? fxCol : '#fff'}`, boxShadow: `0 0 18px ${fxCol}, inset 0 0 18px ${fxCol}`, opacity: 1 - q, transition: 'width .1s linear, height .1s linear, opacity .1s linear' }} />;
+          })}
+          {!reducedMotion && t >= PULSE_AT && t < PULSE_AT + 0.3 && <div className="absolute inset-0 pointer-events-none" style={{ background: fxCol, opacity: 0.35 * (1 - (t - PULSE_AT) / 0.3) }} />}
+          {bt > 0.2 && SEEDS.map(([x, y, n], i) => (
+            <div key={i} className="absolute pointer-events-none" style={{ right: 30 + x * 1.3, top: 190 - y - (bt - 0.2) * 50 * (1 + n / 2), width: 3, height: 3, background: i % 3 ? fxCol : '#fff', boxShadow: `0 0 6px ${fxCol}`, opacity: Math.max(0, 1 - (bt - 0.2) / 0.9), transition: 'top .1s linear' }} />
+          ))}
         </>
       )}
 

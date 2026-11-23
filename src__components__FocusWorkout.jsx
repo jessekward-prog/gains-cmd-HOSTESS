@@ -24,7 +24,7 @@ import {
 import { nextMemberForRound, roundOfSet, setIndexForRound, supersetRounds } from '../lib/supersets';
 import { moodState } from '../lib/mood';
 import ExerciseInfo from './ExerciseInfo';
-import QuestStage from './QuestStage';
+import QuestStage, { preloadBoss, BANISH_MS } from './QuestStage';
 import { AsciiReveal } from 'ascii-reveal';
 import RepScope, { RepTag, repTracking } from './RepScope';
 import useQuest, { readTint, readScanlines, readScrolls, readQuestFx } from '../hooks/useQuest';
@@ -1014,7 +1014,8 @@ export default function FocusWorkout({
   // Offered once, at the start: one set to failure while you're fresh, so it
   // never costs you the rest of the session. Fought first, then the workout.
   const { boss: wBoss, offerable: bossDue, wk: bossWk } = useWeeklyBoss();
-  const [bossAsk, setBossAsk] = useState(false);
+  const [bossAsk, setBossAsk] = useState(0); // when the offer opened (ms epoch), 0 = not on offer
+  const [banishAt, setBanishAt] = useState(0);
   const canBoss = !!wBoss && bossDue && !workout.bossFight && !workout.bossOffered;
   const fightBoss = () => {
     const name = wBoss.exercise;
@@ -1033,10 +1034,17 @@ export default function FocusWorkout({
       exercises: [...prev.exercises, { name, targetSets: BOSS_GROUP_SETS, targetReps: 'failure', repRange: 'failure', restSeconds: 90, sets, notes: [], boss: true }],
       bossFight: { key: qKey, done: false }, bossOffered: true,
     } : prev));
-    setBossAsk(false);
+    setBossAsk(0);
     openBlock(blocks.length);
   };
-  const skipBoss = () => { setBossAsk(false); updateWorkout((prev) => (prev ? { ...prev, bossOffered: true } : prev)); };
+  const skipBoss = () => {
+    setBossAsk(0);
+    // In a quest the hero's pulse throws the boss off, then the first monster's encounter plays.
+    if (quest) { haptics.tap(); setBanishAt(Date.now()); setEncAt(Date.now() + BANISH_MS); }
+    updateWorkout((prev) => (prev ? { ...prev, bossOffered: true } : prev));
+  };
+  // Loaded during the setting-off walk, so it doesn't stride in invisible.
+  useEffect(() => { if (quest && canBoss) preloadBoss(bossSprite(bossWk, prof.theme)); }, [quest, canBoss]); // eslint-disable-line react-hooks/exhaustive-deps
   // The boss block done → the fight counts (once per workout); the second one beats it.
   const bossIdx = exercises.findIndex((e) => e.boss);
   const bossBlockDone = bossIdx >= 0 && exercises[bossIdx].sets.every((x) => x.completed);
@@ -1088,7 +1096,7 @@ export default function FocusWorkout({
   // The weekly boss is offered as the workout begins (after the quest's setting-off walk).
   const anyLogged = exercises.some((e) => e.sets.some((x) => x.completed));
   useEffect(() => {
-    if (canBoss && !anyLogged && !introOn) setBossAsk(true);
+    if (canBoss && !anyLogged && !introOn) setBossAsk((at) => at || Date.now());
   }, [canBoss, introOn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Victory whenever the block on screen becomes done — by its last set, a
@@ -1133,10 +1141,10 @@ export default function FocusWorkout({
   useEffect(() => {
     if (!quest) return;
     const now = Date.now();
-    const ends = [introEnd, encAt + 2500, qHit && qHit.at + 1500, qWin && qWin.at, qWin && qWin.at + 1400].filter((t) => t && t > now);
+    const ends = [introEnd, banishAt + BANISH_MS, encAt + 2500, qHit && qHit.at + 1500, qWin && qWin.at, qWin && qWin.at + 1400].filter((t) => t && t > now);
     const ids = ends.map((t) => setTimeout(() => qBump((n) => n + 1), t - now + 20));
     return () => ids.forEach(clearTimeout);
-  }, [quest, introEnd, encAt, qHit, qWin]);
+  }, [quest, introEnd, encAt, banishAt, qHit, qWin]);
 
   // GO flash when a rest runs out on its own (TimerContext stamps endedAt).
   useEffect(() => { if (timer.endedAt) setGoAt(timer.endedAt); }, [timer.endedAt]);
@@ -1573,7 +1581,10 @@ export default function FocusWorkout({
   const restLine = quest && readScrolls() ? ((l) => l[Math.floor(seeded(`${qKey}|${ci}|${fi}|rest`) * l.length)])(tauntLines || REST_LINES) : null;
   const mon0 = quest ? monsterOf(exercises, block, ci, prof.theme) : null;
   const isBossBlock = !!ex.boss;
-  const mon = mon0 && isBossBlock ? { ...mon0, name: (wBoss?.name || 'The Boss').toUpperCase(), species: 'WEEKLY BOSS', boss: bossSprite(bossWk, prof.theme) } : mon0;
+  // Also true for the one render between the walk ending and the offer opening, so no other line slips in.
+  const standoff = quest && (!!bossAsk || (canBoss && !anyLogged && !introOn));
+  const banishing = quest && !qHit && Date.now() - banishAt < BANISH_MS;
+  const mon = mon0 && (isBossBlock || standoff || banishing) ? { ...mon0, name: (wBoss?.name || 'The Boss').toUpperCase(), species: 'WEEKLY BOSS', boss: bossSprite(bossWk, prof.theme) } : mon0;
   // The monster as the dialogue names it: the boss by its name, others by species.
   const foe = !mon ? '' : isBossBlock ? wBoss?.name || 'The Boss' : titleCase(mon.species);
   if (quest) {
@@ -1601,7 +1612,7 @@ export default function FocusWorkout({
       : qPhase === 'attack' ? qHit.msg
       : qPhase === 'walk' ? (introOn ? `${heroN} sets out across the meadow. Something is out there…` : `${heroN} pushes deeper. Rest up while ${lands[Math.min(ci, lands.length - 1)].walk}…`)
       : qPhase === 'rest' ? (comboRestLine || `${foe} is catching its breath…`)
-      : qPhase === 'encounter' ? 'Something stirs in the dark…'
+      : qPhase === 'encounter' ? (isBossBlock ? `${foe} blocks your path!` : 'Something stirs in the dark…')
       : evKey ? evText(evKey)
       : blockStarted ? `${foe} gets back up.` : isBossBlock ? `${foe} blocks your path! One set to failure — make it count.` : `A wild ${foe} appears!`;
     if (!fs?.completed && kind !== 'cardio' && kind !== 'interval') {
@@ -1669,7 +1680,8 @@ export default function FocusWorkout({
   const qClear = quest && allClear && qPhase !== 'victory';
   if (qClear) { qPhase = 'walk'; qMsg = 'Quest clear! The last monster dropped a loot chest.'; }
   // The encounter only plays on the stage — the controls are usable straight away.
-  if (quest && bossAsk) { qPhase = 'walk'; qMsg = wBoss?.cry ? `${wBoss.name}: “${wBoss.cry}”` : `A shadow falls across the path. ${wBoss?.name || 'The boss'} appears!`; }
+  if (standoff) { qPhase = 'boss'; qStart = bossAsk || Date.now(); qMsg = wBoss?.cry ? `${wBoss.name}: “${wBoss.cry}”` : `A shadow falls across the path. ${wBoss?.name || 'The boss'} appears!`; }
+  else if (banishing && (qPhase === 'encounter' || qPhase === 'battle')) { qPhase = 'banish'; qStart = banishAt; qMsg = `A pulse of light sweeps ${wBoss?.name || 'the boss'} away!`; }
   const qTravel = quest && (qPhase === 'walk' || qPhase === 'victory');
   const shownBlock = qPhase === 'victory' && qTravel ? nextOpenBlock(exercises, blocks, ci) : ci;
   const upNext = shownBlock < 0 ? -1 : (() => { const n = nextOpenBlock(exercises, blocks, shownBlock); return n === shownBlock ? -1 : n; })();
