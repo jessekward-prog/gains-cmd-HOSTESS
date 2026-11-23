@@ -1,8 +1,7 @@
 // The link to the Android app (~/gains-cmd-android). Chrome hands the page a message port when it is running
 // inside the APK; a browser or the installed PWA never gets one, so everything here is inert there.
-// Chrome names a verified app like this (OriginVerifier.getPostMessageUriFromVerifiedOrigin), and its first message
-// is empty apart from the port.
-const APP = typeof window !== 'undefined' && `android-app://${window.location.hostname}/xyz.cmdward.gains`;
+// Chrome gives a verified app this origin (seen on Chrome 152: host only, no package) and an empty first message.
+const APP = typeof window !== 'undefined' && `android-app://${window.location.hostname}`;
 let port = null;
 const subs = new Set();
 const ready = new Set();
@@ -17,9 +16,8 @@ export const native = {
 };
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('message', (e) => {
-    if (e.origin !== APP || !e.ports?.[0]) return;
-    port = e.ports[0];
+  const take = (p) => {
+    port = p;
     port.onmessage = (m) => {
       let msg;
       try { msg = JSON.parse(m.data); } catch { return; }
@@ -27,7 +25,9 @@ if (typeof window !== 'undefined') {
     };
     native.send({ t: 'hello' }); // the app keeps offering until it hears this
     ready.forEach((fn) => fn());
-  });
+  };
+  window.addEventListener('message', (e) => { if (e.origin === APP && e.ports?.[0]) take(e.ports[0]); });
+  if (window.__gainsPort) take(window.__gainsPort); // offered before this module loaded (main.jsx)
   // A notification button pressed while the page was hidden may not have reached it.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) native.send({ t: 'sync' }); });
 }
