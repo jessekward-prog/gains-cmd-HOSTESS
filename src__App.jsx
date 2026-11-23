@@ -21,6 +21,7 @@ import { useTheme } from './context/ThemeContext';
 import { workoutLayout } from './lib/focus';
 import { observePage, useDeskLayout } from './lib/fit';
 import { moodState } from './lib/mood';
+import { native } from './lib/native';
 import { stageArt } from './components/QuestStage';
 import { warmQuestSprites } from './hooks/useQuestSprites';
 import useQuest, { readTint } from './hooks/useQuest';
@@ -41,8 +42,11 @@ function AppShell() {
   // A rest countdown shouldn't outlive the workout (finish or cancel). This
   // lives here, not in WorkoutPage: cancelling also navigates away, and the
   // page unmounts in the same render the workout clears, so its effect never ran.
-  const { stop: stopRestTimer } = useGlobalTimer();
-  useEffect(() => { if (!activeWorkout) stopRestTimer(); }, [activeWorkout, stopRestTimer]);
+  const { stop: stopRestTimer, owner: restOwner } = useGlobalTimer();
+  useEffect(() => { if (!activeWorkout && restOwner !== 'tile') stopRestTimer(); }, [activeWorkout, stopRestTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The Android app reopens here if a reload costs it its link to the page.
+  useEffect(() => native.onReady(() => native.send({ t: 'tab', tab })), [tab]);
 
   // Quest Mode has its own look (Settings → Quest), only on the quest screens.
   const { setQuestActive, questSkin } = useTheme();
@@ -149,7 +153,7 @@ if (typeof window !== 'undefined') {
   const shared = ['share_title', 'share_text', 'share_url'].map((k) => q.get(k)).filter(Boolean).join('\n').slice(0, 2000);
   const code = shared.match(/\b[A-HJ-NP-Z2-9]{6}\b/)?.[0];
   const wanted = shared ? (code ? 'programs' : 'coach') : q.get('tab');
-  if (['workout', 'quest', 'history', 'coach', 'programs'].includes(wanted)) {
+  if (['workout', 'quest', 'history', 'coach', 'programs', 'settings'].includes(wanted)) {
     try {
       if (shared) sessionStorage.setItem('gains-beta-share', code || shared);
       sessionStorage.setItem('gains-beta-active-tab', wanted);
@@ -174,6 +178,9 @@ function AppContent() {
       loadAll();
     }
   }, [user, authLoading, loadAll]);
+
+  // Signed out: the app must not reopen itself in the middle of a Google sign-in.
+  useEffect(() => (authLoading || user ? undefined : native.onReady(() => native.send({ t: 'tab', tab: '' }))), [authLoading, user]);
 
   if (authLoading || (user && dataLoading)) {
     return (

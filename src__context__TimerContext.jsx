@@ -23,8 +23,9 @@ export function TimerProvider({ children }) {
   // Deadline-based: iOS suspends JS when the app is backgrounded, so a
   // decrementing counter drifts/freezes. Remaining is derived from the clock.
   // In the Android app the rest also runs natively, so it rings with the screen off.
-  const tellNative = useCallback((total) => {
-    native.send(endsAtRef.current ? { t: 'rest', endsAt: endsAtRef.current, total } : { t: 'rest-stop' });
+  // `fresh` = a new rest, not an extended one: only those set the Quick Settings tile's length.
+  const tellNative = useCallback((total, fresh = false) => {
+    native.send(endsAtRef.current ? { t: 'rest', endsAt: endsAtRef.current, total, fresh } : { t: 'rest-stop' });
   }, []);
 
   const tick = useCallback(() => {
@@ -37,7 +38,7 @@ export function TimerProvider({ children }) {
     intervalRef.current = null;
     // The app rings 1s after the deadline unless told to stop: on time and on screen this page rings
     // instead, otherwise the app has it.
-    const appRings = native.on && (document.hidden || Date.now() - endsAtRef.current > 1000);
+    const appRings = native.rings && (document.hidden || Date.now() - endsAtRef.current > 1000);
     endsAtRef.current = 0;
     moodState.rest = null;
     localStorage.removeItem(STORAGE_KEY);
@@ -65,10 +66,26 @@ export function TimerProvider({ children }) {
     setRemaining(seconds);
     setIsRunning(true);
     intervalRef.current = setInterval(tick, 250);
-    tellNative(seconds);
+    tellNative(seconds, true);
   }, [tick, tellNative]);
 
+  // A rest started from the app's Quick Settings tile. Owned by 'tile', not by a workout.
+  const adopt = useCallback((endsAt, seconds) => {
+    if (endsAt === endsAtRef.current || endsAt <= Date.now()) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    onCompleteRef.current = null;
+    endsAtRef.current = endsAt;
+    moodState.rest = { end: endsAt, total: seconds * 1000 };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt, total: seconds, owner: 'tile' }));
+    setOwner('tile'); ownerRef.current = 'tile';
+    setTotal(seconds);
+    setRemaining(Math.ceil((endsAt - Date.now()) / 1000));
+    setIsRunning(true);
+    intervalRef.current = setInterval(tick, 250);
+  }, [tick]);
+
   const stop = useCallback(() => {
+    const wasRunning = !!endsAtRef.current;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -80,7 +97,7 @@ export function TimerProvider({ children }) {
     setOwner(null); ownerRef.current = null;
     setRemaining(0);
     setTotal(0);
-    tellNative();
+    if (wasRunning) tellNative();
   }, [tellNative]);
 
   const extend = useCallback((seconds) => {
@@ -127,14 +144,17 @@ export function TimerProvider({ children }) {
   // Its notification buttons (+15 s, Skip) come back here.
   useEffect(() => {
     const offReady = native.onReady(() => {
-      if (endsAtRef.current) native.send({ t: 'rest', endsAt: endsAtRef.current, total: Math.round((moodState.rest?.total || 0) / 1000) });
+      native.send({ t: 'state', endsAt: endsAtRef.current, total: Math.round((moodState.rest?.total || 0) / 1000) });
     });
     const offMsg = native.subscribe((m) => {
+      if (m.t === 'rest-start') { adopt(m.endsAt, m.total); return; }
+      // A button press can arrive late: it only counts for the rest it was pressed on.
+      if (!endsAtRef.current || Math.abs(m.endsAt - endsAtRef.current) > 1500) return;
       if (m.t === 'rest-skip') stop();
       else if (m.t === 'rest-add') extend(15);
     });
     return () => { offReady(); offMsg(); };
-  }, [stop, extend]);
+  }, [stop, extend, adopt]);
 
   useEffect(() => {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };

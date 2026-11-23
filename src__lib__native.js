@@ -3,11 +3,13 @@
 // Chrome gives a verified app this origin (seen on Chrome 152: host only, no package) and an empty first message.
 const APP = typeof window !== 'undefined' && `android-app://${window.location.hostname}`;
 let port = null;
+let rings = false; // until the app says its notifications can sound, this page does the beeping
 const subs = new Set();
 const ready = new Set();
 
 export const native = {
   get on() { return !!port; },
+  get rings() { return !!port && rings; },
   send(msg) { try { port?.postMessage(JSON.stringify(msg)); } catch { /* app went away */ } },
   /** fn(msg) for every message from the app. Returns an unsubscribe. */
   subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
@@ -18,10 +20,12 @@ export const native = {
 if (typeof window !== 'undefined') {
   const take = (p) => {
     port = p;
+    rings = false;
     port.onmessage = (m) => {
       let msg;
       try { msg = JSON.parse(m.data); } catch { return; }
-      if (msg && typeof msg.t === 'string') subs.forEach((fn) => fn(msg));
+      if (msg?.t === 'can-ring') rings = msg.v === true;
+      else if (msg && typeof msg.t === 'string') subs.forEach((fn) => fn(msg));
     };
     native.send({ t: 'hello' }); // the app keeps offering until it hears this
     ready.forEach((fn) => fn());
