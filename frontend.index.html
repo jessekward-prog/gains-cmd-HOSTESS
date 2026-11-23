@@ -66,6 +66,21 @@
     } catch (e) {}
   </script>
 
+  <script>
+    // A saved page whose files are gone can't start: drop the saved copies and fetch fresh, once.
+    (function () {
+      function recover() {
+        try {
+          if (document.querySelector('#root > *') || sessionStorage.getItem('gains-boot-retry')) return;
+          sessionStorage.setItem('gains-boot-retry', '1');
+          caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); }).then(function () { location.reload(); });
+        } catch (e) {}
+      }
+      window.addEventListener('vite:preloadError', recover);
+      window.addEventListener('error', function (e) { if (e.target && e.target.tagName === 'SCRIPT') recover(); }, true);
+    })();
+  </script>
+
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
