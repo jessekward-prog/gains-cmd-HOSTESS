@@ -1,12 +1,14 @@
-const CACHE_NAME = 'gains-cmd-v7';
+const CACHE_NAME = 'gains-cmd-v8';
 
 // Sounds that must play the instant they're called: stored at install, then
 // always answered from the phone, never the network.
 const INSTANT = ['/slow-down.mp3'];
+// Shown from the phone straight away, then refreshed for the next open.
+const SPLASH = '/boot-splash.html';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(INSTANT)).catch(() => {}));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([...INSTANT, SPLASH])).catch(() => {}));
 });
 
 self.addEventListener('activate', (event) => {
@@ -27,6 +29,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname === SPLASH) {
+    const fresh = fetch(event.request).then((response) => {
+      if (!response.ok) return response;
+      const clone = response.clone();
+      return caches.open(CACHE_NAME).then((cache) => cache.put(SPLASH, clone)).then(() => response);
+    });
+    event.waitUntil(fresh.catch(() => {}));
+    event.respondWith(caches.match(SPLASH).then((hit) => hit || fresh));
+    return;
+  }
+
   // App shell: network first (the server sends no-store so deploys land
   // immediately), but keep the last copy so the app still opens with no
   // signal at the gym.
@@ -34,8 +47,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Keyed by URL: the boot-splash iframe is a navigation too, and
-          // must not overwrite the app shell.
+          // Keyed by URL: a navigation to any other page must not overwrite
+          // the app shell.
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));

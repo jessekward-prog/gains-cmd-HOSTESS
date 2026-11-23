@@ -19,10 +19,10 @@
   <meta name="twitter:card" content="summary" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <style>
     body { background: #0a0700; }
-    #boot-splash { position:fixed; inset:0; z-index:9999; border:none; width:100%; height:100%; }
+    #boot-splash { position:fixed; inset:0; z-index:9999; background:#000; transition:opacity .15s; }
   </style>
 </head>
 <body>
@@ -36,12 +36,26 @@
         (deskPref !== 'phone' && (window.matchMedia ? window.matchMedia('(min-width: 980px)').matches : window.innerWidth >= 980))
       );
       if (!isDesk && localStorage.getItem('gains-cmd-banner-enabled') !== 'false') {
-        var splash = document.createElement('iframe');
+        var splash = document.createElement('div');
         splash.id = 'boot-splash';
-        splash.title = 'Boot splash';
-        splash.src = '/boot-splash.html';
+        splash.setAttribute('aria-hidden', 'true');
         document.body.appendChild(splash);
-        setTimeout(function () { splash.remove(); }, 3800);
+        var close = function () { splash.style.opacity = 0; setTimeout(function () { splash.remove(); }, 150); };
+        setTimeout(close, 3800);
+        // Stay black until the app has something to show, so its "Loading..." never does.
+        var closeWhenReady = function () {
+          if (document.querySelector('#root > *') && !document.querySelector('[data-booting]')) close();
+          else setTimeout(closeWhenReady, 50);
+        };
+        // In this document, not an iframe: Chrome holds the Android app's own splash until the top page paints content.
+        fetch('/boot-splash.html').then(function (r) { if (!r.ok) throw r; return r.text(); }).then(function (html) {
+          var box = document.createElement('div');
+          box.innerHTML = html;
+          splash.attachShadow({ mode: 'open' }).appendChild(box);
+          return Promise.all(box.getAnimations({ subtree: true })
+            .filter(function (a) { return a.effect.getComputedTiming().endTime !== Infinity; })
+            .map(function (a) { return a.finished; }));
+        }).then(closeWhenReady, closeWhenReady);
       }
     } catch (e) {}
   </script>

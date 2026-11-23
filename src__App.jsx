@@ -184,7 +184,7 @@ function AppContent() {
 
   if (authLoading || (user && dataLoading)) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-bg-0">
+      <div data-booting className="min-h-dvh flex items-center justify-center bg-bg-0">
         <div className="text-center">
           <div className="mb-4 animate-pulse text-text-tertiary">
             <NavIcon id="workout" size={40} />

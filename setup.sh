@@ -14,7 +14,7 @@ done
 
 [ -f "vite.config.js" ] && cp vite.config.js frontend/vite.config.js
 [ -f "frontend.index.html" ] && cp frontend.index.html frontend/index.html
-[ -f "frontend.public__boot-splash.html" ] && mkdir -p frontend/public && cp frontend.public__boot-splash.html frontend/public/boot-splash.html
+[ -f "frontend.public__boot-splash.html" ] && mkdir -p frontend/public && node flatten-splash.mjs frontend.public__boot-splash.html frontend/public/boot-splash.html
 
 cat > frontend/package.json << 'EOF'
 {
