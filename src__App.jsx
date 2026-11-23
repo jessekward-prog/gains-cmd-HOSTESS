@@ -142,6 +142,22 @@ function AppShell() {
   );
 }
 
+// The Android app's long-press shortcuts open /?tab=…, and its share target /?share_text=…: hand them to the
+// navigator's reload restore. Shared text goes to Import when it carries a share code, otherwise to the Coach.
+if (typeof window !== 'undefined') {
+  const q = new URLSearchParams(window.location.search);
+  const shared = ['share_title', 'share_text', 'share_url'].map((k) => q.get(k)).filter(Boolean).join('\n').slice(0, 2000);
+  const code = shared.match(/\b[A-HJ-NP-Z2-9]{6}\b/)?.[0];
+  const wanted = shared ? (code ? 'programs' : 'coach') : q.get('tab');
+  if (['workout', 'quest', 'history', 'coach', 'programs'].includes(wanted)) {
+    try {
+      if (shared) sessionStorage.setItem('gains-beta-share', code || shared);
+      sessionStorage.setItem('gains-beta-active-tab', wanted);
+      window.history.replaceState(null, '', '/');
+    } catch {}
+  }
+}
+
 // Clean legacy /desk bookmarks or ?phone links silently so the app stays at /.
 if (typeof window !== 'undefined' && (window.location.pathname.startsWith('/desk') || new URLSearchParams(window.location.search).has('phone'))) {
   try { window.history.replaceState(null, '', '/'); } catch {}

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { takeShare } from '../lib/share';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkout } from '../context/WorkoutContext';
@@ -803,8 +804,9 @@ export default function ProgramsPage({ onNavigate }) {
   const [shareModal, setShareModal] = useState(null); // { code, workoutName, expiresAt }
   const [shareLoading, setShareLoading] = useState(false);
   // Import code
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importCode, setImportCode] = useState('');
+  const [showImportModal, setShowImportModal] = useState(() => !!takeShare(false));
+  const [importCode, setImportCode] = useState(() => takeShare(false));
+  useEffect(() => { takeShare(); }, []);
   const [importLoading, setImportLoading] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importError, setImportError] = useState('');

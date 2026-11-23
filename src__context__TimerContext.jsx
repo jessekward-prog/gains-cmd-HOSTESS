@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import { moodState } from '../lib/mood';
+import { native } from '../lib/native';
 
 const TimerContext = createContext(null);
 
@@ -21,6 +22,11 @@ export function TimerProvider({ children }) {
 
   // Deadline-based: iOS suspends JS when the app is backgrounded, so a
   // decrementing counter drifts/freezes. Remaining is derived from the clock.
+  // In the Android app the rest also runs natively, so it rings with the screen off.
+  const tellNative = useCallback((total) => {
+    native.send(endsAtRef.current ? { t: 'rest', endsAt: endsAtRef.current, total } : { t: 'rest-stop' });
+  }, []);
+
   const tick = useCallback(() => {
     const left = Math.ceil((endsAtRef.current - Date.now()) / 1000);
     if (left > 0) {
@@ -29,6 +35,9 @@ export function TimerProvider({ children }) {
     }
     clearInterval(intervalRef.current);
     intervalRef.current = null;
+    // The app rings 1s after the deadline unless told to stop: on time and on screen this page rings
+    // instead, otherwise the app has it.
+    const appRings = native.on && (document.hidden || Date.now() - endsAtRef.current > 1000);
     endsAtRef.current = 0;
     moodState.rest = null;
     localStorage.removeItem(STORAGE_KEY);
@@ -36,13 +45,14 @@ export function TimerProvider({ children }) {
     setIsRunning(false);
     setOwner(null); ownerRef.current = null;
     setEndedAt(Date.now());
-    try {
+    if (!appRings) tellNative();
+    if (!appRings) try {
       const audio = window.cachedTimerSound || new Audio('/timer-sound.mp3');
       audio.currentTime = 0;
       audio.play().catch(() => {});
     } catch {}
     onCompleteRef.current?.();
-  }, []);
+  }, [tellNative]);
 
   const start = useCallback((seconds, onComplete, ownerId = null) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -55,7 +65,8 @@ export function TimerProvider({ children }) {
     setRemaining(seconds);
     setIsRunning(true);
     intervalRef.current = setInterval(tick, 250);
-  }, [tick]);
+    tellNative(seconds);
+  }, [tick, tellNative]);
 
   const stop = useCallback(() => {
     if (intervalRef.current) {
@@ -69,7 +80,8 @@ export function TimerProvider({ children }) {
     setOwner(null); ownerRef.current = null;
     setRemaining(0);
     setTotal(0);
-  }, []);
+    tellNative();
+  }, [tellNative]);
 
   const extend = useCallback((seconds) => {
     if (!endsAtRef.current) return;
@@ -78,10 +90,11 @@ export function TimerProvider({ children }) {
       const next = t + seconds;
       moodState.rest = { end: endsAtRef.current, total: next * 1000 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ endsAt: endsAtRef.current, total: next, owner: ownerRef.current }));
+      tellNative(next);
       return next;
     });
     tick();
-  }, [tick]);
+  }, [tick, tellNative]);
 
   // Restore a timer that outlived the page — iOS can evict the PWA entirely,
   // which drops the in-memory deadline. An already-expired timer is discarded
@@ -109,6 +122,19 @@ export function TimerProvider({ children }) {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [tick]);
+
+  // The app connects after the page has loaded, and again after a reload; it may have missed a start.
+  // Its notification buttons (+15 s, Skip) come back here.
+  useEffect(() => {
+    const offReady = native.onReady(() => {
+      if (endsAtRef.current) native.send({ t: 'rest', endsAt: endsAtRef.current, total: Math.round((moodState.rest?.total || 0) / 1000) });
+    });
+    const offMsg = native.subscribe((m) => {
+      if (m.t === 'rest-skip') stop();
+      else if (m.t === 'rest-add') extend(15);
+    });
+    return () => { offReady(); offMsg(); };
+  }, [stop, extend]);
 
   useEffect(() => {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };

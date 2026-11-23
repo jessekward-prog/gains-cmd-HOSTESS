@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { takeShare } from '../lib/share';
 import { motion, AnimatePresence } from 'framer-motion';
 import { marked } from 'marked';
 import { pageVariants } from '../lib/variants';
@@ -18,7 +19,8 @@ function renderText(text) {
 
 export default function CoachPage() {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => takeShare(false));
+  useEffect(() => { takeShare(); }, []);
   const [loading, setLoading] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const messagesEndRef = useRef(null);
