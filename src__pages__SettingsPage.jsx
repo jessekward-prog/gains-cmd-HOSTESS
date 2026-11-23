@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, THEMES, ACCENT_COLORS, FONTS, loadFontPreviews } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
@@ -22,6 +22,8 @@ import { workoutLayout as readLayout } from '../lib/focus';
 import { WAVE_KEY, readWaveStyle } from '../components/WaveBackground';
 import { moodState } from '../lib/mood';
 import { GREETING_KEY, readGreeting, defaultGreeting } from '../lib/greeting';
+import { native } from '../lib/native';
+import { readRemind, saveRemind } from '../lib/upnext';
 import { useScreenFit, MIN_W, toggleDeskLayout } from '../lib/fit';
 
 const MONO = 'var(--font-mono)';
@@ -195,6 +197,8 @@ export default function SettingsPage() {
           <Segmented value={bannerEnabled} onChange={setBannerEnabled} options={[[true, 'On'], [false, 'Off']]} />
         </Section>
 
+        <AndroidSection />
+
         {!isInstalled && canInstall && (
           <Section title="Install app">
             <p className="mt-2.5 mb-3 text-[13px] text-text-secondary" style={{ lineHeight: 1.5 }}>
@@ -244,6 +248,40 @@ export default function SettingsPage() {
         }}
       />
     </div>
+  );
+}
+
+// Only inside the Android app (lib/native.js).
+function AndroidSection() {
+  const [, redraw] = useState(0);
+  const [remind, setRemind] = useState(readRemind);
+  useEffect(() => {
+    const draw = () => redraw((n) => n + 1);
+    const offs = [native.onReady(draw), native.subscribe((m) => { if (m.t === 'can-ring') draw(); })];
+    return () => offs.forEach((f) => f());
+  }, []);
+  if (!native.on) return null;
+  const save = (r) => {
+    setRemind(r);
+    saveRemind(r);
+    native.send({ t: 'remind', ...r, ask: true });
+  };
+  return (
+    <Section title="Android app">
+      <div className="g-label mb-2" style={{ fontSize: 9 }}>REMIND ME AFTER DAYS WITHOUT A WORKOUT</div>
+      <Segmented value={remind.days} onChange={(days) => save({ ...remind, days })} options={[[0, 'Off'], [1, '1'], [2, '2'], [3, '3'], [4, '4']]} />
+      {remind.days > 0 && (
+        <>
+          <div className="g-label mt-4 mb-2" style={{ fontSize: 9 }}>AT</div>
+          <input type="time" value={remind.at} onChange={(e) => e.target.value && save({ ...remind, at: e.target.value })} aria-label="Reminder time"
+            className="w-full h-12 px-4 rounded-[15px] bg-bg-2 text-text-primary text-sm outline-none focus:ring-1 focus:ring-accent/40" />
+        </>
+      )}
+      <p className="mt-2 text-text-tertiary" style={{ font: `400 10px/1.5 ${MONO}` }}>
+        {remind.days > 0 && native.blocked ? 'Android is blocking notifications from Gains. Turn them on in Android settings. ' : ''}
+        For the widget, hold an empty spot on your home screen, then Widgets, Gains_CMD.
+      </p>
+    </Section>
   );
 }
 

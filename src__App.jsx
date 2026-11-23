@@ -22,6 +22,7 @@ import { workoutLayout } from './lib/focus';
 import { observePage, useDeskLayout } from './lib/fit';
 import { moodState } from './lib/mood';
 import { native } from './lib/native';
+import { homeMessage, readRemind } from './lib/upnext';
 import { stageArt } from './components/QuestStage';
 import { warmQuestSprites } from './hooks/useQuestSprites';
 import useQuest, { readTint } from './hooks/useQuest';
@@ -35,7 +36,7 @@ import AggressionPage from './pages/AggressionPage';
 import DeskApp from './desk/DeskApp';
 
 function AppShell() {
-  const { activeWorkout } = useWorkout();
+  const { activeWorkout, programs, workoutHistory, settings } = useWorkout();
   const { tab, navigate } = useNavigation();
   const [navExpanded, setNavExpanded] = useState(false);
 
@@ -59,6 +60,18 @@ function AppShell() {
   // pop. Recolour at idle from whatever screen you're on instead: the cache is
   // keyed on the same skin and jobs, so the stage is painted before the wave starts.
   const { prof, ready } = useQuest();
+
+  // The app's widget and reminder. Not the whole workout: it changes with every set.
+  const activeName = activeWorkout?.workoutName, startTime = activeWorkout?.startTime;
+  const profile = settings?.quest?.profile; // `prof` is a new object every render
+  useEffect(() => {
+    if (!programs.length && !workoutHistory.length) return undefined; // nothing loaded: keep what the app has
+    return native.onReady(() => native.send(homeMessage({
+      programs, workoutHistory, prof: profile, activeWorkout: activeName ? { workoutName: activeName, startTime } : null,
+    })));
+  }, [programs, workoutHistory, profile, activeName, startTime]);
+  useEffect(() => native.onReady(() => native.send({ t: 'remind', ...readRemind() })), []);
+
   useEffect(() => {
     if (inQuest || !ready) return undefined;
     const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
@@ -180,7 +193,7 @@ function AppContent() {
   }, [user, authLoading, loadAll]);
 
   // Signed out: the app must not reopen itself in the middle of a Google sign-in.
-  useEffect(() => (authLoading || user ? undefined : native.onReady(() => native.send({ t: 'tab', tab: '' }))), [authLoading, user]);
+  useEffect(() => (authLoading || user ? undefined : native.onReady(() => { native.send({ t: 'tab', tab: '' }); native.send({ t: 'home', out: true }); })), [authLoading, user]);
 
   if (authLoading || (user && dataLoading)) {
     return (

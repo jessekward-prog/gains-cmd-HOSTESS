@@ -19,6 +19,7 @@ import { EXERCISE_LIST_ID } from '../components/ExerciseNameOptions';
 import { isMarker } from '../lib/history';
 import { supersetRows } from '../lib/supersets';
 import { estimateMinutes, daysAgo } from '../lib/focus';
+import { parseWorkouts, upNextOf } from '../lib/upnext';
 import { readGreeting, defaultGreeting } from '../lib/greeting';
 import WaveBackground from '../components/WaveBackground';
 import useRepStartPrompt from '../components/RepStartPrompt';
@@ -81,7 +82,6 @@ function PixelArrow() {
     </svg>
   );
 }
-const parseWorkouts = (p) => (typeof p?.workouts === 'string' ? JSON.parse(p.workouts) : p?.workouts || []);
 const initials = (name) => name.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
 function specials(exs = []) {
   const out = [];
@@ -1016,22 +1016,8 @@ export default function ProgramsPage({ onNavigate }) {
     });
   }, [selectedProgram, activeWorkout, startWorkout, showToast, onNavigate, showHeaderMessage, offerRepSensor]);
 
-  // "Up next": the workout after the one you did last, in that program's order.
   const sessions = useMemo(() => (workoutHistory || []).filter((w) => !isMarker(w)), [workoutHistory]);
-  const upNext = useMemo(() => {
-    const last = sessions[0];
-    const program = programs.find((p) => p.name === last?.program_name) || programs[0];
-    if (!program) return { line: 'Create a program to get started.' };
-    const ws = parseWorkouts(program);
-    const from = ws.findIndex((w) => w.name === last?.workout_name);
-    let index = from < 0 ? 0 : (from + 1) % ws.length;
-    for (let k = 0; k < ws.length && ws[index]?.variationOf; k++) index = (index + 1) % ws.length;
-    const workout = ws[index];
-    const line = last && workout
-      ? `${last.workout_name} was ${daysAgo(last.date)}. ${workout.name} is up next.`
-      : workout ? `${workout.name} is first up.` : 'Add a workout to this program to start.';
-    return { program, workout, index, line };
-  }, [sessions, programs]);
+  const upNext = useMemo(() => upNextOf(programs, sessions), [sessions, programs]);
   const [openProgram, setOpenProgram] = useState(() => upNext.program?.id ?? null);
   const today = new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const workoutMeta = (w, long, program = upNext.program) => {
