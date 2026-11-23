@@ -41,14 +41,20 @@
         splash.setAttribute('aria-hidden', 'true');
         document.body.appendChild(splash);
         var close = function () { splash.style.opacity = 0; setTimeout(function () { splash.remove(); }, 150); };
-        setTimeout(close, 3800);
+        var cap = setTimeout(close, 3800); // splash never arrived
         // Stay black until the app has something to show, so its "Loading..." never does.
         var closeWhenReady = function () {
+          clearTimeout(cap);
+          cap = setTimeout(close, 3000);
+          poll();
+        };
+        var poll = function () {
           if (document.querySelector('#root > *') && !document.querySelector('[data-booting]')) close();
-          else setTimeout(closeWhenReady, 50);
+          else if (splash.isConnected) setTimeout(poll, 50);
         };
         // In this document, not an iframe: Chrome holds the Android app's own splash until the top page paints content.
         fetch('/boot-splash.html').then(function (r) { if (!r.ok) throw r; return r.text(); }).then(function (html) {
+          clearTimeout(cap);
           var box = document.createElement('div');
           box.innerHTML = html;
           splash.attachShadow({ mode: 'open' }).appendChild(box);
