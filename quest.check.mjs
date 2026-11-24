@@ -276,3 +276,14 @@ console.log('boss checks passed');
   assert.equal(Q.repAnswered('100', null), false);
   console.log('rep tracker opt-in checks passed');
 }
+
+{
+  // A favourite's picture: its own card while owned, else an owned card by place; never an unowned one.
+  const v = { owned: { 2: 1, 39: 2, 7: 0 } };
+  assert.equal(Q.favCardId({ card: 2 }, 0, v), 2);
+  assert.equal(Q.favCardId({ card: 7 }, 0, v), 39);
+  assert.equal(Q.favCardId({}, 1, v), 2);
+  assert.equal(Q.favCardId({}, 2, v), 39);
+  assert.equal(Q.favCardId({ card: 5 }, 0, { owned: {} }), null);
+  console.log('favourite picture checks passed');
+}

@@ -5,23 +5,29 @@ import { useWorkout } from '../context/WorkoutContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
+import useQuestArt from '../hooks/useQuestArt';
+import useBackHandler from '../hooks/useBackHandler';
 import QuestStage from './QuestStage';
 import ConfirmDialog from './ConfirmDialog';
 import useRepStartPrompt from './RepStartPrompt';
 import QuestHeroCard, { MiniHeroCard } from './QuestHeroCard';
 import { isMarker } from '../lib/history';
 import { buildBlocks } from '../lib/focus';
-import { lvTitle, tierOf } from '../lib/quest';
-import BossPanel from './BossPanel';
+import { lvTitle, tierOf, monsOf, favCardId } from '../lib/quest';
+import BossPanel, { BOSS_H } from './BossPanel';
+import QuestFan, { FAN_ROW_H } from './QuestFan';
+import DitherCard, { effCard } from './DitherCard';
+import { CARDS, RAR } from '../lib/dither';
 import TypewriterName from './TypewriterName';
 import Ticker from './Ticker';
-import { usePageH, stageScale } from '../lib/fit';
+import { usePageH, stageScale, STAGE_H } from '../lib/fit';
 import { aggressionOf } from '../lib/levelup';
 import { autoCapable, autoOn, setAutoWeight } from '../lib/autofail';
 import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
+const FAN_IDEAL = 256, FAN_MIN = 200, FAN_MAX = 340, FAN_GROWN = 540, TITLE_MIN_K = 0.64;
 const newGroupId = () => Math.random().toString(36).slice(2, 8);
 // A group of one is not a group: drop its id so it renders as a plain favourite.
 const tidy = (list) => list.map((f) => {
@@ -32,7 +38,7 @@ const tidy = (list) => list.map((f) => {
 
 // Identity of a favourite in the saved list: [program, workout].
 const keyOf = (p, w) => JSON.stringify([p, w]);
-const SHEET_TITLE = { auto: 'Auto weight per workout', autoEx: 'Auto weight', menu: 'Options', reorder: 'Reorder', group: 'Create group', editGroup: 'Edit group', rename: 'Rename workout', remove: 'Remove favourites' };
+const SHEET_TITLE = { auto: 'Auto weight per workout', autoEx: 'Auto weight', menu: 'Options', reorder: 'Reorder', group: 'Create group', editGroup: 'Edit group', rename: 'Rename workout', remove: 'Remove favourites', picture: 'Picture' };
 const FAV_ACTIONS = [['reorder', 'Reorder'], ['group', 'Create group'], ['editGroup', 'Edit group'], ['rename', 'Rename a favourite'], ['remove', 'Remove favourites']];
 // Moves the selected favourites together at the first selected one's place, all in `gid`.
 const placeTogether = (list, keys, gid) => {
@@ -58,7 +64,8 @@ export default function QuestTitle({ onNavigate }) {
   const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings, reloadPrograms, reloadSettings } = useWorkout();
   const agg = aggressionOf(settings);
   const { showToast } = useToast();
-  const { prof, updProf } = useQuest();
+  const { prof, vault, updProf } = useQuest();
+  const art = useQuestArt();
   const { questSkin } = useTheme();
   const { offer: offerSensor, prompts } = useRepStartPrompt();
 
@@ -120,8 +127,14 @@ export default function QuestTitle({ onNavigate }) {
     read();
     return () => ro.disconnect();
   }, []);
-  const LIST_PEEK = 112; // the top of the boss panel or the first favourite
-  const stageK = stageScale(pageH && chrome != null ? pageH - chrome - LIST_PEEK : null);
+  const bossRef = useRef(null);
+  const [bossH, setBossH] = useState(0);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !bossRef.current) return undefined;
+    const ro = new ResizeObserver(([e]) => setBossH(e.contentRect.height));
+    ro.observe(bossRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // Favourites: pinned in order, with an optional quest-only alias and an
   // optional group id `g`. Drop any whose program or workout has since been
@@ -131,6 +144,17 @@ export default function QuestTitle({ onNavigate }) {
     const i = pg ? parse(pg).findIndex((w) => w.name === f.w) : -1;
     return i >= 0 ? { ...f, pg, i, w: parse(pg)[i] } : null;
   }).filter(Boolean), [prof.favs, programs]);
+
+  // With favourites the stage, the boss and the cards share one screen: the stage
+  // gives up height first, then the cards. An opened boss panel isn't counted, so
+  // reading it never resizes the stage.
+  const LIST_PEEK = 112; // without favourites: the top of the boss panel
+  const boss = Math.min(bossH, BOSS_H);
+  const bezel = questSkin?.st.bezel ? 24 : 0;
+  const room = pageH && chrome != null ? pageH - chrome - (boss ? boss + 10 : 0) - FAN_ROW_H - 12 - bezel : null;
+  const stageK = favs.length ? stageScale(room == null ? null : room - FAN_IDEAL, TITLE_MIN_K)
+    : stageScale(pageH && chrome != null ? pageH - chrome - LIST_PEEK : null);
+  const fanH = room == null ? FAN_IDEAL : Math.round(Math.max(FAN_MIN, Math.min(FAN_MAX, room - STAGE_H * stageK)));
 
   const last = useMemo(() => (workoutHistory || []).find((w) => !isMarker(w)), [workoutHistory]);
   const isLast = (f) => f.p === last?.program_name && f.w.name === last?.workout_name;
@@ -171,6 +195,7 @@ export default function QuestTitle({ onNavigate }) {
   const [sel, setSel] = useState([]); // favourite keys ticked inside the sheet
   const [autoPick, setAutoPick] = useState(null); // { programId, index } open in Auto weight
   const [editGid, setEditGid] = useState(null); // the group being edited
+  const [picFor, setPicFor] = useState(null); // key of the favourite choosing its picture
   const program = programs.find((p) => p.id === pick?.programId) || upNext?.program;
   const index = pick?.index ?? (program === upNext?.program ? upNext?.index : 0) ?? 0;
   const ws = program ? parse(program).map((w, i) => [w, i]) : [];
@@ -222,7 +247,34 @@ export default function QuestTitle({ onNavigate }) {
     try { await api.updateProgram(autoPg.id, autoPg.name, setAutoWeight(parse(autoPg), autoPick.index, idxs, value)); await reloadPrograms(); }
     catch (e) { showToast('Error: ' + e.message, 'error'); }
   };
+  useBackHandler(favSheet === 'picture', closeSheet);
+  const setPicture = (id) => updProf((pr) => ({ ...pr, favs: (pr.favs || []).map((f) => {
+    if (keyOf(f.p, f.w) !== picFor) return f;
+    const { card, ...rest } = f;
+    return id ? { ...rest, card: id } : rest;
+  }) })).catch((e) => showToast('Not saved: ' + e.message, 'error'));
   const toggleSel = (k) => setSel((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+
+  // The fan's cards, rebuilt only when what they show changes.
+  const fan = useMemo(() => favs.map((f, i) => {
+    const exs = f.w.exercises || [];
+    const blocks = buildBlocks(exs.map((e) => ({ ...e, sets: [] })));
+    const sets = exs.reduce((a, e) => a + (Number(e.sets) || 0), 0);
+    const autoN = exs.filter((e) => autoOn(e, agg)).length;
+    const c = CARDS[favCardId(f, i, vault) - 1];
+    const mons = monsOf(prof.theme);
+    return {
+      key: keyOf(f.p, f.w.name), name: f.alias || f.w.name, count: exs.length,
+      g: f.g && favs.filter((x) => x.g === f.g).length > 1 ? f.g : null,
+      next: nextFav?.p === f.p && nextFav?.w.name === f.w.name,
+      info: `${blocks.length} monster${blocks.length === 1 ? '' : 's'}${sets ? ` · ${sets} sets` : ''}${autoN ? ` · AUTO ${autoN}/${exs.filter(autoCapable).length}` : ''}`,
+      card: c && effCard(c, art[c.id]), img: c && art[c.id]?.img,
+      rows: blocks.map((b, bi) => ({
+        sprite: mons[bi % mons.length][0],
+        lines: b.indices.map((x) => [exs[x].name, [exs[x].sets, exs[x].repRange].filter(Boolean).join(' × ')]),
+      })),
+    };
+  }), [favs, vault, art, prof.theme, nextFav, settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tier = tierOf(prof.lvl);
   const start = async () => {
@@ -245,9 +297,8 @@ export default function QuestTitle({ onNavigate }) {
   const headerName = ws.find(([, i]) => i === index)?.[0]?.name;
   const headerAlias = program && headerName && aliasOf(program.name, headerName);
 
-  // One workout button. In favourites edit mode the row gets its controls;
-  // everything else gets the star to pin it.
-  const workoutRow = (pg, w, i, { asFav = false, keyPrefix = '', nextUp = false }) => {
+  // One workout button, with the star to pin it.
+  const workoutRow = (pg, w, i) => {
     const on = pg === program && i === index;
     const fav = isFav(pg.name, w.name);
     const alias = aliasOf(pg.name, w.name);
@@ -257,7 +308,7 @@ export default function QuestTitle({ onNavigate }) {
     const autoN = exs.filter((e) => autoOn(e, agg)).length, autoOf = exs.filter(autoCapable).length;
     const info = `${alias ? `${w.name} · ` : ''}${buildBlocks(exs.map((e) => ({ ...e, sets: [] }))).length} monsters${sets ? ` · ${sets} sets` : ''}${autoN ? ` · AUTO ${autoN}/${autoOf}` : ''} · ${exs.map((e) => e.name).join(' · ')}`;
     return (
-      <div key={`${keyPrefix}${pg.id}-${i}`} className="flex items-stretch gap-2">
+      <div key={`${pg.id}-${i}`} className="flex items-stretch gap-2">
         <button onClick={() => setPick({ programId: pg.id, index: i })} className="flex-1 min-w-0 flex items-center gap-2 px-4 py-3.5 rounded-[18px] text-left"
           style={{ background: on ? 'rgba(255,34,34,.08)' : 'var(--color-bg-2)', boxShadow: `inset 0 0 0 1.5px ${on ? 'var(--color-accent)' : 'transparent'}` }}>
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: on ? 'var(--color-accent)' : '#333' }} />
@@ -265,29 +316,17 @@ export default function QuestTitle({ onNavigate }) {
             <span className="block truncate" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{name}</span>
             {/* The picked row scrolls its whole line like a ticker tape; the rest truncate. */}
             <span className={`mt-0.5 text-text-secondary ${on ? 'flex min-w-0' : 'block truncate'}`} style={{ font: `400 11px ${MONO}` }}>
-              {nextUp && <span className="text-accent flex-shrink-0 whitespace-pre">UP NEXT · </span>}
               {on ? <Ticker>{info}</Ticker> : info}
             </span>
           </span>
         </button>
-        {!asFav && (
-          <button aria-label={fav ? 'Unpin from favourites' : 'Pin to favourites'} onClick={() => toggleFav(pg.name, w.name)}
-            className="flex-shrink-0 w-9 h-9 flex items-center justify-center self-center" style={{ fontSize: 18, color: fav ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}>
-            {fav ? '★' : '☆'}
-          </button>
-        )}
+        <button aria-label={fav ? 'Unpin from favourites' : 'Pin to favourites'} onClick={() => toggleFav(pg.name, w.name)}
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center self-center" style={{ fontSize: 18, color: fav ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}>
+          {fav ? '★' : '☆'}
+        </button>
       </div>
     );
   };
-
-  // Favourites in list order, with each run of same-group members boxed together.
-  const favChunks = [];
-  favs.forEach((f) => {
-    const prev = favChunks.at(-1);
-    const grouped = !!f.g && favs.filter((x) => x.g === f.g).length > 1;
-    if (grouped && prev?.g === f.g) prev.items.push(f);
-    else favChunks.push({ g: grouped ? f.g : null, items: [f] });
-  });
 
   return (
     // The screen decodes in through a character grid instead of snapping on.
@@ -318,32 +357,19 @@ export default function QuestTitle({ onNavigate }) {
           card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} scale={stageK} />
         </div>
 
-        <BossPanel />
+        <div ref={bossRef} className="flex-shrink-0 empty:hidden"><BossPanel /></div>
 
         {favs.length > 0 && (
-          <div data-ascii="favs" className="flex-shrink-0 bg-bg-1 rounded-[28px] q-card p-5">
-            <div>
-              <div className="flex items-center justify-between px-1 pb-2">
-                <div className="text-text-tertiary" style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>FAVOURITES</div>
+          <div data-ascii="favs" className="flex-shrink-0">
+            <QuestFan items={fan} index={favs.findIndex((f) => f.pg === program && f.i === index)}
+              height={fanH} grow={Math.max(0, Math.min(FAN_GROWN - fanH, STAGE_H * stageK + boss))}
+              menu={(
                 <button onClick={() => setFavSheet('menu')} aria-label="Favourites options"
-                  className="w-8 h-8 -my-2 -mr-1 rounded-[8px] text-text-tertiary active:bg-bg-2 flex items-center justify-center"
+                  className="w-11 h-11 rounded-[8px] text-text-tertiary active:bg-bg-2 flex items-center justify-center"
                   style={{ font: `700 16px ${MONO}` }}>⋯</button>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {favChunks.map((chunk, ci) => {
-                  const rows = chunk.items.map(({ pg, w, i, ...f }) => workoutRow(pg, w, i, {
-                    asFav: true, keyPrefix: 'fav-', nextUp: nextFav?.p === f.p && nextFav?.w.name === w.name,
-                  }));
-                  if (!chunk.g) return <div key={ci} className="flex flex-col gap-1.5">{rows}</div>;
-                  return (
-                    <div key={ci} className="rounded-[22px] p-1.5 flex flex-col gap-1.5" style={{ boxShadow: 'inset 0 0 0 1.5px var(--color-accent)' }}>
-                      <div className="text-accent px-2 pt-0.5" style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>GROUP · {chunk.items.length} QUESTS</div>
-                      {rows}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+              )}
+              onPick={(k) => setPick({ programId: favs[k].pg.id, index: favs[k].i })}
+              onPicture={(k) => { setPicFor(keyOf(favs[k].p, favs[k].w.name)); setFavSheet('picture'); }} />
           </div>
         )}
         <div data-ascii="surface" className={`flex-shrink-0 bg-bg-1 rounded-[28px] q-card p-5 ${favs.length > 0 ? 'mt-2' : ''}`}>
@@ -394,7 +420,7 @@ export default function QuestTitle({ onNavigate }) {
                 )}
                 {(open || (groups.length === 1 && favs.length === 0)) && (
                   <div className="flex flex-col gap-1.5 fx-in">
-                    {parse(pg).map((w, i) => workoutRow(pg, w, i, {}))}
+                    {parse(pg).map((w, i) => workoutRow(pg, w, i))}
                   </div>
                 )}
               </div>
@@ -512,6 +538,32 @@ export default function QuestTitle({ onNavigate }) {
                     item('pick', 'Auto weight per workout', () => setFavSheet('auto'), '›'),
                     ...(favs.length ? FAV_ACTIONS.map(([mode, label]) => item(mode, label, () => { setSel([]); setEditGid(null); setFavSheet(mode); })) : []),
                   ])}
+                </>
+              );
+            })()}
+
+            {favSheet === 'picture' && (() => {
+              const cur = favs.find((f) => keyOf(f.p, f.w.name) === picFor);
+              if (!cur) return null;
+              const on = favCardId(cur, favs.indexOf(cur), vault);
+              return (
+                <>
+                  <div className="px-2 pb-3 font-bold truncate" style={{ fontSize: 17 }}>{cur.alias || cur.w.name}</div>
+                  <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))' }}>
+                    {CARDS.filter((c) => vault.owned[c.id]).map((c0) => {
+                      const c = effCard(c0, art[c0.id]);
+                      return (
+                        <button key={c.id} aria-pressed={c.id === on} onClick={() => setPicture(c.id)} className="min-w-0 text-left">
+                          <span className="block relative overflow-hidden" style={{ aspectRatio: '5 / 7', borderRadius: 12, background: '#0b0b0b', boxShadow: c.id === on ? '0 0 0 3px var(--color-text-primary)' : 'none' }}>
+                            <DitherCard card={c} img={art[c.id]?.img} still />
+                          </span>
+                          <span className="block truncate font-bold" style={{ marginTop: 6, fontSize: 13 }}>{c.name}</span>
+                          <span className="block" style={{ font: `400 11px ${MONO}`, color: RAR[c.rarity].col }}>{RAR[c.rarity].name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {cur.card && <button onClick={() => setPicture(null)} className="w-full mt-3 h-11 text-text-secondary font-bold">Use an automatic picture</button>}
                 </>
               );
             })()}

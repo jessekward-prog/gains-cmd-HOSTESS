@@ -310,6 +310,11 @@ export const FORGE_RIGHTS = {
   L: { pal: true, style: true, name: true, img: true },
 };
 export const RIGHTS_LABEL = { pal: 'COMMON+', style: 'RARE+', name: 'EPIC+', img: 'LEGENDARY' };
+/** A favourite's picture: the vault card you gave it, else an owned card by its place in the list. Ids of cards you don't own never show. */
+export const favCardId = (fav, i, vault) => {
+  const owned = Object.keys(vault?.owned || {}).map(Number).filter((id) => vault.owned[id] > 0).sort((a, b) => b - a);
+  return owned.includes(fav.card) ? fav.card : owned.length ? owned[i % owned.length] : null;
+};
 export const editsLeft = (vault, id) => Math.max(0, (vault.owned?.[id] || 0) - (vault.edits?.[id] || 0));
 
 // ── Random events ───────────────────────────────────────────────────
