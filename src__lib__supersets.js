@@ -200,3 +200,75 @@ export function linkSuperset(exercises = [], index, partnerName) {
   next[partnerIdx] = { ...next[partnerIdx], supersetWith: next[index].name };
   return next;
 }
+
+// ── Planner edits ───────────────────────────────────────────────────
+// Program exercises (sets is a number), edited on the desktop planner.
+
+// Everyone points at one anchor and the anchor points back. Links resolve to
+// the first exercise of a name, so a repeated exercise can link but not be linked to.
+function writeLinks(list, members) {
+  const isFirst = (i) => norm(list[i].name) && list.findIndex((e) => norm(e?.name) === norm(list[i].name)) === i;
+  const anchor = members.find(isFirst);
+  if (anchor === undefined) return false;
+  const back = members.find((i) => i !== anchor && isFirst(i));
+  members.forEach((i) => {
+    const to = i === anchor ? back : anchor;
+    list[i].supersetWith = to === undefined ? null : list[to].name;
+  });
+  return true;
+}
+
+/**
+ * Put exercises[index] in a superset with exercises[partner], or take it out of
+ * its superset when partner is null. Both sides are written, the group takes its
+ * first member's rest, and whoever is left behind stays a group if it still can.
+ */
+export function pairSuperset(exercises = [], index, partner = null) {
+  const own = supersetMembersOf(exercises, index) || [index];
+  if (partner !== null && own.includes(partner)) return exercises;
+  const join = partner === null ? [] : supersetMembersOf(exercises, partner) || [partner];
+  const left = own.filter((i) => i !== index);
+  const next = exercises.map((e) => ({ ...e }));
+  [...own, ...join].forEach((i) => { next[i].supersetWith = null; });
+  if (left.length > 1) writeLinks(next, left);
+  if (!join.length) return next;
+  const members = [index, ...join].sort((a, b) => a - b);
+  if (!writeLinks(next, members)) return exercises;
+  members.forEach((i) => { next[i].restSeconds = next[members[0]].restSeconds; });
+  return next;
+}
+
+/** Rename an exercise and the links its superset partners hold to it. */
+export function renameInSuperset(exercises = [], index, name) {
+  const members = supersetMembersOf(exercises, index) || [];
+  const old = norm(exercises[index].name);
+  return exercises.map((e, i) => (i === index ? { ...e, name }
+    : members.includes(i) && norm(e.supersetWith) === old ? { ...e, supersetWith: name } : e));
+}
+
+/** Index order that brings a superset together at its first member's place. */
+export function gatherOrder(exercises = [], index) {
+  const members = supersetMembersOf(exercises, index) || [index];
+  return exercises.flatMap((_, i) => (i === members[0] ? members : members.includes(i) ? [] : [i]));
+}
+
+/** Index order after moving a row up (-1) or down (1): inside its superset first, then as one block. */
+export function moveOrder(exercises = [], index, d) {
+  const order = exercises.map((_, i) => i);
+  const other = index + d;
+  if (other < 0 || other >= order.length) return order;
+  const block = (i) => {
+    const members = supersetMembersOf(exercises, i) || [i];
+    let a = i, b = i;
+    while (members.includes(a - 1)) a--;
+    while (members.includes(b + 1)) b++;
+    return [a, b];
+  };
+  const [a, b] = block(index);
+  if (other >= a && other <= b) { [order[index], order[other]] = [other, index]; return order; }
+  const [c, e] = block(other);
+  const lo = Math.min(a, c), hi = Math.max(b, e);
+  const [p, q] = d < 0 ? [[a, b], [c, e]] : [[c, e], [a, b]];
+  const run = ([x, y]) => order.slice(x, y + 1);
+  return [...order.slice(0, lo), ...run(p), ...run(q), ...order.slice(hi + 1)];
+}

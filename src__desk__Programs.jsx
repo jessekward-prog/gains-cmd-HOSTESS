@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import useQuest from '../hooks/useQuest';
 import { aggressionOf } from '../lib/levelup';
 import { autoCapable, autoOn } from '../lib/autofail';
+import { supersetMembersOf, pairSuperset, renameInSuperset, gatherOrder, moveOrder } from '../lib/supersets';
 import * as api from '../lib/api';
 import { MONO, Btn, TextIn, NumIn, Sel, ConfirmBtn, SaveBar, parseW, clone, allNames, NamesList } from './ui';
 
@@ -264,29 +265,34 @@ export default function DeskPrograms() {
   };
 
   const moveEx = (i, d) => {
-    setW((x) => ({ ...x, exercises: move(x.exercises, i, d) }));
-    if (expandedIdx === i) setExpandedIdx(i + d);
-    else if (expandedIdx === i + d) setExpandedIdx(i);
+    reorder(moveOrder(exList, i, d), exList);
   };
 
+  const reorder = (order, list) => {
+    setW((x) => ({ ...x, exercises: order.map((k) => list[k]) }));
+    if (expandedIdx != null) setExpandedIdx(order.indexOf(expandedIdx));
+  };
+
+  const pairWith = (i, partner) => {
+    const list = pairSuperset(exList, i, partner);
+    reorder(gatherOrder(list, i), list);
+  };
+
+  // A superset rests once, after the round, so its members share one rest value.
+  const setRest = (i, v) => {
+    const targets = supersetMembersOf(exList, i) || [i];
+    setW((x) => ({ ...x, exercises: x.exercises.map((e, k) => (targets.includes(k) ? { ...e, restSeconds: v } : e)) }));
+  };
+
+  const setSets = (i, v) => setEx(i, (x) => ({ ...x, sets: v ?? 1, failureIndices: (x.failureIndices || []).filter((f) => f < (v ?? 1)) }));
+
   const removeEx = (i) => {
-    setW((x) => ({ ...x, exercises: x.exercises.filter((_, k) => k !== i) }));
+    setW((x) => ({ ...x, exercises: pairSuperset(x.exercises, i, null).filter((_, k) => k !== i) }));
     if (expandedIdx === i) setExpandedIdx(null);
     else if (expandedIdx != null && expandedIdx > i) setExpandedIdx(expandedIdx - 1);
   };
 
   const exList = w?.exercises || [];
-  const exNames = exList.map((e) => e.name).filter(Boolean);
-  const supersetPartnerMap = useMemo(() => {
-    const m = new Map();
-    for (const ex of exList) {
-      if (ex.name && ex.supersetWith) {
-        m.set(ex.name, ex.supersetWith);
-        if (!m.has(ex.supersetWith)) m.set(ex.supersetWith, ex.name);
-      }
-    }
-    return m;
-  }, [exList]);
 
   const hasVars = ws.some((x) => x.variationOf);
 
@@ -586,9 +592,11 @@ export default function DeskPrograms() {
                       if (expandedAll) { setExpandedAll(false); setExpandedIdx(i); }
                       else setExpandedIdx(expandedIdx === i ? null : i);
                     };
-                    const partner = e.supersetWith || supersetPartnerMap.get(e.name);
-                    const isSuperset = !cardio && !!partner;
-                    const partnerIdx = e.supersetWith ? exList.findIndex((x) => x.name === e.supersetWith) : -1;
+                    const members = supersetMembersOf(exList, i);
+                    const partners = (members || []).filter((k) => k !== i);
+                    const setsOf = (k) => Math.max(1, Math.min(12, Number(exList[k].sets) || 1));
+                    const counts = (members || []).map(setsOf);
+                    const together = Math.min(...counts), rounds = Math.max(...counts);
 
                     const kindLabel = kind === 'drops' ? `DROP ×${e.numDrops || 1}`
                       : kind === 'bfr' ? `BFR ${e.bfrSeconds || 45}s`
@@ -603,26 +611,26 @@ export default function DeskPrograms() {
                       : null;
 
                     return (
-                      <div key={i} style={isSuperset ? { boxShadow: 'inset 2px 0 0 var(--g-ss, #4f8fe0)' } : undefined}>
+                      <div key={i} style={members ? { boxShadow: 'inset 2px 0 0 var(--g-ss, #4f8fe0)' } : undefined}>
                         {/* Main single-line row */}
                         <div className="group px-4 py-2 flex items-center gap-2 hover:bg-bg-2/40 transition-colors">
                           <span className="w-6 text-center text-[11px] font-mono text-text-tertiary tabular-nums shrink-0">{i + 1}</span>
 
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                          <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <input
                               ref={(el) => { nameRefs.current[i] = el; }}
                               type="text"
                               list="desk-names"
                               value={e.name}
                               placeholder="Exercise name"
-                              onChange={(ev) => setEx(i, { name: ev.target.value })}
-                              className={`flex-1 min-w-[200px] text-[14px] font-medium text-text-primary ${inlineField} -ml-2`}
+                              onChange={(ev) => setW((x) => ({ ...x, exercises: renameInSuperset(x.exercises, i, ev.target.value) }))}
+                              className={`flex-1 min-w-[min(200px,100%)] text-[14px] font-medium text-text-primary ${inlineField} -ml-2`}
                             />
-                            <div className="shrink-0 flex items-center gap-1">
+                            <div className="ml-auto flex flex-wrap justify-end items-center gap-1">
                               {kindLabel && <Chip onClick={toggleOpen} title="Exercise mode">{kindLabel}</Chip>}
-                              {e.supersetWith && (
-                                <Chip tone="ss" onClick={toggleOpen} title={`Superset with ${e.supersetWith}`}>
-                                  {partnerIdx >= 0 ? `SS · #${partnerIdx + 1}` : 'SS'}
+                              {members && (
+                                <Chip tone="ss" onClick={toggleOpen} title={`Superset with ${partners.map((k) => exList[k].name).join(' + ')}`}>
+                                  {`SS ${String.fromCharCode(65 + members.indexOf(i))} · ${partners.map((k) => `#${k + 1}`).join(' ')}`}
                                 </Chip>
                               )}
                               {failLabel && <Chip tone="accent" onClick={toggleOpen} title="Sets to failure">{failLabel}</Chip>}
@@ -641,10 +649,7 @@ export default function DeskPrograms() {
                                 max={12}
                                 value={e.sets ?? ''}
                                 onFocus={(ev) => ev.target.select()}
-                                onChange={(ev) => {
-                                  const v = ev.target.value === '' ? undefined : Number(ev.target.value);
-                                  setEx(i, { sets: v ?? 1, failureIndices: fails.filter((f) => f < (v ?? 1)) });
-                                }}
+                                onChange={(ev) => setSets(i, ev.target.value === '' ? undefined : Number(ev.target.value))}
                                 aria-label={`Sets for ${e.name || 'exercise'}`}
                                 className={`w-12 text-right text-[13px] font-mono tabular-nums ${inlineField}`}
                               />
@@ -685,7 +690,7 @@ export default function DeskPrograms() {
                                   step={15}
                                   value={e.restSeconds ?? ''}
                                   onFocus={(ev) => ev.target.select()}
-                                  onChange={(ev) => setEx(i, { restSeconds: ev.target.value === '' ? undefined : Number(ev.target.value) })}
+                                  onChange={(ev) => setRest(i, ev.target.value === '' ? undefined : Number(ev.target.value))}
                                   aria-label={`Rest seconds for ${e.name || 'exercise'}`}
                                   className={`w-[48px] text-right text-[13px] font-mono tabular-nums ${inlineField}`}
                                 />
@@ -750,7 +755,7 @@ export default function DeskPrograms() {
                                       <button
                                         key={k}
                                         type="button"
-                                        onClick={() => setEx(i, (x) => withKind(x, k))}
+                                        onClick={() => setW((x) => ({ ...x, exercises: (k === 'cardio' ? pairSuperset(x.exercises, i, null) : x.exercises).map((y, j) => (j === i ? withKind(y, k) : y)) }))}
                                         className={`px-2.5 py-1 rounded-md text-[12px] cursor-pointer transition-colors ${active ? 'bg-bg-3 text-text-primary border border-border-strong font-semibold' : 'text-text-secondary hover:text-text-primary border border-transparent'}`}
                                       >
                                         {l}
@@ -815,9 +820,10 @@ export default function DeskPrograms() {
                               {!cardio ? (
                                 <div>
                                   <div className="text-[10px] font-mono uppercase tracking-[.12em] text-text-tertiary mb-2">Superset partner</div>
-                                  <Sel value={e.supersetWith || ''} onChange={(ev) => setEx(i, { supersetWith: ev.target.value || null })} className="w-full text-[13px]">
+                                  <Sel aria-label={`Superset partner for ${e.name || 'exercise'}`} value={partners[0] ?? ''} disabled={!e.name.trim()} onChange={(ev) => pairWith(i, ev.target.value === '' ? null : Number(ev.target.value))} className="w-full text-[13px]">
                                     <option value="">None</option>
-                                    {exNames.filter((x) => x !== e.name).map((x) => <option key={x} value={x}>{x}</option>)}
+                                    {exList.map((x, k) => (k !== i && x.name.trim() && x.name.trim().toLowerCase() !== e.name.trim().toLowerCase() && kindOf(x) !== 'cardio'
+                                      ? <option key={k} value={k}>{`#${k + 1} ${x.name}`}</option> : null))}
                                   </Sel>
                                 </div>
                               ) : <div />}
@@ -848,6 +854,34 @@ export default function DeskPrograms() {
                                 </div>
                               ) : <div />}
                             </div>
+
+                            {/* Superset: sets for each exercise and the rest after a round */}
+                            {members && (
+                              <div className="rounded-xl border border-[#4f8fe0]/35 bg-[#4f8fe0]/8 px-4 py-3 flex flex-col gap-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] font-mono uppercase tracking-[.12em] text-[#7cb3f4]">Superset</span>
+                                  <span className="text-[12px] text-text-secondary flex-1 min-w-0">
+                                    {`${together} round${together === 1 ? '' : 's'} back to back`}
+                                    {rounds > together && `, then ${members.filter((k) => setsOf(k) > together).map((k) => `${setsOf(k) - together} extra ${exList[k].name}`).join(' and ')}`}
+                                  </span>
+                                  <Btn onClick={() => reorder(moveOrder(exList, members[0], 1), exList)} disabled={members.length !== 2 || members[1] !== members[0] + 1} className="px-2.5 py-1 text-[12px]">Swap order</Btn>
+                                  <Btn onClick={() => pairWith(i, null)} className="px-2.5 py-1 text-[12px]">Unlink</Btn>
+                                </div>
+                                {members.map((k, s) => (
+                                  <label key={k} className="flex items-center gap-3 text-[13px]">
+                                    <span className="w-4 font-mono text-[11px] text-[#7cb3f4]">{String.fromCharCode(65 + s)}</span>
+                                    <span className={`flex-1 min-w-0 truncate ${k === i ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>{exList[k].name}</span>
+                                    <NumIn value={exList[k].sets} min={1} max={12} onChange={(v) => setSets(k, v)} className="w-16 py-1" />
+                                    <span className="w-8 text-[11px] font-mono text-text-tertiary">sets</span>
+                                  </label>
+                                ))}
+                                <label className="flex items-center gap-3 text-[13px] pt-3 border-t border-[#4f8fe0]/25">
+                                  <span className="flex-1">Rest after each round</span>
+                                  <NumIn value={exList[members[0]].restSeconds} min={0} step={15} onChange={(v) => setRest(members[0], v)} className="w-16 py-1" />
+                                  <span className="w-8 text-[11px] font-mono text-text-tertiary">sec</span>
+                                </label>
+                              </div>
+                            )}
 
                             {/* Row 3: Custom per-set weight / reps */}
                             {['normal', 'drops'].includes(kind) && (

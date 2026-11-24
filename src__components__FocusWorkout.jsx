@@ -826,7 +826,7 @@ function Handoff({ exercises, blocks, from, to, stats, onGo }) {
   const normals = b0.sets.filter((s) => s.type !== 'drop').length;
   const st = stats[b0.name];
   const meta = b.kind === 'interval' ? `${b0.sets.length} × ${b0.sets[0]?.intervalWork || 30}s on / ${b0.sets[0]?.intervalRest || 30}s off`
-    : b.kind === 'superset' ? `${normals} rounds · A then B · ${restLabel(b0.restSeconds)} rest after B`
+    : b.kind === 'superset' ? `${supersetRounds(exercises, b.indices)} rounds · A then B · ${restLabel(b0.restSeconds)} rest after B`
     : b.kind === 'drop' ? `${normals} sets + ${b0.numDrops || 1} drop${(b0.numDrops || 1) > 1 ? 's' : ''} each · ${restLabel(b0.restSeconds)} rest`
     : b.kind === 'bfr' ? `${b0.sets.length} × ${b0.sets[0]?.bfrSeconds || 45}s timed · cuffs on`
     : b.kind === 'timed' ? `${b0.sets.length} × ${mmss(b0.sets[0]?.timedSec || 60)} timed · ${restLabel(b0.restSeconds)} rest`
@@ -936,12 +936,11 @@ export default function FocusWorkout({
   // Focus/Quest show a superset as one round: every member's set for the round
   // on the card at once, logged by one button. Dense keeps the A/B tabs.
   const roundMode = block.kind === 'superset' && !dense;
-  const lead0 = exercises[block.indices[0]];
   const roundDone = (r) => block.indices.every((i) => {
     const s0 = setIndexForRound(exercises[i], r);
     return s0 < 0 || (dropChain(exercises[i].sets, s0) || [s0]).every((j) => exercises[i].sets[j].completed);
   });
-  const rd = !roundMode ? -1 : fset != null && lead0.sets[fset] ? Math.max(0, roundOfSet(lead0, fset))
+  const rd = !roundMode ? -1 : fset != null ? Math.min(fset, supersetRounds(exercises, block.indices) - 1) // a round here, not a set index: members can have different set counts
     : (() => { const tot = supersetRounds(exercises, block.indices); for (let r = 0; r < tot; r++) if (!roundDone(r)) return r; return tot - 1; })();
   // Inside a round you work one exercise at a time: the first member that still
   // owes its set is the one in front of you, so logging it hands you to the next.
@@ -1199,7 +1198,7 @@ export default function FocusWorkout({
   // With a drop chain, every set in it is logged at once and si is its last drop.
   const complete = (xi, si, chain = null) => {
     const x = exercises[xi], s = x.sets[si];
-    if (s.completed) { (chain || [si]).forEach((j) => patchSet(xi, j, { completed: false })); setFset(chain ? chain[0] : si); return; }
+    if (s.completed) { (chain || [si]).forEach((j) => patchSet(xi, j, { completed: false })); setFset(roundMode ? rd : chain ? chain[0] : si); return; }
     const logged = (j) => { const sh = shownReps(x, x.sets[j], stats[x.name]); return sh === 'failure' ? x.sets[j].reps : sh; };
     (chain || []).slice(0, -1).forEach((j) => patchSet(xi, j, { completed: true, reps: logged(j) ?? '', weight: shownWeight(x.sets, j) }));
     const top = chain ? x.sets[chain[0]] : s, topReps = logged(chain ? chain[0] : si);
@@ -1363,7 +1362,7 @@ export default function FocusWorkout({
     if (!swipeExercises && (dir === 'left' || dir === 'right')) {
       const ni = roundMode ? rd + (dir === 'left' ? 1 : -1) : fi + (dir === 'left' ? 1 : -1);
       const lim = roundMode ? supersetRounds(exercises, block.indices) : ex.sets.length;
-      if (ni >= 0 && ni < lim) apply = () => setFset(roundMode ? setIndexForRound(lead0, ni) : ni);
+      if (ni >= 0 && ni < lim) apply = () => setFset(ni);
     } else {
       const ni = ci + (dir === 'left' || dir === 'up' ? 1 : -1);
       if (ni >= 0 && ni < blocks.length) apply = () => openBlock(ni);
@@ -1831,7 +1830,7 @@ export default function FocusWorkout({
                   : ex.sets).map((s, i) => {
                   const on = roundMode ? i === rd : chain ? chain.includes(i) : i === fi, small = !roundMode && s.type === 'drop';
                   return (
-                    <button key={i} onClick={() => (roundMode ? setFset(setIndexForRound(lead0, i)) : setFset(i))}
+                    <button key={i} onClick={() => setFset(i)}
                       style={{
                         flex: small ? '0 0 16px' : 1, height: small ? 20 : quest ? 24 : 34, borderRadius: small ? 7 : quest ? 9 : 12, padding: 0,
                         font: `500 ${quest ? 11 : 12}px ${MONO}`, transition: 'all .2s',

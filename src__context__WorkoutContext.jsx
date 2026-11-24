@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import * as api from '../lib/api';
 import { localDate as toLocalDate, cleanWeight } from '../lib/history';
 import { aggressionOf } from '../lib/levelup';
+import { supersetMembersOf } from '../lib/supersets';
 import { autoWeight, autoOn, exerciseConfig } from '../lib/autofail';
 
 const WorkoutContext = createContext(null);
@@ -116,7 +117,7 @@ export function WorkoutProvider({ children }) {
         supersetWith: ex.supersetWith || null,
         failureIndices: ex.failureIndices || [],
       })),
-      exercises: w.exercises.map((ex) => {
+      exercises: w.exercises.map((ex, exIdx) => {
 
         // ── CARDIO exercises ──────────────────────────────────────────
         // Cardio exercises get a single cardio-type set with timer state.
@@ -282,8 +283,10 @@ export function WorkoutProvider({ children }) {
           expanded.forEach(s => sets.push(s));
         }
 
-        let restSeconds = ex.restSeconds || 90;
-        if (lastExercise?.restSeconds) restSeconds = lastExercise.restSeconds;
+        // A superset's round rest is planned; last session's rest came from doing the lift alone.
+        const inSuperset = !!supersetMembersOf(w.exercises, exIdx);
+        let restSeconds = inSuperset ? ex.restSeconds ?? 90 : ex.restSeconds || 90;
+        if (!inSuperset && lastExercise?.restSeconds) restSeconds = lastExercise.restSeconds;
 
         // Restore failure sets from variation/program definition
         const failureIndices = ex.failureIndices || [];
