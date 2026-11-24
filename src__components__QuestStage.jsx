@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import useQuestSprites from '../hooks/useQuestSprites';
 import { revealing } from '../lib/reveal';
 import Ticker from './Ticker';
+import { placeLayers, SkyFx } from './QuestScene';
+import { PLACES, PW, PH } from '../lib/places';
 import { TINTS, SIZES, PETS, heroOf, ASSET, BOSS_SPRITES, landsOf, titleCase } from '../lib/quest';
 import { BASE, headFont } from '../lib/questSkins';
 import { useTheme } from '../context/ThemeContext';
@@ -177,7 +179,7 @@ export function stageArt({ theme = 'fantasy', hero, pet: petKey, tint = 'amber',
 }
 
 export default function QuestStage({ phase, start = 0, aura = null, monster, hit, area = 0, heroName = 'Warlord', petKey = null, lvl, xp, tint = 'amber', scanlines = true, msg = '', title, card, theme = 'fantasy',
-  fx = {}, charge = null, react = null, lastStand = false, dozing = false, dayK = 0, combo = 0, rest = null, gauntlet = null, gauntletEx = false, chase = null, taunt = null, scale = 1 }) {
+  fx = {}, charge = null, react = null, lastStand = false, dozing = false, dayK = 0, combo = 0, rest = null, gauntlet = null, gauntletEx = false, chase = null, taunt = null, scale = 1, place = null, sky = null, onScene = null }) {
   const frame = useFrame();
   const t = start ? Math.max(0, (Date.now() - start) / 1000) : 9;
   const [wf, setWf] = useState(0);
@@ -360,7 +362,11 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
   const cBox = cutIn ? opaqueBox(cSrc) : null;
   const ck = cBox ? 320 / cBox.w : 0;
 
-  const layers = land.strip
+  const away = phase === 'title' && theme === 'fantasy' ? PLACES.find((p) => p[0] === place) : null;
+  const groundY = 204 + gy;
+  const layers = away
+    ? placeLayers(place, K).map((l) => ({ img: l.img, size: `${(PW / PH) * groundY}px ${groundY}px`, pos: `${-wf * 6 * l.sp}px 0px`, op: 1 }))
+    : land.strip
     ? [{ img: strip || BLANK, size: '1536px 352px', pos: `${-wf * 6}px 0px`, op: 1 }]
     : land.layers.map(([n, sp]) => ({ img: lands?.[n] || BLANK, size: 'auto 290px', pos: `${-wf * 6 * sp}px ${gy - 40}px`, op: land.dim || 1 }));
   const box = { ...K.box, color: K.boxTxt };
@@ -456,8 +462,9 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
         ))}
         {!groundOn && !land.strip && <div className="absolute left-0 right-0 bottom-0" style={{ top: 204 + gy, background: ST.ground, boxShadow: ST.line || `inset 0 2px 0 ${K.tint}` }} />}
         {groundOn && <BattleGround renderer={ground} bakeKey={gKey} accentRGB={hexToRGB(K.tint)} reducedMotion={reducedMotion} />}
+        {phase === 'title' && sky && <SkyFx sky={sky} frame={frame} ground={groundY} />}
       </div>
-      {fx.weather && land.fx && <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.2 }}><LandFx kind={land.fx} now={now} /></div>}
+      {fx.weather && land.fx && !away && <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.2 }}><LandFx kind={land.fx} now={now} /></div>}
       {/* Day → night over the session: dusk glow on the horizon, then night and faint stars.
           Outdoors only — the dungeon has no sky. */}
       {dayK > 0 && !land.strip && (
@@ -480,9 +487,10 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
 
       {(phase === 'walk' || phase === 'title' || phase === 'boss' || phase === 'banish') && (
         <div className="absolute z-[5]" style={{ top: 14, left: 14, font: `500 10px ${MONO}`, letterSpacing: '.14em', ...K.chip, ...grow('0 0') }}>
-          AREA {Math.min(area, LANDS.length - 1) + 1} · {land.name.toUpperCase()}
+          {away ? away[1].toUpperCase() : `AREA ${Math.min(area, LANDS.length - 1) + 1} · ${land.name.toUpperCase()}`}{onScene ? ' ▾' : ''}
         </div>
       )}
+      {onScene && <button aria-label="Change the scene" onClick={onScene} className="absolute z-[6]" style={{ top: 2, left: 4, width: 'min(230px, 54%)', height: 52 }} />}
       {phase === 'title' && title && (
         // The left half, but never under the hero card (MINI_CARD_W, 14 px in
         // from the right) on a narrow stage. The words shrink to the width left

@@ -7,6 +7,7 @@
 // training and a reload can't double-count. The profile only changes at the
 // finish, keyed to the saved workout id.
 import { num, isAssisted, buildBlocks, isCardio } from './focus.js';
+import { SKIES } from './skies.js';
 
 export const ASSET = '/quest/';
 const R = String.raw;
@@ -130,6 +131,8 @@ export const defProf = () => ({
   hero: 'Warlord', lvl: 1, xp: 0, quests: 0, vol: 0, crits: 0, pet: null, chestPets: [], epithets: [], epithet: null,
   border: 'plain', borders: [], packs: 1, lastQuest: null, lastChest: null,
   favs: [], // quest favourites: [{ p: programName, w: workoutName, alias?: string }]
+  place: 'daily', // title scene: 'daily', 'meadow' or a PLACES key
+  sky: null, skies: [], // title-scene filter in use, and those won from chests
   theme: 'fantasy', // 'fantasy' | 'cyberpunk' — reskins lands/hero/monsters/bosses
 });
 export const withDefaults = (p) => ({ ...defProf(), ...(p || {}) });
@@ -260,18 +263,19 @@ export const oddsOf = (luck) => ({ l: 0.03 + luck * 0.15, e: 0.12 + luck * 0.35,
 
 /**
  * Roll the chest. Common: +150–400 XP. Rare: epithet or chest-only Rare border.
- * Epic: chest pet or Epic border. Legendary: Legendary border. An exhausted pool
+ * Epic: chest pet, Epic border or sky. Legendary: Legendary border or sky. An exhausted pool
  * falls back a tier; drops auto-equip. `rand` is injectable for the check.
  */
 export function rollLoot(prof, crits, rand = Math.random) {
   const o = oddsOf(luckOf(crits));
   const r = rand();
   let tier = r < o.l ? 3 : r < o.l + o.e ? 2 : r < o.l + o.e + o.r ? 1 : 0;
-  const p = { ...prof, chestPets: prof.chestPets.slice(), epithets: prof.epithets.slice(), borders: (prof.borders || []).slice() };
+  const p = { ...prof, chestPets: prof.chestPets.slice(), epithets: prof.epithets.slice(), borders: (prof.borders || []).slice(), skies: (prof.skies || []).slice() };
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const chestB = (rr) => BORDERS.filter((b) => b[2] === rr && b[3] === -1 && !p.borders.includes(b[0])).map((b) => ({ b }));
+  const chestS = (rr) => SKIES.filter((s) => s[2] === rr && !p.skies.includes(s[0])).map((s) => ({ s }));
   const pools = [[], [...EPITHETS.filter((e) => !p.epithets.includes(e)).map((e) => ({ ep: e })), ...chestB(1)],
-    [...PETS.filter((x) => !x[2] && !p.chestPets.includes(x[0])).map((x) => ({ pet: x })), ...chestB(2)], chestB(3)];
+    [...PETS.filter((x) => !x[2] && !p.chestPets.includes(x[0])).map((x) => ({ pet: x })), ...chestB(2), ...chestS(2)], [...chestB(3), ...chestS(3)]];
   while (tier > 0 && !pools[tier].length) tier--;
   let loot;
   if (tier === 0) {
@@ -281,6 +285,7 @@ export function rollLoot(prof, crits, rand = Math.random) {
   } else {
     const c = pick(pools[tier]);
     if (c.b) { p.borders.push(c.b[0]); p.border = c.b[0]; loot = { label: `${c.b[1]} border`, sub: 'New frame for your hero card' }; }
+    else if (c.s) { p.skies.push(c.s[0]); p.sky = c.s[0]; loot = { label: `${c.s[1]} sky`, sub: 'New sky over your title scene', sky: c.s[0] }; }
     else if (c.pet) { p.chestPets.push(c.pet[0]); p.pet = c.pet[0]; loot = { label: c.pet[1], sub: 'New pet · +10% XP while equipped', pet: c.pet[0], h: c.pet[3] }; }
     else { p.epithets.push(c.ep); p.epithet = c.ep; loot = { label: c.ep, sub: 'New epithet for your title' }; }
   }

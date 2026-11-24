@@ -7,7 +7,9 @@ import { useToast } from '../context/ToastContext';
 import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
 import useQuestArt from '../hooks/useQuestArt';
 import useBackHandler from '../hooks/useBackHandler';
-import QuestStage from './QuestStage';
+import QuestStage, { stageArt } from './QuestStage';
+import SceneSheet from './QuestScene';
+import { PLACES, placeOf } from '../lib/places';
 import ConfirmDialog from './ConfirmDialog';
 import useRepStartPrompt from './RepStartPrompt';
 import QuestHeroCard, { MiniHeroCard } from './QuestHeroCard';
@@ -70,6 +72,9 @@ export default function QuestTitle({ onNavigate }) {
   const { offer: offerSensor, prompts } = useRepStartPrompt();
 
   const [cardOpen, setCardOpen] = useState(false);
+  const [sceneOpen, setSceneOpen] = useState(false);
+  const today = new Date();
+  const place = placeOf(prof.place, Math.round(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 864e5));
   // Mounting the stage (sprite recolour + ground bake) blocks paint for the
   // best part of a second, and a reveal started during that gap plays out
   // invisibly. Hold the wave until the browser has painted a frame.
@@ -352,7 +357,8 @@ export default function QuestTitle({ onNavigate }) {
       <div className="flex-1 px-3.5 pb-2 flex flex-col gap-2.5">
         <div className={questSkin?.st.bezel ? 'q-bezel flex-shrink-0' : 'contents'}>
         <QuestStage phase="title" area={0} heroName={prof.hero} petKey={prof.pet} lvl={prof.lvl} xp={prof.xp} theme={prof.theme}
-          tint={readTint()} scanlines={readScanlines()} msg={prof.theme === 'cyberpunk' ? 'The neon night hums. Choose your quest, HERO.' : 'A new day dawns over the meadow. Choose your quest, HERO.'}
+          tint={readTint()} scanlines={readScanlines()} place={place} sky={(prof.skies || []).includes(prof.sky) ? prof.sky : null} onScene={() => setSceneOpen(true)}
+          msg={prof.theme === 'cyberpunk' ? 'The neon night hums. Choose your quest, HERO.' : PLACES.find((p) => p[0] === place)?.[2] || 'A new day dawns over the meadow. Choose your quest, HERO.'}
           title={{ line: `LV ${prof.lvl} · ${lvTitle(prof.lvl).toUpperCase()}`, color: tier[2] }}
           card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} scale={stageK} />
         </div>
@@ -441,6 +447,8 @@ export default function QuestTitle({ onNavigate }) {
         </button>
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
+      <SceneSheet open={sceneOpen} onClose={() => setSceneOpen(false)} prof={prof} skin={stageArt({ theme: prof.theme, hero: prof.hero, tint: readTint() }, questSkin).K}
+        save={(fn) => updProf(fn).catch((e) => showToast('Not saved: ' + e.message, 'error'))} />
 
       {favSheet && createPortal(
         <div className="fixed inset-0 z-[200] flex items-end g-root" onClick={closeSheet} style={{ background: 'rgba(0,0,0,.55)' }}>

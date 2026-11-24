@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { SKIES, GRADES } from '../lib/skies';
 import { ASSET, BORDERS, EPITHETS, PETS, RARITY, borderCss, seeded } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
@@ -16,12 +17,14 @@ function tileFor(r, rand) {
   const pick = (a) => a[Math.floor(rand() * a.length)];
   if (r === 0) return { kind: 'xp', label: `+${150 + Math.floor(rand() * 6) * 50} XP`, r };
   if (r === 1) return rand() < 0.6 ? { kind: 'ep', label: pick(EPITHETS), r } : ((b) => ({ kind: 'border', key: b[0], label: `${b[1]} border`, r }))(pick(bordersOf(1)));
+  if (r >= 2 && rand() < 0.4) return ((s) => ({ kind: 'sky', key: s[0], label: `${s[1]} sky`, r }))(pick(SKIES.filter((s) => s[2] === r)));
   if (r === 2) return rand() < 0.5 ? ((p) => ({ kind: 'pet', key: p[0], h: p[3], label: p[1], r }))(pick(chestPets)) : ((b) => ({ kind: 'border', key: b[0], label: `${b[1]} border`, r }))(pick(bordersOf(2)));
   return ((b) => ({ kind: 'border', key: b[0], label: `${b[1]} border`, r }))(pick(bordersOf(3)));
 }
 // The tile for what actually dropped.
 function wonTile(loot) {
   const r = Math.max(0, RARITY.findIndex((x) => x[0] === loot.tier));
+  if (loot.sky) return { kind: 'sky', key: loot.sky, label: loot.label, r };
   if (loot.pet) return { kind: 'pet', key: loot.pet, h: loot.h || 16, label: loot.label, r };
   const b = BORDERS.find((x) => `${x[1]} border` === loot.label);
   if (b) return { kind: 'border', key: b[0], label: loot.label, r };
@@ -37,6 +40,7 @@ function Tile({ t, won }) {
         {t.kind === 'xp' && <span style={{ font: `800 24px ${MONO}`, color: '#6dff3a', textShadow: '0 0 10px rgba(109,255,58,.5)', letterSpacing: '-0.04em' }}>XP</span>}
         {t.kind === 'ep' && <span style={{ fontSize: 40, fontWeight: 800, lineHeight: 1, color: col, fontFamily: 'Georgia, serif' }}>❝</span>}
         {t.kind === 'border' && <div style={{ width: 38, height: 52, padding: th, borderRadius: 8, background: bg }}><div className="w-full h-full" style={{ borderRadius: 5, background: '#050505' }} /></div>}
+        {t.kind === 'sky' && <div className="relative overflow-hidden" style={{ width: 62, height: 44, borderRadius: 8, isolation: 'isolate', background: 'linear-gradient(#7a4a22 70%, #1a0f06 70%)', boxShadow: `0 0 12px ${col}66` }}><div className="absolute inset-0" style={{ background: GRADES[t.key][0], mixBlendMode: GRADES[t.key][1] }} /><div className="absolute inset-0" style={{ background: `repeating-linear-gradient(105deg, transparent 0 7px, ${col}88 7px 8px)` }} /></div>}
         {t.kind === 'pet' && <img src={`${ASSET}sprites/pet_${t.key}_0.png`} alt="" draggable={false} style={{ height: (t.h || 16) * 2.6, imageRendering: 'pixelated', filter: `drop-shadow(0 0 6px ${col})` }} />}
       </div>
       <div className="w-full truncate text-center" style={{ padding: '0 6px 8px', font: `500 10px ${MONO}`, color: '#ddd' }}>{t.kind === 'xp' ? 'XP pouch' : t.label}</div>
