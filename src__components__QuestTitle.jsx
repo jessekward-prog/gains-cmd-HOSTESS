@@ -27,7 +27,7 @@ import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
-const FAN_IDEAL = 256, FAN_MIN = 200, FAN_MAX = 340, FAN_GROWN = 540, TITLE_MIN_K = 0.64;
+const FAN_IDEAL = 284, FAN_MIN = 200, FAN_MAX = 360, FAN_GROWN = 540, TITLE_MIN_K = 0.64;
 const newGroupId = () => Math.random().toString(36).slice(2, 8);
 // A group of one is not a group: drop its id so it renders as a plain favourite.
 const tidy = (list) => list.map((f) => {

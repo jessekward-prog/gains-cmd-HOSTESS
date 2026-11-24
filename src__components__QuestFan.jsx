@@ -7,14 +7,14 @@ import { ASSET, SIZES, titleCase, MON_NAMES } from '../lib/quest';
 const MONO = 'var(--font-mono)';
 export const FAN_ROW_H = 28; // the row above the cards: group brackets and ⋯
 const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const ASPECT = 7 / 5, GAP = 6, NAME_H = 34, SMALL_MIN = 72;
+const ASPECT = 7 / 5, PEEK_MIN = 34, PEEK_MAX = 140;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 // Long names break before an underscore run rather than mid-word, and never leave one character alone.
 const parts = (name) => name.replace(/ (?=\S$)/, '\u00a0').split(/(?<=[^_])(?=_)/).map((t, k) => <span key={k}>{k > 0 && <wbr />}{t}</span>);
 
-// The quest favourites as a row of vault cards, always the whole 5:7 picture: one
-// open at full height, the rest small with their names under them.
+// The quest favourites as stacked vault cards, all whole 5:7 pictures: the open one on
+// top, the rest tucked behind it as strips with their names on the edge that shows.
 // Swipe (wraps at the ends) or tap a card to choose; tap the open card for its
 // exercises, which grow up over the screen by `grow` px so nothing under them moves.
 // `menu`: the ⋯ button, at the end of the group row. `items`: [{ key, name, info, next, g, card, img, rows }], rows one per
@@ -33,38 +33,42 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
     const W = box.current?.clientWidth;
     if (!W || !n) return;
     const { e, over } = s, H = height + grow * e, q = clamp(s.p, 0, n - 1);
-    const big = Math.min(height / ASPECT, W), small = n > 1 ? clamp((W - big - (n - 1) * GAP) / (n - 1), SMALL_MIN, big * 0.6) : 0;
     const mix = (a, b, t) => a + (b - a) * t;
-    let x = 0;
-    const pos = items.map((_, i) => {
-      const f = Math.max(0, 1 - Math.abs(i - q)), row = mix(small, big, f), w = mix(row, W * f, e);
-      const r = { f, w, h: mix(row * ASPECT, H, e), x }; x += w + GAP * (1 - e); return r;
-    });
-    const total = x - GAP * (1 - e), mid = pos.reduce((a, r) => a + (r.x + r.w / 2) * r.f, 0);
+    const big = Math.min(height / ASPECT, W), peek = n > 1 ? clamp((W - big) / (n - 1), PEEK_MIN, PEEK_MAX) : 0;
+    const total = big + (n - 1) * peek, mid = q * peek + big / 2;
     const off = (total <= W ? (total - W) / 2 : clamp(mid - W / 2, 0, total - W)) + over * 46;
+    // Two cards changing places slide apart to pass, so neither jumps through the other.
+    const apart = 34 * Math.sin(Math.PI * (q - Math.floor(q)));
+    const pos = items.map((_, i) => {
+      const d = i - q, f = Math.max(0, 1 - Math.abs(d));
+      return { d, f, x: i * peek - off, w: big, pass: f > 0 && f < 1 ? Math.sign(d) * apart : 0 };
+    });
     box.current.style.height = `${H}px`;
     items.forEach((it, i) => {
       const el = els.current[i];
       if (!el) return;
-      const { f, w, h, x: ix } = pos[i], o = Math.max(0, (f - 0.6) / 0.4), name = (1 - e) * Math.max(0, 1 - f * 2.2);
-      const $ = (k) => el.querySelector(`[data-fan="${k}"]`);
-      el.style.width = `${w}px`; el.style.opacity = mix(1, f > 0 ? 1 : 0, e);
-      el.style.transform = `translate(${ix - off}px, ${(H - h - NAME_H * (1 - f) * (1 - e)) / 2}px)`;
+      const { d, f, x, pass } = pos[i], o = Math.max(0, (f - 0.6) / 0.4), name = (1 - e) * Math.max(0, 1 - f * 2.2);
+      const w = mix(big, W, e), h = mix(big * ASPECT, H, e), $ = (k) => el.querySelector(`[data-fan="${k}"]`);
+      el.style.width = `${w}px`; el.style.zIndex = Math.round(100 - Math.abs(d) * 10);
+      el.style.opacity = mix(1, f > 0 ? 1 : 0, e);
+      el.style.transform = `translate(${mix(x + pass, d * W, e)}px, ${(H - h) / 2}px)`;
       $('face').style.height = `${h}px`;
       const art = $('art'), aw = Math.max(w, h / ASPECT); // only the list's backdrop ever crops
-      art.style.width = `${aw}px`; art.style.height = `${aw * ASPECT}px`;
+      art.style.width = `${aw}px`; art.style.height = `${aw * ASPECT}px`; art.style.filter = `brightness(${mix(0.75, 1, f)})`;
       art.style.transform = `translate(${(w - aw) / 2}px, ${(h - aw * ASPECT) / 2}px)`;
       const show = (k, v, on, width) => { const t = $(k); t.style.opacity = v; t.style.visibility = on ? 'visible' : 'hidden'; if (width) t.style.width = width; };
       show('text', o * (1 - e), o > 0.05 && e < 0.95, `${big - 24}px`);
       show('pic', o * (1 - e), o > 0.5 && e < 0.4);
+      show('next', o * (1 - e), o > 0.05);
       show('name', name, name > 0);
+      $('name').style.left = `${d < 0 ? peek / 2 : big - peek / 2}px`;
       show('list', o * e, o * e > 0.05, `${W}px`);
     });
     if (bar.current) {
       bar.current.style.opacity = 1 - e;
       [...bar.current.children].forEach((b) => {
         const a = pos[b.dataset.from], z = pos[b.dataset.to];
-        if (a && z) { const l = a.x - off; b.style.left = `${l}px`; b.style.width = `${Math.min(z.x + z.w - off, W - 44) - l}px`; }
+        if (a && z) { b.style.left = `${a.x}px`; b.style.width = `${Math.min(z.x + z.w, W - 44) - a.x}px`; }
       });
     }
     const now = Math.round(q);
@@ -165,20 +169,21 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
       <div ref={box} role="group" aria-label="Favourite quests" onKeyDown={key}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
         onClickCapture={(ev) => { if (moved.current) { ev.stopPropagation(); ev.preventDefault(); moved.current = false; } }}
-        className="absolute left-0 right-0 bottom-0 overflow-hidden select-none" style={{ height, touchAction: 'pan-y' }}>
+        className="absolute left-0 right-0 bottom-0 select-none" style={{ height, touchAction: 'pan-y', overflow: 'clip', overflowClipMargin: 14 }}>
         {items.map((it, i) => (
           <div key={it.key} ref={(el) => { els.current[i] = el; }} className="absolute left-0 top-0">
-            <div data-fan="face" className="relative overflow-hidden" style={{ borderRadius: 14, background: '#0b0b0b' }}>
+            <div data-fan="face" className="relative overflow-hidden" style={{ borderRadius: 14, background: '#0b0b0b', boxShadow: '0 0 0 5px var(--color-bg-0)' }}>
             <div data-fan="art" data-ascii="skip" className="absolute left-0 top-0 pointer-events-none">
               {it.card && <DitherCard card={it.card} img={it.img} still={i !== open || list || still()} />}
             </div>
             <button aria-label={i === open ? `${it.name}, show exercises` : it.name} aria-pressed={i === index} className="absolute inset-0 w-full"
               onClick={() => { if (i !== open || i !== index) choose(i); else expand(true); }} />
-            <div data-fan="text" className="absolute pointer-events-none" style={{ left: 0, bottom: 0, boxSizing: 'content-box', padding: '34px 12px 10px', color: '#f6ece0', background: 'linear-gradient(to top, rgba(0,0,0,.92) 45%, rgba(0,0,0,0))' }}>
+            <div data-fan="text" className="absolute pointer-events-none" style={{ left: 0, bottom: 0, boxSizing: 'content-box', padding: '36px 12px 12px', color: '#f6ece0', background: 'linear-gradient(to top, rgba(0,0,0,.9) 40%, rgba(0,0,0,0))' }}>
               <div style={{ fontSize: Math.max(...it.name.split(/\s+|(?<=[^_])(?=_)/).map((t) => t.length)) > 9 ? 18 : 21, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1.05, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{parts(it.name)}</div>
-              <div style={{ marginTop: 3, font: `500 12px/1.3 ${MONO}`, color: '#ffd9b4' }}>{it.count === 1 ? '1 exercise' : `All ${it.count} exercises`} ›</div>
+              <div style={{ marginTop: 3, font: `400 12px/1.3 ${MONO}`, color: '#ffd9b4' }}>{it.info}</div>
+              <span className="inline-flex items-center" style={{ marginTop: 8, height: 34, padding: '0 14px', borderRadius: 17, background: '#f6ece0', color: '#1a0303', fontWeight: 800, fontSize: 13 }}>{it.count === 1 ? '1 exercise' : `All ${it.count} exercises`}</span>
             </div>
-            {it.next && <div className="absolute pointer-events-none" style={{ left: 8, top: 8, padding: '3px 7px', borderRadius: 6, background: 'rgba(0,0,0,.8)', color: '#f6ece0', font: `600 10px ${MONO}`, letterSpacing: '.1em' }}>{i === open ? 'UP NEXT' : 'NEXT'}</div>}
+            <div data-fan="next" className="absolute pointer-events-none" style={{ display: it.next ? undefined : 'none', left: 8, top: 8, padding: '3px 7px', borderRadius: 6, background: 'rgba(0,0,0,.8)', color: '#f6ece0', font: `600 10px ${MONO}`, letterSpacing: '.1em' }}>UP NEXT</div>
             <button data-fan="pic" aria-label={`Change the picture for ${it.name}`} onClick={() => onPicture(i)}
               className="absolute flex items-center justify-center" style={{ right: 0, top: 0, width: 44, height: 44, color: '#f6ece0' }}>
               <span className="flex items-center justify-center" style={{ width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,.8)' }}>
@@ -218,8 +223,9 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
               </div>
             </div>
             {i === index && <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: 14, boxShadow: 'inset 0 0 0 2px #f6ece0' }} />}
+            <span data-fan="name" className="absolute pointer-events-none whitespace-nowrap overflow-hidden"
+              style={{ top: 16, maxHeight: '90%', textOverflow: 'ellipsis', writingMode: 'vertical-rl', transform: 'translateX(-50%)', fontSize: 17, fontWeight: 800, letterSpacing: '-0.03em', color: '#f6ece0', textShadow: '0 0 3px #000, 0 0 8px #000, 0 0 12px #000' }}>{it.name}</span>
             </div>
-            <div data-fan="name" className="absolute left-0 right-0 text-center pointer-events-none" style={{ top: '100%', paddingTop: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.15, letterSpacing: '-0.02em', overflowWrap: 'anywhere', height: NAME_H, overflow: 'hidden' }}>{parts(it.name)}</div>
           </div>
         ))}
       </div>
