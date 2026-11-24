@@ -1709,7 +1709,7 @@ export default function FocusWorkout({
         <div className="flex justify-between items-end gap-3">
           <div className="min-w-0">
             <div className="g-label truncate ps-x">{workout.programName}{quest ? ' · QUEST' : ''}</div>
-            <div className="mt-1 truncate q-head" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>{workout.workoutName}</div>
+            <div className="truncate q-head" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: '32px', marginBottom: -4 }}>{workout.workoutName}</div>
           </div>
           <div className="text-right flex-shrink-0">
             <div className="g-tab" style={{ font: `500 24px ${MONO}`, lineHeight: 1 }}>{elapsed}</div>

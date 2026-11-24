@@ -267,7 +267,7 @@ export default function QuestTitle({ onNavigate }) {
       key: keyOf(f.p, f.w.name), name: f.alias || f.w.name, count: exs.length,
       g: f.g && favs.filter((x) => x.g === f.g).length > 1 ? f.g : null,
       next: nextFav?.p === f.p && nextFav?.w.name === f.w.name,
-      info: `${blocks.length} monster${blocks.length === 1 ? '' : 's'}${sets ? ` · ${sets} sets` : ''}${autoN ? ` · AUTO ${autoN}/${exs.filter(autoCapable).length}` : ''}`,
+      info: `${blocks.length} monster${blocks.length === 1 ? '' : 's'}${sets ? ` · ${sets} sets` : ''}${autoN ? ` · AUTO\u00a0${autoN}/${exs.filter(autoCapable).length}` : ''}`,
       card: c && effCard(c, art[c.id]), img: c && art[c.id]?.img,
       rows: blocks.map((b, bi) => ({
         sprite: mons[bi % mons.length][0],
@@ -344,7 +344,7 @@ export default function QuestTitle({ onNavigate }) {
       style={settling ? { visibility: 'hidden' } : undefined}>
       <div ref={headRef} className="px-5 pt-3 pb-3">
         <div className="g-label truncate ps-x">{program ? `${program.name} · QUEST` : 'QUEST'}</div>
-        <div className="mt-1 truncate q-head" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>
+        <div className="truncate q-head" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: '32px', marginBottom: -4 }}>
           {/* Retypes with the cursor whenever you pick a different quest (and now and then on its own). */}
           <TypewriterName text={headerAlias || headerName || 'Gains Quest'} />
         </div>

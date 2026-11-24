@@ -73,10 +73,13 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
       [...bar.current.children].forEach((b) => {
         const from = +b.dataset.from, to = +b.dataset.to;
         if (!pos[to]) return;
-        const l = left(from), r = right(to), room = Math.min(r, W - 44) - l, t = b.firstChild; // clear of ⋯
+        const l = left(from), r = right(to);
         b.style.left = `${l}px`; b.style.width = `${Math.max(0, r - l)}px`;
-        t.style.left = `${room / 2}px`;
-        t.textContent = room >= 110 ? `GROUP · ${to - from + 1}` : room >= 74 ? 'GROUP' : to - from + 1;
+        const t = b.firstChild, num = t.lastChild;
+        t.style.left = `${Math.min((r - l) / 2, Math.max(26, W - 54 - l))}px`; // centred, clear of ⋯
+        // The count closes up with the bracket, gone well before it's at its smallest.
+        const k = clamp((r - l - 120) / 80, 0, 1);
+        num.style.maxWidth = `${k * 4}em`; num.style.opacity = k;
       });
     }
     const now = Math.round(q);
@@ -166,7 +169,7 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
           <div ref={bar} className="absolute inset-0 overflow-hidden" aria-hidden="true">
             {groups.map((g) => (
               <div key={g.g} data-from={g.from} data-to={g.to} className="absolute" style={{ top: 13, height: 20, border: '1.5px solid var(--color-text-secondary)', borderBottom: 0, borderRadius: '9px 9px 0 0' }}>
-                <span className="absolute bg-bg-0 text-text-secondary whitespace-nowrap px-2" style={{ left: '50%', top: -8, transform: 'translateX(-50%)', font: `600 10px ${MONO}`, letterSpacing: '.16em' }} />
+                <span className="absolute bg-bg-0 text-text-secondary whitespace-nowrap px-1.5" style={{ left: '50%', top: -8, transform: 'translateX(-50%)', font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>GROUP<span className="inline-block overflow-hidden whitespace-pre align-bottom">{` · ${g.to - g.from + 1}`}</span></span>
               </div>
             ))}
           </div>
@@ -187,7 +190,7 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
             <button aria-label={i === open ? `${it.name}, show exercises` : it.name} aria-pressed={i === index} className="absolute inset-0 w-full"
               onClick={() => { if (i !== open || i !== index) choose(i); else expand(true); }} />
             <div data-fan="text" className="absolute pointer-events-none" style={{ left: 0, bottom: 0, boxSizing: 'content-box', padding: '36px 12px 12px', color: '#f6ece0', background: 'linear-gradient(to top, rgba(0,0,0,.9) 40%, rgba(0,0,0,0))' }}>
-              <div style={{ fontSize: Math.max(...it.name.split(/\s+|(?<=[^_])(?=_)/).map((t) => t.length)) > 9 ? 18 : 21, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1.05, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{parts(it.name)}</div>
+              <div style={{ fontSize: Math.max(...it.name.split(/\s+|(?<=[^_])(?=_)/).map((t) => t.length)) > 9 ? 18 : 21, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1.05, paddingBottom: '0.22em', marginBottom: '-0.22em', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{parts(it.name)}</div>
               <div style={{ marginTop: 3, font: `400 12px/1.3 ${MONO}`, color: '#ffd9b4' }}>{it.info}</div>
               <span className="inline-flex items-center" style={{ marginTop: 8, height: 34, padding: '0 14px', borderRadius: 17, background: '#f6ece0', color: '#1a0303', fontWeight: 800, fontSize: 13 }}>{it.count === 1 ? '1 exercise' : `All ${it.count} exercises`}</span>
             </div>
@@ -201,7 +204,7 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
             <div data-fan="list" className="absolute left-0 top-0 bottom-0 flex flex-col" style={{ background: 'rgba(0,0,0,.84)', color: '#f6ece0' }}>
               <div className="flex items-center gap-2 flex-shrink-0" style={{ padding: '10px 8px 8px 16px' }}>
                 <span className="flex-1 min-w-0">
-                  <span className="block truncate" style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.15 }}>{it.name}</span>
+                  <span className="block truncate" style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.3 }}>{it.name}</span>
                   <span className="block truncate" style={{ font: `400 12px ${MONO}`, color: '#ffd9b4' }}>{it.info}</span>
                 </span>
                 <button aria-label="Close the exercise list" onClick={() => expand(false)} className="flex items-center justify-center flex-shrink-0"
