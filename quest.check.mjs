@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 
 const dir = join(mkdtempSync(join(tmpdir(), 'quest-')), 'lib');
 mkdirSync(dir);
-for (const f of ['quest', 'focus', 'supersets', 'history', 'skies', 'places']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
+for (const f of ['quest', 'focus', 'supersets', 'history', 'skies', 'places', 'borders']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
 const Q = await import(join(dir, 'quest.js'));
 const { buildBlocks } = await import(join(dir, 'focus.js'));
 
@@ -85,7 +85,7 @@ assert.equal(Q.tierOf(15)[1], 'SILVER');
   assert.equal(com.label, '+400 XP');
   assert.deepEqual([com.prof.lvl, com.prof.xp], [21, 300]);
   const { SKIES } = await import(join(dir, 'skies.js'));
-  const full = { ...p, borders: ['holo', 'void'], skies: SKIES.filter((s) => s[2] === 3).map((s) => s[0]) };
+  const full = { ...p, borders: Q.BORDERS.map((b) => b[0]), skies: SKIES.filter((s) => s[2] === 3).map((s) => s[0]) };
   assert.notEqual(Q.rollLoot(full, 0, seq(0.0, 0.0)).tier, 'LEGENDARY');
   assert.ok(Q.oddsOf(Q.luckOf(20)).l > Q.oddsOf(0).l); // crits raise the odds, capped
   assert.equal(Q.luckOf(20), 0.3);
@@ -304,4 +304,19 @@ console.log('boss checks passed');
   assert.equal(new Set(Array.from({ length: 11 }, (_, d) => placeOf('daily', d))).size, 11);
   assert.equal(placeOf('ember', 3), 'ember'); assert.equal(placeOf(undefined, 0), 'meadow');
   console.log('scene checks passed');
+}
+
+{
+  // Pixel borders: unique, all drawable, every rarity wins from its own chest, commons only sometimes.
+  const { FX, grid } = await import(join(dir, 'borders.js'));
+  const keys = Q.BORDERS.map((b) => b[0]), names = Q.BORDERS.map((b) => b[1]);
+  assert.equal(Object.keys(FX).length, 52);
+  assert.equal(new Set(keys).size, keys.length); assert.equal(new Set(names).size, names.length);
+  for (const k of Object.keys(FX)) assert.ok(grid(k, 0).some(Boolean), k);
+  const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
+  const c = Q.rollLoot(Q.defProf(), 0, seq(0.99, 0.1, 0));
+  assert.equal(c.tier, 'COMMON'); assert.equal(FX[c.prof.border].rarity, 0); assert.ok(c.prof.borders.includes(c.prof.border));
+  const own = { ...Q.defProf(), borders: keys };
+  assert.match(Q.rollLoot(own, 0, seq(0.99, 0.1, 0)).label, /XP$/); // none left to win
+  console.log('border checks passed');
 }

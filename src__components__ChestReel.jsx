@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import PixelBorder from './PixelBorder';
+import { FX } from '../lib/borders';
 import { SKIES, GRADES } from '../lib/skies';
 import { ASSET, BORDERS, EPITHETS, PETS, RARITY, borderCss, seeded } from '../lib/quest';
 
@@ -15,6 +17,7 @@ const chestPets = PETS.filter((p) => !p[2]);
 const bordersOf = (r) => BORDERS.filter((b) => b[2] === r && b[0] !== 'plain');
 function tileFor(r, rand) {
   const pick = (a) => a[Math.floor(rand() * a.length)];
+  if (r === 0 && rand() < 0.35) return ((b) => ({ kind: 'border', key: b[0], label: `${b[1]} border`, r }))(pick(bordersOf(0)));
   if (r === 0) return { kind: 'xp', label: `+${150 + Math.floor(rand() * 6) * 50} XP`, r };
   if (r === 1) return rand() < 0.6 ? { kind: 'ep', label: pick(EPITHETS), r } : ((b) => ({ kind: 'border', key: b[0], label: `${b[1]} border`, r }))(pick(bordersOf(1)));
   if (r >= 2 && rand() < 0.4) return ((s) => ({ kind: 'sky', key: s[0], label: `${s[1]} sky`, r }))(pick(SKIES.filter((s) => s[2] === r)));
@@ -39,7 +42,8 @@ function Tile({ t, won }) {
       <div className="flex-1 w-full flex items-center justify-center">
         {t.kind === 'xp' && <span style={{ font: `800 24px ${MONO}`, color: '#6dff3a', textShadow: '0 0 10px rgba(109,255,58,.5)', letterSpacing: '-0.04em' }}>XP</span>}
         {t.kind === 'ep' && <span style={{ fontSize: 40, fontWeight: 800, lineHeight: 1, color: col, fontFamily: 'Georgia, serif' }}>❝</span>}
-        {t.kind === 'border' && <div style={{ width: 38, height: 52, padding: th, borderRadius: 8, background: bg }}><div className="w-full h-full" style={{ borderRadius: 5, background: '#050505' }} /></div>}
+        {t.kind === 'border' && FX[t.key] && <div className="relative" style={{ width: 45, height: 63 }}><PixelBorder k={t.key} /></div>}
+        {t.kind === 'border' && !FX[t.key] && <div style={{ width: 38, height: 52, padding: th, borderRadius: 8, background: bg }}><div className="w-full h-full" style={{ borderRadius: 5, background: '#050505' }} /></div>}
         {t.kind === 'sky' && <div className="relative overflow-hidden" style={{ width: 62, height: 44, borderRadius: 8, isolation: 'isolate', background: 'linear-gradient(#7a4a22 70%, #1a0f06 70%)', boxShadow: `0 0 12px ${col}66` }}><div className="absolute inset-0" style={{ background: GRADES[t.key][0], mixBlendMode: GRADES[t.key][1] }} /><div className="absolute inset-0" style={{ background: `repeating-linear-gradient(105deg, transparent 0 7px, ${col}88 7px 8px)` }} /></div>}
         {t.kind === 'pet' && <img src={`${ASSET}sprites/pet_${t.key}_0.png`} alt="" draggable={false} style={{ height: (t.h || 16) * 2.6, imageRendering: 'pixelated', filter: `drop-shadow(0 0 6px ${col})` }} />}
       </div>

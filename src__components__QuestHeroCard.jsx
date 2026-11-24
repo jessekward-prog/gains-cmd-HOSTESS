@@ -7,6 +7,8 @@ import useQuestArt from '../hooks/useQuestArt';
 import DitherCard, { effCard } from './DitherCard';
 import QuestVault from './QuestVault';
 import Ticker from './Ticker';
+import PixelBorder, { faceInset } from './PixelBorder';
+import { FX } from '../lib/borders';
 import { MINI_CARD_W } from '../lib/fit';
 import { CARDS, RAR, PAL } from '../lib/dither';
 import { useToast } from '../context/ToastContext';
@@ -38,13 +40,13 @@ export function MiniHeroCard({ onOpen }) {
   const frame = useFrame();
   const feat = featuredCards(vault)[0];
   const card = feat && effCard(feat, art[feat.id]);
-  const bc = borderCss(equippedBorder(prof, prof.lvl)[0], frame);
+  const bk = equippedBorder(prof, prof.lvl)[0], fx = FX[bk], bc = borderCss(bk, frame);
   const pad = Math.max(1, Math.round(bc[1] * 0.6));
   return (
     // Width-led (not top + bottom) so a narrow stage gets a smaller card, not a squashed one.
     <button onClick={onOpen} aria-label="Open hero card" className="absolute block z-[6]"
-      style={{ right: 14, top: 14, width: MINI_CARD_W, aspectRatio: '5 / 7', padding: pad, borderRadius: 12 + pad, background: bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
-      <div className="relative h-full overflow-hidden text-left" style={{ borderRadius: 12, background: '#0b0b0b' }}>
+      style={{ right: fx ? 20 : 14, top: fx ? 20 : 14, width: MINI_CARD_W, aspectRatio: '5 / 7', padding: fx ? 0 : pad, borderRadius: fx ? 6 : 12 + pad, background: fx ? 'none' : bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
+      <div className="relative h-full overflow-hidden text-left" style={{ borderRadius: fx ? 0 : 12, background: '#0b0b0b', ...(fx && { ...faceInset(fx.T), height: 'auto' }) }}>
         {card ? <DitherCard card={card} img={art[feat.id]?.img} /> : (
           <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px', padding: '16px 14px 60px', font: `400 10px ${MONO}`, color: '#999' }}>Pick a card in your vault</div>
         )}
@@ -56,6 +58,7 @@ export function MiniHeroCard({ onOpen }) {
           <div style={{ marginTop: 6, height: 2, background: '#2a2a2a' }}><div className="h-full" style={{ width: `${prof.xp / 10}%`, background: card ? RAR[card.rarity].col : '#f0f0f0' }} /></div>
         </div>
       </div>
+      {fx && <PixelBorder k={bk} f={Math.floor(frame * fx.fps / 10)} />}
     </button>
   );
 }
@@ -78,7 +81,7 @@ export default function QuestHeroCard({ open, onClose }) {
   const favs = featuredCards(vault);
   const feat = favs[0]; // the vault's chosen card (Use this card)
   const card = feat && effCard(feat, art[feat.id]);
-  const bd = equippedBorder(prof, lvl), bc = borderCss(bd[0], frame);
+  const bd = equippedBorder(prof, lvl), bc = borderCss(bd[0], frame), fx = FX[bd[0]];
   const title = lvTitle(lvl);
   const petDef = PETS.find((p) => p[0] === prof.pet && ownsPet(prof, lvl, p));
   const ups = [...LV_TITLES.filter((t) => t[0] > lvl).map((t) => [t[0], `TITLE "${t[1].toUpperCase()}"`]), ...PETS.filter((p) => p[2] > lvl).map((p) => [p[2], `${p[1].toUpperCase()} PET`])].sort((a, b) => a[0] - b[0]);
@@ -94,8 +97,8 @@ export default function QuestHeroCard({ open, onClose }) {
           <span style={{ font: `500 10px ${MONO}`, letterSpacing: '.16em', color: '#666' }}>HERO CARD</span>
           <button onClick={onClose} aria-label="Close" style={{ width: 44, height: 44, marginRight: -10, borderRadius: 14, color: '#999', font: `400 20px ${MONO}` }}>×</button>
         </div>
-        <button onClick={() => setVaultOpen(true)} aria-label="Change card" className="block w-full text-left" style={{ padding: bc[1], borderRadius: 18 + bc[1], background: bc[0], boxShadow: `0 0 40px ${bc[2]}` }}>
-          <div className="relative overflow-hidden" style={{ aspectRatio: '5 / 7', borderRadius: 18, background: '#0b0b0b' }}>
+        <button onClick={() => setVaultOpen(true)} aria-label="Change card" className="relative block text-left" style={{ ...(fx ? { width: '84%', margin: '20px auto 14px', aspectRatio: '5 / 7', borderRadius: 8 } : { width: '100%', padding: bc[1], borderRadius: 18 + bc[1], background: bc[0] }), boxShadow: `0 0 40px ${bc[2]}` }}>
+          <div className="relative overflow-hidden" style={fx ? { ...faceInset(fx.T), background: '#0b0b0b' } : { aspectRatio: '5 / 7', borderRadius: 18, background: '#0b0b0b' }}>
             {card ? (
               <>
                 <DitherCard card={card} img={art[feat.id]?.img} />
@@ -117,6 +120,7 @@ export default function QuestHeroCard({ open, onClose }) {
               </div>
             </div>
           </div>
+          {fx && <PixelBorder k={bd[0]} f={Math.floor(frame * fx.fps / 10)} />}
         </button>
         <button onClick={() => setVaultOpen(true)} className="self-center" style={{ marginTop: -4, font: `500 11px ${MONO}`, letterSpacing: '.08em', color: '#ff9a3c' }}>Change card in the vault ›</button>
         <div className="text-center" style={{ font: `400 10px ${MONO}`, letterSpacing: '.1em', color: '#666' }}>
@@ -160,21 +164,21 @@ export default function QuestHeroCard({ open, onClose }) {
         )}
 
         <OptionRow open={panel === 'border'} onClick={() => toggle('border')} title="Border" sub={`${bd[1]} · ${owned.length} of ${BORDERS.length} unlocked`}
-          icon={<div style={{ width: 34, height: 46, padding: Math.max(1, Math.round(bc[1] / 2)), borderRadius: 8, background: bc[0], boxShadow: `0 0 12px ${bc[2]}` }}><div className="w-full h-full" style={{ borderRadius: 6, background: '#0b0b0b' }} /></div>} />
+          icon={fx ? <div className="relative mb-1" style={{ width: 32, height: 45 }}><PixelBorder k={bd[0]} /></div> : <div style={{ width: 34, height: 46, padding: Math.max(1, Math.round(bc[1] / 2)), borderRadius: 8, background: bc[0], boxShadow: `0 0 12px ${bc[2]}` }}><div className="w-full h-full" style={{ borderRadius: 6, background: '#0b0b0b' }} /></div>} />
         {panel === 'border' && (
           <Picker title="BORDERS" count={`${owned.length} / ${BORDERS.length}`}>
-            {BORDERS.map((x) => {
+            {[...BORDERS].sort((p, q) => ownsBorder(prof, lvl, q) - ownsBorder(prof, lvl, p) || p[2] - q[2]).map((x) => {
               const own = ownsBorder(prof, lvl, x), on = own && bd[0] === x[0], b = borderCss(x[0], frame);
               return (
                 <button key={x[0]} onClick={() => own && save((q) => ({ ...q, border: x[0] }))}
                   className="flex flex-col items-center justify-end gap-1"
                   style={{ height: 104, borderRadius: 14, background: on ? 'rgba(255,34,34,.1)' : '#171717', boxShadow: `inset 0 0 0 1.5px ${on ? '#ff2222' : 'transparent'}`, color: '#f0f0f0', padding: '8px 2px' }}>
-                  <div style={{ width: 34, height: 46, padding: Math.max(1, Math.round(b[1] / 2)), borderRadius: 8, background: b[0], boxShadow: `0 0 12px ${own ? b[2] : 'transparent'}`, opacity: own ? 1 : 0.3 }}>
+                  {FX[x[0]] ? <div className="relative" style={{ width: 42, height: 59, marginBottom: 6, opacity: own ? 1 : 0.35, filter: own ? 'none' : 'grayscale(1)' }}><PixelBorder k={x[0]} /></div> : <div style={{ width: 34, height: 46, padding: Math.max(1, Math.round(b[1] / 2)), borderRadius: 8, background: b[0], boxShadow: `0 0 12px ${own ? b[2] : 'transparent'}`, opacity: own ? 1 : 0.3 }}>
                     <div className="w-full h-full" style={{ borderRadius: 6, background: '#0b0b0b' }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{x[1]}</span>
-                  <span style={{ font: `500 8px ${MONO}`, letterSpacing: '.08em', color: on ? '#ff2222' : own ? RARITY[x[2]][1] : '#666' }}>
-                    {on ? 'EQUIPPED' : own ? RARITY[x[2]][0] : x[3] > 0 ? `LV ${x[3]}` : 'CHEST'}
+                  </div>}
+                  <span className="truncate max-w-full" style={{ fontSize: 11, fontWeight: 700 }}>{x[1]}</span>
+                  <span style={{ font: `500 8px ${MONO}`, letterSpacing: '.08em', color: on ? '#ff2222' : RARITY[x[2]][1], opacity: own ? 1 : 0.75 }}>
+                    {on ? 'EQUIPPED' : own ? RARITY[x[2]][0] : x[3] > 0 ? `LV ${x[3]}` : RARITY[x[2]][0]}
                   </span>
                 </button>
               );

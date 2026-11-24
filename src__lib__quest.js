@@ -8,6 +8,7 @@
 // finish, keyed to the saved workout id.
 import { num, isAssisted, buildBlocks, isCardio } from './focus.js';
 import { SKIES } from './skies.js';
+import { FX } from './borders.js';
 
 export const ASSET = '/quest/';
 const R = String.raw;
@@ -111,7 +112,8 @@ export const RARITY = [['COMMON', '#999999'], ['RARE', '#60a5fa'], ['EPIC', '#c0
 export const REEL = ['+250 XP', 'Goblin', 'the Unbroken', 'Holo border', 'Shaman', '+400 XP', 'Rackbreaker', 'Void border', 'Frostbite', '+150 XP', 'Chalk-Handed'];
 // [key, name, rarity 0-3, unlock level (0 = free, -1 = chest only)]
 export const BORDERS = [['plain', 'Plain', 0, 0], ['iron', 'Iron', 0, 13], ['bone', 'Bone', 0, 16], ['silver', 'Silver', 1, 18], ['cobalt', 'Cobalt', 1, 22], ['chain', 'Chainlink', 1, -1],
-  ['gold', 'Gold', 2, 25], ['phantom', 'Phantom', 2, 30], ['venom', 'Venom', 2, -1], ['inferno', 'Inferno', 3, 35], ['holo', 'Holo', 3, -1], ['void', 'Void', 3, -1]];
+  ['gold', 'Gold', 2, 25], ['phantom', 'Phantom', 2, 30], ['venom', 'Venom', 2, -1], ['inferno', 'Inferno', 3, 35], ['holo', 'Holo', 3, -1], ['void', 'Void', 3, -1],
+  ...Object.entries(FX).map(([k, b]) => [k, b.name, b.rarity, -1])]; // the pixel borders, all from chests
 /** [background, thickness px, glow] for a border at animation frame f (100ms each). */
 export const borderCss = (k, f = 0) => ({
   plain: ['#3a3a3a', 2, 'transparent'], iron: ['#6b7079', 2, 'transparent'], bone: ['#d9d2bf', 2, 'transparent'],
@@ -124,7 +126,7 @@ export const borderCss = (k, f = 0) => ({
   inferno: [`conic-gradient(from ${f * 12}deg, #8a0f0f, #ff2222, #ff7a1a, #fbbf24, #ff7a1a, #ff2222, #8a0f0f)`, 6, 'rgba(255,90,30,.45)'],
   holo: [`conic-gradient(from ${f * 9}deg, #ff5ea8, #fbbf24, #6dff3a, #3aa0ff, #c084fc, #ff5ea8)`, 6, 'rgba(192,132,252,.4)'],
   void: [`conic-gradient(from ${-f * 6}deg, #050505, #7c3aed, #050505, #00e5ff, #050505)`, 6, 'rgba(124,58,237,.45)'],
-}[k] || ['#3a3a3a', 2, 'transparent']);
+}[k] || (FX[k] ? [FX[k].base, FX[k].T, FX[k].glow] : ['#3a3a3a', 2, 'transparent']));
 
 // A fresh hero. The prototype starts at Lv 12 for its demo; real heroes start at 1.
 export const defProf = () => ({
@@ -258,11 +260,12 @@ export function commitQuest(prof, workoutId, session) {
 }
 
 // ── Loot chest ──────────────────────────────────────────────────────
+const COMMON_BORDER = 0.35; // of Common chests, while there are Common borders left to win
 export const luckOf = (crits) => Math.min(0.3, crits * 0.03);
 export const oddsOf = (luck) => ({ l: 0.03 + luck * 0.15, e: 0.12 + luck * 0.35, r: 0.25 + luck * 0.5 });
 
 /**
- * Roll the chest. Common: +150–400 XP. Rare: epithet or chest-only Rare border.
+ * Roll the chest. Common: +150–400 XP, or sometimes a Common border. Rare: epithet or chest-only Rare border.
  * Epic: chest pet, Epic border or sky. Legendary: Legendary border or sky. An exhausted pool
  * falls back a tier; drops auto-equip. `rand` is injectable for the check.
  */
@@ -278,12 +281,13 @@ export function rollLoot(prof, crits, rand = Math.random) {
     [...PETS.filter((x) => !x[2] && !p.chestPets.includes(x[0])).map((x) => ({ pet: x })), ...chestB(2), ...chestS(2)], [...chestB(3), ...chestS(3)]];
   while (tier > 0 && !pools[tier].length) tier--;
   let loot;
-  if (tier === 0) {
+  const plainB = tier === 0 ? chestB(0) : [];
+  if (tier === 0 && !(plainB.length && rand() < COMMON_BORDER)) {
     const g = 150 + Math.floor(rand() * 6) * 50;
     Object.assign(p, addXp(p.lvl, p.xp, g));
     loot = { label: `+${g} XP`, sub: 'A pouch of raw experience' };
   } else {
-    const c = pick(pools[tier]);
+    const c = pick(tier ? pools[tier] : plainB);
     if (c.b) { p.borders.push(c.b[0]); p.border = c.b[0]; loot = { label: `${c.b[1]} border`, sub: 'New frame for your hero card' }; }
     else if (c.s) { p.skies.push(c.s[0]); p.sky = c.s[0]; loot = { label: `${c.s[1]} sky`, sub: 'New sky over your title scene', sky: c.s[0] }; }
     else if (c.pet) { p.chestPets.push(c.pet[0]); p.pet = c.pet[0]; loot = { label: c.pet[1], sub: 'New pet · +10% XP while equipped', pet: c.pet[0], h: c.pet[3] }; }
