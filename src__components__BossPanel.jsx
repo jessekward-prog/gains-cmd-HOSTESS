@@ -9,6 +9,7 @@ import Ticker from './Ticker';
 import { ASSET, BOSS_GROUPS, BOSS_GROUP_SETS, BOSS_SPRITES, BOSS_WORDS, bossSprite } from '../lib/quest';
 
 const MONO = 'var(--font-mono)';
+const IDLE = 3, REST = 5, ACT = 1.5, PULSE = 8; // how slowly it moves: 100 ms ticks per frame (idle, recovering, acting) and the glow's
 export const BOSS_H = 104; // fixed: nothing on the screen moves when it attacks
 // [face x, face y] in the sprite's idle frame, and the close-up's zoom.
 const FACE = { dslime: [114, 60, 3], golem: [43, 11, 5], frost: [88, 33, 3], minotaur: [117, 56, 3], necro: [33, 62, 5], cp_enforcer: [59, 9, 4], cp_bruiser: [19, 9, 5] };
@@ -85,12 +86,12 @@ export default function BossPanel({ skin }) {
   const left = beaten ? 0 : Math.max(0, BOSS_GROUPS - boss.fights.length);
   const wait = nextAt && nextAt > Date.now() ? Math.ceil((nextAt - Date.now()) / 3600e3) : 0;
   const since = frame - tapAt; // frames of 100 ms
-  const acting = act && art[act] && since >= 0 && since < spr.n[act] + 2;
+  const acting = act && art[act] && since >= 0 && since < spr.n[act] * ACT + 2;
   const talking = !beaten && since >= 0 && since < 48;
-  const img = acting ? art[act][Math.min(spr.n[act] - 1, since)] : art.idle?.[still || beaten ? 0 : Math.floor(frame / (wait ? 3 : 1.5)) % spr.n.idle];
-  const lunge = !still && acting && !beaten ? Math.sin(Math.PI * Math.min(1, since / spr.n.atk)) : 0;
+  const img = acting ? art[act][Math.min(spr.n[act] - 1, Math.floor(since / ACT))] : art.idle?.[still || beaten ? 0 : Math.floor(frame / (wait ? REST : IDLE)) % spr.n.idle];
+  const lunge = !still && acting && !beaten ? Math.sin(Math.PI * Math.min(1, since / (spr.n.atk * ACT))) : 0;
   const shake = !still && acting && !beaten && since > 1 && since < 9 ? (since % 2 ? 3 : -3) : 0;
-  const pulse = still ? 0.5 : 0.5 + 0.5 * Math.sin(frame / 5);
+  const pulse = still ? 0.5 : 0.5 + 0.5 * Math.sin(frame / PULSE);
   const full = accent ? `rgb(${accent})` : 'var(--color-accent)';
   const line = beaten ? 'var(--color-success)' : full;
   // The battle screen's own HP bar (QuestStage `bar`), skin and all; the default skin's fill is the accent.
