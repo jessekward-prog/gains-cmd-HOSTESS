@@ -88,7 +88,7 @@ export default function SceneSheet({ open, onClose, prof, skin, save }) {
           <div className="h-3" />
           {head('PLACES', `${PLACES.length + 1}`)}
           <div className="grid grid-cols-2 gap-3">
-            {tile('daily', !prof.place || prof.place === 'daily', 'Travelling', 'A new place each day', null, <PlaceThumb k="frost" skin={skin} />, () => save((p) => ({ ...p, place: 'daily' })))}
+            {tile('daily', prof.place !== MEADOW && !PLACES.some(([k]) => k === prof.place), 'Travelling', 'A new place each day', null, <PlaceThumb k="ember" skin={skin} />, () => save((p) => ({ ...p, place: 'daily' })))}
             {tile(MEADOW, prof.place === MEADOW, 'The Meadow', 'Where it all began', null, <span className="absolute inset-0" style={{ backgroundImage: `url(${ASSET}sprites/land_mountains.png)`, backgroundSize: 'auto 130%', backgroundPosition: 'bottom', imageRendering: 'pixelated', filter: 'sepia(1) saturate(2)' }} />, () => save((p) => ({ ...p, place: MEADOW })))}
             {PLACES.map(([k, name]) => tile(k, prof.place === k, name, 'Open', null, <PlaceThumb k={k} skin={skin} />, () => save((p) => ({ ...p, place: k }))))}
           </div>

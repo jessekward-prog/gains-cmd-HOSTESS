@@ -293,7 +293,7 @@ console.log('boss checks passed');
   // Skies: Epic and Legendary chests only, never twice. Places: every one bakes, the daily walk covers them all.
   const { SKIES } = await import(join(dir, 'skies.js'));
   const { PLACES, bakePlace, placeOf, PW, PH } = await import(join(dir, 'places.js'));
-  assert.equal(SKIES.length, 10); assert.equal(PLACES.length, 10);
+  assert.equal(SKIES.length, 10); assert.deepEqual(PLACES.map((p) => p[0]), ['dunes', 'ember', 'graves', 'cavern']);
   assert.ok(SKIES.every((s) => s[2] === 2 || s[2] === 3));
   const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
   const p = { ...Q.defProf(), lvl: 20 };
@@ -301,7 +301,8 @@ console.log('boss checks passed');
   assert.deepEqual([won.tier, won.sky, won.prof.sky, won.prof.skies], ['LEGENDARY', 'signal', 'signal', ['signal']]);
   assert.notEqual(Q.rollLoot(won.prof, 0, seq(0, 0.999)).sky, 'signal');
   for (const [k] of PLACES) { const ls = bakePlace(k); assert.equal(ls.length, 4); assert.ok(ls[0].A.every((a) => a === 1), `${k} sky has no holes`); assert.equal(ls[0].L.length, PW * PH); }
-  assert.equal(new Set(Array.from({ length: 11 }, (_, d) => placeOf('daily', d))).size, 11);
+  assert.equal(new Set(Array.from({ length: 5 }, (_, d) => placeOf('daily', d))).size, 5);
+  assert.equal(placeOf('frost', 0), 'meadow'); // a place that was removed falls back to travelling
   assert.equal(placeOf('ember', 3), 'ember'); assert.equal(placeOf(undefined, 0), 'meadow');
   console.log('scene checks passed');
 }
