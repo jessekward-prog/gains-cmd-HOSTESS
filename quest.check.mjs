@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 
 const dir = join(mkdtempSync(join(tmpdir(), 'quest-')), 'lib');
 mkdirSync(dir);
-for (const f of ['quest', 'focus', 'supersets', 'history']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
+for (const f of ['quest', 'focus', 'supersets', 'history', 'skies', 'places']) copyFileSync(resolve(`src__lib__${f}.js`), join(dir, `${f}.js`));
 const Q = await import(join(dir, 'quest.js'));
 const { buildBlocks } = await import(join(dir, 'focus.js'));
 
@@ -84,7 +84,8 @@ assert.equal(Q.tierOf(15)[1], 'SILVER');
   assert.equal(com.tier, 'COMMON');
   assert.equal(com.label, '+400 XP');
   assert.deepEqual([com.prof.lvl, com.prof.xp], [21, 300]);
-  const full = { ...p, borders: ['holo', 'void'] };
+  const { SKIES } = await import(join(dir, 'skies.js'));
+  const full = { ...p, borders: ['holo', 'void'], skies: SKIES.filter((s) => s[2] === 3).map((s) => s[0]) };
   assert.notEqual(Q.rollLoot(full, 0, seq(0.0, 0.0)).tier, 'LEGENDARY');
   assert.ok(Q.oddsOf(Q.luckOf(20)).l > Q.oddsOf(0).l); // crits raise the odds, capped
   assert.equal(Q.luckOf(20), 0.3);
@@ -286,4 +287,21 @@ console.log('boss checks passed');
   assert.equal(Q.favCardId({}, 2, v), 39);
   assert.equal(Q.favCardId({ card: 5 }, 0, { owned: {} }), null);
   console.log('favourite picture checks passed');
+}
+
+{
+  // Skies: Epic and Legendary chests only, never twice. Places: every one bakes, the daily walk covers them all.
+  const { SKIES } = await import(join(dir, 'skies.js'));
+  const { PLACES, bakePlace, placeOf, PW, PH } = await import(join(dir, 'places.js'));
+  assert.equal(SKIES.length, 10); assert.equal(PLACES.length, 10);
+  assert.ok(SKIES.every((s) => s[2] === 2 || s[2] === 3));
+  const seq = (...v) => { let i = 0; return () => v[i++ % v.length]; };
+  const p = { ...Q.defProf(), lvl: 20 };
+  const won = Q.rollLoot(p, 0, seq(0, 0.999));
+  assert.deepEqual([won.tier, won.sky, won.prof.sky, won.prof.skies], ['LEGENDARY', 'signal', 'signal', ['signal']]);
+  assert.notEqual(Q.rollLoot(won.prof, 0, seq(0, 0.999)).sky, 'signal');
+  for (const [k] of PLACES) { const ls = bakePlace(k); assert.equal(ls.length, 4); assert.ok(ls[0].A.every((a) => a === 1), `${k} sky has no holes`); assert.equal(ls[0].L.length, PW * PH); }
+  assert.equal(new Set(Array.from({ length: 11 }, (_, d) => placeOf('daily', d))).size, 11);
+  assert.equal(placeOf('ember', 3), 'ember'); assert.equal(placeOf(undefined, 0), 'meadow');
+  console.log('scene checks passed');
 }
