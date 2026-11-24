@@ -73,8 +73,10 @@ export default function SceneSheet({ open, onClose, prof, skin, save }) {
   );
   const head = (t, r) => <div className="flex justify-between text-text-secondary px-1 pt-2 pb-2.5" style={{ font: `600 12px ${MONO}`, letterSpacing: '.1em' }}><span>{t}</span><span>{r}</span></div>;
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end g-root" onClick={onClose} style={{ background: 'rgba(0,0,0,.55)' }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Scene" className="w-full max-h-[80vh] overflow-y-auto bg-bg-1 rounded-t-[28px] p-4 pb-8">
+    <div className="fixed inset-0 z-[200] flex items-end g-root" onClick={onClose} style={{ background: 'rgba(0,0,0,.85)' }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Scene" className="w-full max-h-[80vh] overflow-y-auto bg-bg-1 rounded-t-[28px] p-4 pb-8 border-accent"
+        // The accent at full strength: the Quest accent is 25% by default, too faint for a hairline.
+        style={{ borderWidth: '1.5px 1.5px 0', borderStyle: 'solid', borderColor: 'rgb(from var(--color-accent) r g b / 1)' }}>
         <div className="flex items-center justify-between px-1">
           <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em' }}>Scene</div>
           <button onClick={onClose} className="h-11 px-3 font-bold text-text-secondary">Close</button>
