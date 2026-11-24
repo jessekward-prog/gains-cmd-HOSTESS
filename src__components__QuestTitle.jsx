@@ -366,7 +366,7 @@ export default function QuestTitle({ onNavigate }) {
               menu={(
                 <button onClick={() => setFavSheet('menu')} aria-label="Favourites options"
                   className="w-11 h-11 rounded-[8px] text-text-tertiary active:bg-bg-2 flex items-center justify-center"
-                  style={{ font: `700 16px ${MONO}` }}>⋯</button>
+                  style={{ font: `700 16px ${MONO}` }}><span className="bg-bg-0 px-1">⋯</span></button>
               )}
               onPick={(k) => setPick({ programId: favs[k].pg.id, index: favs[k].i })}
               onPicture={(k) => { setPicFor(keyOf(favs[k].p, favs[k].w.name)); setFavSheet('picture'); }} />

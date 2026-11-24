@@ -7,7 +7,7 @@ import { ASSET, SIZES, titleCase, MON_NAMES } from '../lib/quest';
 const MONO = 'var(--font-mono)';
 export const FAN_ROW_H = 28; // the row above the cards: group brackets and ⋯
 const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const ASPECT = 7 / 5, PEEK_MIN = 34, PEEK_MAX = 140;
+const ASPECT = 7 / 5, PEEK_MIN = 34, PEEK_MAX = 140, RING = 5;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 // Long names break before an underscore run rather than mid-word, and never leave one character alone.
@@ -66,9 +66,17 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
     });
     if (bar.current) {
       bar.current.style.opacity = 1 - e;
+      // A bracket spans only what shows of its cards: one tucked to the left shows up to
+      // the next card's edge, one tucked to the right from the previous card's.
+      const left = (i) => mix(pos[i].x, i ? pos[i - 1].x + big + RING : 0, clamp(pos[i].d, 0, i ? 1 : 0));
+      const right = (i) => mix(pos[i].x + big, i < n - 1 ? pos[i + 1].x - RING : 0, clamp(-pos[i].d, 0, i < n - 1 ? 1 : 0));
       [...bar.current.children].forEach((b) => {
-        const a = pos[b.dataset.from], z = pos[b.dataset.to];
-        if (a && z) { b.style.left = `${a.x}px`; b.style.width = `${Math.min(z.x + z.w, W - 44) - a.x}px`; }
+        const from = +b.dataset.from, to = +b.dataset.to;
+        if (!pos[to]) return;
+        const l = left(from), r = right(to), room = Math.min(r, W - 44) - l, t = b.firstChild; // clear of ⋯
+        b.style.left = `${l}px`; b.style.width = `${Math.max(0, r - l)}px`;
+        t.style.left = `${room / 2}px`;
+        t.textContent = room >= 110 ? `GROUP · ${to - from + 1}` : room >= 74 ? 'GROUP' : to - from + 1;
       });
     }
     const now = Math.round(q);
@@ -158,7 +166,7 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
           <div ref={bar} className="absolute inset-0 overflow-hidden" aria-hidden="true">
             {groups.map((g) => (
               <div key={g.g} data-from={g.from} data-to={g.to} className="absolute" style={{ top: 13, height: 20, border: '1.5px solid var(--color-text-secondary)', borderBottom: 0, borderRadius: '9px 9px 0 0' }}>
-                <span className="absolute bg-bg-0 text-text-secondary whitespace-nowrap px-2" style={{ left: '50%', top: -8, transform: 'translateX(-50%)', font: `600 10px ${MONO}`, letterSpacing: '.16em' }}>GROUP · {g.to - g.from + 1}</span>
+                <span className="absolute bg-bg-0 text-text-secondary whitespace-nowrap px-2" style={{ left: '50%', top: -8, transform: 'translateX(-50%)', font: `600 10px ${MONO}`, letterSpacing: '.16em' }} />
               </div>
             ))}
           </div>
@@ -172,7 +180,7 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
         className="absolute left-0 right-0 bottom-0 select-none" style={{ height, touchAction: 'pan-y', overflow: 'clip', overflowClipMargin: 14 }}>
         {items.map((it, i) => (
           <div key={it.key} ref={(el) => { els.current[i] = el; }} className="absolute left-0 top-0">
-            <div data-fan="face" className="relative overflow-hidden" style={{ borderRadius: 14, background: '#0b0b0b', boxShadow: '0 0 0 5px var(--color-bg-0)' }}>
+            <div data-fan="face" className="relative overflow-hidden" style={{ borderRadius: 14, background: '#0b0b0b', boxShadow: `0 0 0 ${RING}px var(--color-bg-0)` }}>
             <div data-fan="art" data-ascii="skip" className="absolute left-0 top-0 pointer-events-none">
               {it.card && <DitherCard card={it.card} img={it.img} still={i !== open || list || still()} />}
             </div>
