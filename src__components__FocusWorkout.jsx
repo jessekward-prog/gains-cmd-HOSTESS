@@ -277,6 +277,7 @@ const GO_HOLD = 1000;                     // then red and GO alone, no images
 const GO_MS = GO_RUN + GO_HOLD;           // how long the card is up in all
 const GO_STEP = GO_RUN / GO_SEQ.length;
 const GO_RED_HEX = '#d4181d';             // the filter's red, a shade under the old flash red
+const RED_FONT = "'Times New Roman', Times, serif"; // big words on the red card, as on the splash
 const GO_RED = 0.6;                       // and how strongly it sits over the frames
 const goReduceMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -2071,10 +2072,10 @@ export default function FocusWorkout({
               // propped up across the room and the number has to read from there.
               <div className="absolute inset-0 z-20 rounded-[28px] overflow-hidden flex flex-col items-center justify-center pointer-events-none"
                 style={{ background: GO_RED_HEX, animation: 'fx-fade .2s both' }} role="status" aria-live="assertive">
-                <span key={repSensor.holdLeft} style={{ color: '#fff', fontSize: 160, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1, textShadow: '0 2px 20px rgba(0,0,0,.45)', animation: reduce ? 'none' : 'fx-pop .35s cubic-bezier(.2,1.6,.4,1)' }}>
+                <span key={repSensor.holdLeft} style={{ color: '#fff', fontFamily: RED_FONT, fontSize: 190, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, textShadow: '0 2px 20px rgba(0,0,0,.45)', animation: reduce ? 'none' : 'fx-pop .35s cubic-bezier(.2,1.6,.4,1)' }}>
                   {repSensor.holdLeft}
                 </span>
-                <span style={{ color: '#fff', marginTop: 10, font: `800 22px ${MONO}`, letterSpacing: '.18em' }}>HOLD STILL</span>
+                <span style={{ color: '#fff', marginTop: 6, font: `700 34px ${RED_FONT}`, letterSpacing: '.04em', whiteSpace: 'nowrap' }}>HOLD STILL</span>
               </div>
             )}
             {goFlash && (
@@ -2089,7 +2090,7 @@ export default function FocusWorkout({
                 style={{ background: GO_RED_HEX, animation: `fx-flash-bg ${GO_MS}ms ease both` }}>
                 <GoFlash />
                 <div className="absolute inset-0" style={{ background: GO_RED_HEX, opacity: GO_RED }} />
-                <span style={{ position: 'relative', zIndex: 1, color: '#fff', fontSize: 112, fontWeight: 800, letterSpacing: '-0.05em', textShadow: '0 2px 20px rgba(0,0,0,.45)', animation: `fx-flash ${GO_MS}ms cubic-bezier(.2,1.2,.3,1) both` }}>GO</span>
+                <span style={{ position: 'relative', zIndex: 1, color: '#fff', fontFamily: RED_FONT, fontSize: 132, fontWeight: 700, letterSpacing: '-0.03em', textShadow: '0 2px 20px rgba(0,0,0,.45)', animation: `fx-flash ${GO_MS}ms cubic-bezier(.2,1.2,.3,1) both` }}>GO</span>
               </div>
             )}
             {toast && (

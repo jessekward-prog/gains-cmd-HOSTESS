@@ -150,9 +150,9 @@ export default function QuestTitle({ onNavigate }) {
     return i >= 0 ? { ...f, pg, i, w: parse(pg)[i] } : null;
   }).filter(Boolean), [prof.favs, programs]);
 
+  const sceneSkin = stageArt({ theme: prof.theme, hero: prof.hero, tint: readTint() }, questSkin).K;
   // With favourites the stage, the boss and the cards share one screen: the stage
-  // gives up height first, then the cards. An opened boss panel isn't counted, so
-  // reading it never resizes the stage.
+  // gives up height first, then the cards.
   const LIST_PEEK = 112; // without favourites: the top of the boss panel
   const boss = Math.min(bossH, BOSS_H);
   const bezel = questSkin?.st.bezel ? 24 : 0;
@@ -363,7 +363,7 @@ export default function QuestTitle({ onNavigate }) {
           card={<MiniHeroCard onOpen={() => setCardOpen(true)} />} scale={stageK} />
         </div>
 
-        <div ref={bossRef} className="flex-shrink-0 empty:hidden"><BossPanel /></div>
+        <div ref={bossRef} className="flex-shrink-0 empty:hidden"><BossPanel skin={sceneSkin} /></div>
 
         {favs.length > 0 && (
           <div data-ascii="favs" className="flex-shrink-0">
@@ -447,7 +447,7 @@ export default function QuestTitle({ onNavigate }) {
         </button>
       </div>
       {cardOpen && <QuestHeroCard open onClose={() => setCardOpen(false)} />}
-      <SceneSheet open={sceneOpen} onClose={() => setSceneOpen(false)} prof={prof} skin={stageArt({ theme: prof.theme, hero: prof.hero, tint: readTint() }, questSkin).K}
+      <SceneSheet open={sceneOpen} onClose={() => setSceneOpen(false)} prof={prof} skin={sceneSkin}
         save={(fn) => updProf(fn).catch((e) => showToast('Not saved: ' + e.message, 'error'))} />
 
       {favSheet && createPortal(
