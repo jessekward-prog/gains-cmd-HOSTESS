@@ -111,7 +111,7 @@ export default function BossPanel({ skin }) {
         <span className="absolute inset-0" style={{ background: `radial-gradient(circle at calc(100% - 74px) 46%, ${full}, transparent 96px)`, opacity: wait ? 0.1 : 0.16 + 0.1 * pulse + lunge * 0.25 }} />
         {img && <span className="absolute block" style={{
           left: `calc(100% - 74px - ${fx * z}px)`, top: 46 - fy * z, width: spr.w * z, height: spr.h * z, backgroundImage: `url(${img.src})`, backgroundSize: '100% 100%', imageRendering: 'pixelated',
-          transformOrigin: `${fx * z}px ${fy * z}px`, transform: `translate(${-lunge * 22}px, ${lunge * 10}px) scale(${1 + lunge * 0.14})`, opacity: wait ? 0.55 : 1,
+          transformOrigin: `${fx * z}px ${fy * z}px`, transform: `translate(${-lunge * 22}px, ${lunge * 10}px) scale(${1 + lunge * 0.14})`, filter: `brightness(${wait ? 0.5 : 0.68 + lunge * 0.32})`, // full strength only as it attacks
         }} />}
         <span className="absolute inset-0" style={{ background: 'linear-gradient(90deg, var(--color-bg-1) 56%, transparent 82%)' }} />
       </span>
