@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkoutProvider, useWorkout } from './context/WorkoutContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -25,6 +25,7 @@ import { native } from './lib/native';
 import { homeMessage, readRemind } from './lib/upnext';
 import { stageArt } from './components/QuestStage';
 import { warmQuestSprites } from './hooks/useQuestSprites';
+import { warmQuestArt } from './hooks/useQuestArt';
 import useQuest, { readTint } from './hooks/useQuest';
 import ProgramsPage from './pages/ProgramsPage';
 import WorkoutPage from './pages/WorkoutPage';
@@ -52,7 +53,7 @@ function AppShell() {
   // Quest Mode has its own look (Settings → Quest), only on the quest screens.
   const { setQuestActive, questSkin } = useTheme();
   const inQuest = tab === 'quest' || (tab === 'workout' && !!activeWorkout?.quest);
-  useEffect(() => { setQuestActive(inQuest); }, [inQuest, setQuestActive]);
+  useLayoutEffect(() => { setQuestActive(inQuest); }, [inQuest, setQuestActive]);
 
   // The quest sprites are recoloured once per session and cached. Doing that on
   // arrival put a second of fetching and per-pixel work under the decode wave,
@@ -75,6 +76,7 @@ function AppShell() {
   useEffect(() => {
     if (inQuest || !ready) return undefined;
     const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
+    warmQuestArt();
     return warmQuestSprites(K, jobs);
   }, [inQuest, ready, questSkin, prof.theme, prof.hero, prof.pet]); // eslint-disable-line react-hooks/exhaustive-deps
 

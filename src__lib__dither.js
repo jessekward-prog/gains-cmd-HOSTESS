@@ -204,9 +204,30 @@ function render(out, card, prep, t) {
     if (anim) { const y0 = ((tt * 70) % (OH + 60)) - 30; ctx.fillStyle = rgb(light, 0.12); ctx.fillRect(0, y0, OW, 40); }
   }
 }
+const stillCache = new Map();
+function frameKey(card, art) {
+  const src = art || card.art || '';
+  return `${card.id}|${card.style}|${card.pal}|${card.rarity}|${src ? src.length + src.slice(-32) : ''}`;
+}
+function getCachedFrame(card, art) {
+  if (!card) return null;
+  return stillCache.get(frameKey(card, art)) || null;
+}
+async function warmCard(card, art) {
+  if (!card) return null;
+  const k = frameKey(card, art);
+  if (stillCache.has(k)) return stillCache.get(k);
+  const prep = await prepare(card, art);
+  if (!prep) return null;
+  if (stillCache.has(k)) return stillCache.get(k);
+  const c = cv(OW, OH);
+  render(c, card, prep, 0);
+  stillCache.set(k, c);
+  return c;
+}
 function thumb(card, prep) {
   const c = cv(OW, OH); render(c, card, prep, 0);
   return new Promise((res) => c.toBlob((b) => res(b ? `url(${URL.createObjectURL(b)})` : 'none'), 'image/png'));
 }
 
-export { CARDS, SPRITE_CARDS, PAL, STYLES, RAR, prepare, render, thumb, OW, OH, hx };
+export { CARDS, SPRITE_CARDS, PAL, STYLES, RAR, prepare, render, thumb, warmCard, getCachedFrame, OW, OH, hx };

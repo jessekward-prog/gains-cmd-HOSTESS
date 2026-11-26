@@ -6,7 +6,11 @@ import * as api from '../lib/api';
 let art = null, loading = null;
 const subs = new Set();
 const emit = () => subs.forEach((f) => f(art));
-const load = () => (loading ??= api.getQuestArt().then((r) => { art = r.art || {}; emit(); }).catch(() => { art = {}; emit(); }));
+const load = () => (loading ??= api.getQuestArt().then((r) => { art = r.art || {}; emit(); return art; }).catch(() => { art = {}; emit(); return art; }));
+
+export const warmQuestArt = () => load();
+export const isQuestArtReady = () => art !== null;
+export const getCachedQuestArt = () => art || {};
 
 export async function saveArt(slot, rec) {
   await api.saveQuestArt(slot, rec);

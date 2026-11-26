@@ -23,10 +23,15 @@ const rgbOf = (css) => {
   const g = c.getContext('2d'); g.fillStyle = css; g.fillRect(0, 0, 1, 1);
   return [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)];
 };
+export const readAccentRgb = () => (typeof document === 'undefined'
+  ? '255,34,34'
+  : String(rgbOf(getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#ff2222')));
 // The sprite in five flat shades of the accent, the way the skins colour the rest of the stage.
 const SHADES = [0.12, 0.3, 0.55, 0.85, 1.1]; // above 1 is lightened
 const luma = (p, k) => (0.3 * p[k] + 0.59 * p[k + 1] + 0.11 * p[k + 2]) / 255;
 const cache = new Map(); // `${sprite}|${anim}|${rgb}` → Promise of frames
+const readyFrames = new Map(); // `${sprite}|${anim}|${rgb}` → decoded Image[]
+const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
 const frames = (key, anim, rgb) => {
   const id = `${key}|${anim}|${rgb}`;
   if (!cache.has(id)) cache.set(id, (async () => {
@@ -40,7 +45,8 @@ const frames = (key, anim, rgb) => {
     const ls = []; { const p = raw[0].d.data; for (let k = 0; k < p.length; k += 4) if (p[k + 3]) ls.push(luma(p, k)); }
     ls.sort((x, y) => x - y);
     const lo = ls[Math.floor(ls.length * 0.04)], hi = Math.max(lo + 0.1, ls[Math.floor(ls.length * 0.95)]);
-    return Promise.all(raw.map(async ({ c, g, d }) => {
+    const imgs = [];
+    for (const { c, g, d } of raw) {
       const p = d.data;
       for (let k = 0; k < p.length; k += 4) {
         if (!p[k + 3]) continue;
@@ -49,10 +55,32 @@ const frames = (key, anim, rgb) => {
       }
       g.putImageData(d, 0, 0);
       const out = new Image(); out.src = c.toDataURL(); await out.decode(); // so a swap never blinks
-      return out;
-    }));
+      imgs.push(out);
+      await yieldFrame();
+    }
+    readyFrames.set(id, imgs);
+    return imgs;
   })());
   return cache.get(id);
+};
+export const isBossFramesReady = (key, act, accentStr = readAccentRgb()) => {
+  if (!key || !BOSS_SPRITES[key]) return true;
+  const anims = ['idle', act].filter(Boolean);
+  return anims.every((a) => readyFrames.has(`${key}|${a}|${accentStr}`));
+};
+export const warmBossFrames = (key, act, accentStr = readAccentRgb()) => {
+  if (!key || !BOSS_SPRITES[key]) return Promise.resolve();
+  const rgb = accentStr.split(',').map(Number);
+  const anims = ['idle', act].filter(Boolean);
+  return Promise.all(anims.map((a) => frames(key, a, rgb).catch(() => null)));
+};
+const cachedBossArt = (key, act, accentStr) => {
+  const out = {};
+  for (const a of ['idle', act].filter(Boolean)) {
+    const f = readyFrames.get(`${key}|${a}|${accentStr}`);
+    if (f) out[a] = f;
+  }
+  return out;
 };
 
 // The weekly boss: the muscle it has come for, and the boss itself close up in
@@ -64,21 +92,30 @@ export default function BossPanel({ skin }) {
   const haptics = useHaptics();
   const frame = useFrame();
   const [tapAt, setTapAt] = useState(-1e4); // the frame it was last tapped on
-  const [accent, setAccent] = useState('');
-  const [art, setArt] = useState({});
+  const [accent, setAccent] = useState(readAccentRgb);
   const key = bossSprite(boss?.week || '2026-01-05', prof.theme);
   const act = beaten ? (BOSS_SPRITES[key].n.death ? 'death' : null) : 'atk';
+  const [art, setArt] = useState(() => cachedBossArt(key, act, accent));
   const slow = Math.floor(frame / 10);
   useEffect(() => { // the accent can change under it: Quest's own theme lands after the first paint
-    const a = String(rgbOf(getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#ff2222'));
+    const a = readAccentRgb();
     if (a !== accent) setAccent(a);
   }, [slow]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!accent || !boss) return undefined;
     let live = true;
+    const cached = cachedBossArt(key, act, accent);
+    const anims = ['idle', act].filter(Boolean);
+    if (anims.every((a) => cached[a])) {
+      setArt(cached);
+      return undefined;
+    }
     const rgb = accent.split(',').map(Number);
-    setArt({});
-    ['idle', act].filter(Boolean).forEach((a) => frames(key, a, rgb).then((f) => { if (live) setArt((s) => ({ ...s, [a]: f })); }, () => {}));
+    setArt(cached);
+    anims.forEach((a) => {
+      if (cached[a]) return;
+      frames(key, a, rgb).then((f) => { if (live) setArt((s) => ({ ...s, [a]: f })); }, () => {});
+    });
     return () => { live = false; };
   }, [key, act, accent, !boss]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!boss) return null;

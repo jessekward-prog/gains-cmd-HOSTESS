@@ -7,8 +7,21 @@ import { colourFns } from '../lib/questSkins';
 // to a colour is the skin's business (tint / duo / pal4 / grad — colourFns);
 // the loop here only walks the pixels.
 const cache = new Map(); // `${id}|${what}` → Promise
+const resolved = new Map(); // `${id}|${what}` → resolved value (already decoded)
 
 const loadImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+const decodeCssUrl = (cssUrl) => {
+  if (!cssUrl) return Promise.resolve();
+  const m = cssUrl.match(/^url\((.*)\)$/);
+  if (!m) return Promise.resolve();
+  return new Promise((res) => {
+    const im = new Image();
+    im.decoding = 'async';
+    im.src = m[1];
+    if (im.decode) im.decode().then(res, res);
+    else { im.onload = res; im.onerror = res; }
+  });
+};
 const toUrl = (cv) => new Promise((res) => cv.toBlob((b) => res(b ? URL.createObjectURL(b) : null)));
 
 async function recolour(src, fn, mix = 0) {
@@ -24,11 +37,19 @@ async function recolour(src, fn, mix = 0) {
   }
   ctx.putImageData(d, 0, 0);
   const u = await toUrl(c);
-  return u ? `url(${u})` : null;
+  if (!u) return null;
+  const css = `url(${u})`;
+  await decodeCssUrl(css);
+  return css;
 }
 
 const rgbOf = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const memo = (key, make) => { if (!cache.has(key)) cache.set(key, make()); return cache.get(key); };
+const memo = (key, make) => {
+  if (!cache.has(key)) {
+    cache.set(key, Promise.resolve().then(make).then((v) => { resolved.set(key, v); return v; }));
+  }
+  return cache.get(key);
+};
 // The base skin carries the scene tint, which the Scene picker can still change,
 // so the cache key has to move with it. A real skin's tint never changes.
 const idOf = (skin) => `${skin.id}|${skin.tint}|${skin.theme}`;
@@ -92,6 +113,37 @@ export function warmQuestSprites(skin, jobs) {
   return () => { live = false; if (typeof cancelIdleCallback === 'function') cancelIdleCallback(id); else clearTimeout(id); };
 }
 
+function readResolved(skin, jobs) {
+  const base = idOf(skin);
+  const spr = {};
+  for (const [key] of jobs) {
+    const v = resolved.get(`${base}|${key}`);
+    if (v) spr[key] = v;
+  }
+  return {
+    sprites: spr,
+    lands: resolved.get(`${base}|lands`) || null,
+    strip: resolved.get(`${base}|strip`) || null,
+  };
+}
+
+export function isQuestSpritesReady(skin, jobs) {
+  const base = idOf(skin);
+  if (!resolved.has(`${base}|lands`) || !resolved.has(`${base}|strip`)) return false;
+  return jobs.every(([key]) => resolved.has(`${base}|${key}`));
+}
+
+export async function preloadQuestSprites(skin, jobs) {
+  if (isQuestSpritesReady(skin, jobs)) return readResolved(skin, jobs);
+  const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+  const tasks = [() => lands(skin), () => strip(skin), ...jobs.map(([key, n]) => () => frames(skin, key, n))];
+  for (const fn of tasks) {
+    await fn().catch(() => null);
+    await yieldFrame();
+  }
+  return readResolved(skin, jobs);
+}
+
 /**
  * Recoloured sprites for the scene. `skin` is a questSkins entry (BASE carrying
  * the scene tint when no skin is picked); `jobs` is [[key, frameCount], …].
@@ -99,10 +151,12 @@ export function warmQuestSprites(skin, jobs) {
  */
 export default function useQuestSprites(skin, jobs) {
   const sig = `${idOf(skin)}|${jobs.map((j) => j.join(':')).join(',')}`;
-  const [state, setState] = useState({ sprites: {}, lands: null, strip: null });
+  const [state, setState] = useState(() => readResolved(skin, jobs));
   useEffect(() => {
+    const cur = readResolved(skin, jobs);
+    setState(cur);
+    if (isQuestSpritesReady(skin, jobs)) return undefined;
     let live = true;
-    setState({ sprites: {}, lands: null, strip: null });
     jobs.forEach(([key, n]) => frames(skin, key, n).then((f) => live && setState((s) => ({ ...s, sprites: { ...s.sprites, [key]: f } }))));
     lands(skin).then((l) => live && setState((s) => ({ ...s, lands: l })));
     strip(skin).then((u) => live && setState((s) => ({ ...s, strip: u })));

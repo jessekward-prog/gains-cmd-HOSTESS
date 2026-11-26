@@ -1,25 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AsciiReveal } from 'ascii-reveal';
 import { useWorkout } from '../context/WorkoutContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import useQuest, { readTint, readScanlines } from '../hooks/useQuest';
-import useQuestArt from '../hooks/useQuestArt';
+import useQuestArt, { warmQuestArt, isQuestArtReady, getCachedQuestArt } from '../hooks/useQuestArt';
+import { preloadQuestSprites, isQuestSpritesReady } from '../hooks/useQuestSprites';
 import useBackHandler from '../hooks/useBackHandler';
 import QuestStage, { stageArt } from './QuestStage';
 import SceneSheet from './QuestScene';
 import { PLACES, placeOf } from '../lib/places';
 import ConfirmDialog from './ConfirmDialog';
 import useRepStartPrompt from './RepStartPrompt';
-import QuestHeroCard, { MiniHeroCard } from './QuestHeroCard';
+import QuestHeroCard, { MiniHeroCard, featuredCards } from './QuestHeroCard';
 import { isMarker } from '../lib/history';
 import { buildBlocks } from '../lib/focus';
-import { lvTitle, tierOf, monsOf, favCardId } from '../lib/quest';
-import BossPanel, { BOSS_H } from './BossPanel';
+import { lvTitle, tierOf, monsOf, favCardId, weekKey, bossSprite, BOSS_SPRITES } from '../lib/quest';
+import BossPanel, { BOSS_H, readAccentRgb, isBossFramesReady, warmBossFrames } from './BossPanel';
 import QuestFan, { FAN_ROW_H } from './QuestFan';
 import DitherCard, { effCard } from './DitherCard';
-import { CARDS, RAR } from '../lib/dither';
+import { CARDS, RAR, warmCard, getCachedFrame } from '../lib/dither';
 import TypewriterName from './TypewriterName';
 import Ticker from './Ticker';
 import { usePageH, stageScale, STAGE_H } from '../lib/fit';
@@ -58,11 +59,127 @@ const clearGroup = (list, gid) => list.map((f) => {
   return rest;
 });
 
+const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+
+function questCardTargets(prof, vault, programs, artMap) {
+  const seen = new Set();
+  const out = [];
+  const pushCard = (c0) => {
+    if (!c0) return;
+    const rec = artMap[c0.id];
+    const c = effCard(c0, rec);
+    const img = rec?.img;
+    const k = `${c.id}|${c.style}|${c.pal}|${img ? img.length : 0}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push([c, img]);
+  };
+  pushCard(featuredCards(vault)[0]);
+  const favs = (prof.favs || []).filter((f) => {
+    const pg = programs.find((pp) => pp.name === f.p);
+    return pg && parse(pg).some((w) => w.name === f.w);
+  });
+  favs.forEach((f, i) => pushCard(CARDS[favCardId(f, i, vault) - 1]));
+  return out;
+}
+
+function questBossInfo(prof) {
+  const wk = weekKey();
+  const b = prof.boss?.week === wk && prof.boss.exercise && prof.boss.fights ? prof.boss : null;
+  if (!b) return null;
+  const key = bossSprite(b.week, prof.theme);
+  const beaten = prof.bossBeat === wk;
+  const act = beaten ? (BOSS_SPRITES[key]?.n?.death ? 'death' : null) : 'atk';
+  return { key, act };
+}
+
+function checkQuestCache(prof, vault, programs, questSkin) {
+  if (!isQuestArtReady()) return false;
+  const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
+  if (!isQuestSpritesReady(K, jobs)) return false;
+  const boss = questBossInfo(prof);
+  if (boss && !isBossFramesReady(boss.key, boss.act, readAccentRgb())) return false;
+  const artMap = getCachedQuestArt();
+  const cards = questCardTargets(prof, vault, programs, artMap);
+  return cards.every(([c, img]) => !!getCachedFrame(c, img));
+}
+
+// Preload gate: when sprites, custom art, boss frames, and dithered card bitmaps
+// are already cached in memory, QuestTitleView mounts immediately with zero
+// loading screen. On a cold visit it shows a lightweight boot screen while
+// pre-rendering off the animation window so the reveal runs smoothly.
+export default function QuestTitle({ onNavigate }) {
+  const { programs } = useWorkout();
+  const { prof, vault } = useQuest();
+  const { questSkin } = useTheme();
+
+  const [ready, setReady] = useState(() => checkQuestCache(prof, vault, programs, questSkin));
+  const [progress, setProgress] = useState({ done: 0, total: 1 });
+
+  useEffect(() => {
+    if (ready) return undefined;
+    let live = true;
+    const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
+    const boss = questBossInfo(prof);
+    const accentStr = readAccentRgb();
+
+    (async () => {
+      const safety = new Promise((r) => setTimeout(r, 5000));
+      const run = (async () => {
+        const artMap = await Promise.race([warmQuestArt(), new Promise((r) => setTimeout(() => r(getCachedQuestArt()), 2500))]);
+        if (!live) return;
+        const cards = questCardTargets(prof, vault, programs, artMap || {});
+        const total = 1 + (boss ? 1 : 0) + cards.length;
+        let done = 0;
+        const bump = () => { done += 1; if (live) setProgress({ done, total }); };
+        if (live) setProgress({ done: 0, total });
+
+        const spriteP = preloadQuestSprites(K, jobs).catch(() => null).then(bump);
+        const bossP = boss ? warmBossFrames(boss.key, boss.act, accentStr).catch(() => null).then(bump) : Promise.resolve();
+
+        for (const [c, img] of cards) {
+          if (!live) return;
+          if (!getCachedFrame(c, img)) {
+            await warmCard(c, img).catch(() => null);
+            await yieldFrame();
+          }
+          bump();
+        }
+        await Promise.all([spriteP, bossP]);
+      })();
+
+      await Promise.race([run, safety]);
+      if (live) setReady(true);
+    })();
+
+    return () => { live = false; };
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!ready) {
+    const pct = Math.max(8, Math.min(100, Math.round((progress.done / Math.max(1, progress.total)) * 100)));
+    return (
+      <div className="g-root flex flex-col items-center justify-center min-h-full px-8 select-none">
+        <div className="w-full max-w-[240px] flex flex-col gap-3">
+          <div className="flex items-center justify-between text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.18em' }}>
+            <span>LOADING QUEST</span>
+            <span className="text-text-tertiary">{String(progress.done).padStart(2, '0')}/{String(progress.total).padStart(2, '0')}</span>
+          </div>
+          <div className="w-full overflow-hidden rounded-full bg-bg-2" style={{ height: 4 }}>
+            <div className="h-full bg-accent" style={{ width: `${pct}%`, transition: 'width 140ms ease-out' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <QuestTitleView onNavigate={onNavigate} />;
+}
+
 // Quest Mode's title screen (home → Quest): choose today's quest from your
 // program (defaulting to the one that's up next) and begin. Favourites you've
 // starred are pinned at the top with their quest-only alias. Favourites can be
 // grouped: a group is a progression, and the next member is queued for you.
-export default function QuestTitle({ onNavigate }) {
+function QuestTitleView({ onNavigate }) {
   const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings, reloadPrograms, reloadSettings } = useWorkout();
   const agg = aggressionOf(settings);
   const { showToast } = useToast();
@@ -123,19 +240,24 @@ export default function QuestTitle({ onNavigate }) {
   const pageH = usePageH();
   const headRef = useRef(null);
   const [chrome, setChrome] = useState(null); // header + pinned bar, px
-  useEffect(() => {
+  useLayoutEffect(() => {
     const els = [headRef.current, barRef.current].filter(Boolean);
-    if (typeof ResizeObserver === 'undefined' || !els.length) return undefined;
+    if (!els.length) return undefined;
     const read = () => setChrome(els.reduce((a, el) => a + el.offsetHeight, 0));
+    read();
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(read);
     els.forEach((el) => ro.observe(el));
-    read();
     return () => ro.disconnect();
   }, []);
   const bossRef = useRef(null);
-  const [bossH, setBossH] = useState(0);
-  useEffect(() => {
-    if (typeof ResizeObserver === 'undefined' || !bossRef.current) return undefined;
+  const hasBoss = !!questBossInfo(prof);
+  const [bossH, setBossH] = useState(() => (hasBoss ? BOSS_H : 0));
+  useLayoutEffect(() => {
+    if (!bossRef.current) return undefined;
+    const curH = bossRef.current.offsetHeight;
+    if (curH) setBossH(curH);
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(([e]) => setBossH(e.contentRect.height));
     ro.observe(bossRef.current);
     return () => ro.disconnect();
