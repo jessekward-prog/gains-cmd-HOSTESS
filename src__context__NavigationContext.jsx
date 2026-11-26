@@ -15,6 +15,11 @@ const ROOT_TAB = 'programs';
 // Double-tap-to-exit window (ms)
 const EXIT_CONFIRM_MS = 2000;
 
+// The home screen back falls to before it exits: the quest screen in Quest
+// Mode, Programs otherwise. Whichever of the two was visited last decides it.
+const HOME_KEY = 'gains-beta-home';
+const readHome = () => { try { return localStorage.getItem(HOME_KEY) === 'quest' ? 'quest' : ROOT_TAB; } catch { return ROOT_TAB; } };
+
 /**
  * NavigationProvider
  *
@@ -48,6 +53,16 @@ export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAtte
   useEffect(() => { stackRef.current = stack; }, [stack]);
 
   const tab = stack[stack.length - 1];
+
+  const homeRef = useRef(readHome());
+  const launchTab = useRef(tab);
+  useEffect(() => {
+    // The app always opens on Programs; only a real visit changes the home.
+    if (launchTab.current !== null) { const first = launchTab.current === tab; launchTab.current = null; if (first) return; }
+    if (tab !== 'quest' && tab !== ROOT_TAB) return;
+    homeRef.current = tab;
+    try { localStorage.setItem(HOME_KEY, tab); } catch {}
+  }, [tab]);
 
   // Stack of registered back-handlers (e.g. open modals).
   // Most recently registered runs first. If it returns true, the back
@@ -117,15 +132,35 @@ export function NavigationProvider({ children, initialTab = ROOT_TAB, onExitAtte
         return;
       }
 
-      // 3. If we have more than one tab on the stack, pop it.
-      if (stackRef.current.length > 1) {
-        const next = stackRef.current.slice(0, -1);
+      // 3. Step back, but never past home, and reaching home always leaves the
+      //    stack as [home] with one real history entry above the sentinel — the
+      //    shape step 4's exit relies on. The browser already popped one entry,
+      //    so it sits at index len-2 (the sentinel when len is 1).
+      const cur = stackRef.current;
+      const home = cur.includes('quest') ? 'quest' : homeRef.current;
+      const settle = (next) => {
+        const delta = (next.length - 1) - (cur.length - 2);
+        if (delta < 0) { programmaticPopRef.current = true; try { window.history.go(delta); } catch {} }
+        else if (delta > 0) { try { window.history.pushState({ navIndex: 0, tab: next[0] }, ''); } catch {} }
         stackRef.current = next;
         setStack(next);
+      };
+      if (cur[cur.length - 1] !== home) {
+        let next = cur.slice(0, -1);
+        if (!next.includes(home) || next[next.length - 1] === home) next = [home];
+        settle(next);
+        return;
+      }
+      if (cur.length > 1) {
+        // On home with screens under it (Programs under the quest screen): this
+        // press is the first of the two exit presses.
+        settle([home]);
+        lastExitAttemptRef.current = Date.now();
+        if (typeof onExitAttempt === 'function') { try { onExitAttempt(); } catch {} }
         return;
       }
 
-      // 4. We're at the root. Double-tap-to-exit.
+      // 4. We're on the home screen. Double-tap-to-exit.
       const now = Date.now();
       if (now - lastExitAttemptRef.current < EXIT_CONFIRM_MS) {
         // User confirmed exit — actually let the browser go back.

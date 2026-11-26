@@ -12,6 +12,7 @@ import BodyMap from './BodyMap';
 import QuestHeroCard from './QuestHeroCard';
 import QuestVault, { PackPanel } from './QuestVault';
 import ChestReel from './ChestReel';
+import Ticker from './Ticker';
 import useQuest from '../hooks/useQuest';
 import { questSession, clearQuest, xpMult, luckOf, addXp, lvTitle, TROPHY, EVENTS, weekKey } from '../lib/quest';
 
@@ -226,10 +227,10 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
   const tiles = [[`${dur}m`, 'DURATION'], [vol, 'KG MOVED'], [String(summary.sets), 'SETS']];
   if (summary.cal) tiles.push([summary.cal.toLocaleString(), 'CALORIES']);
   return portal(
-    <div className={`${LAYER} overflow-y-auto`}>
+    <div className={`${LAYER} overflow-y-auto overflow-x-hidden`}>
       <div className="max-w-xl mx-auto px-5 pb-8" style={{ paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))' }}>
         <div className="text-success" style={{ font: `500 11px ${MONO}`, letterSpacing: '.16em', animation: 'fx-in .4s .05s both' }}>✓ WORKOUT COMPLETE</div>
-        <div className="mt-2.5 origin-left" style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 0.95, animation: 'fx-pop .5s .1s cubic-bezier(.2,1.3,.4,1) both' }}>{summary.name}</div>
+        <div className="mt-2.5 origin-left" style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.15, animation: 'fx-pop .5s .1s cubic-bezier(.2,1.3,.4,1) both' }}><Ticker>{summary.name}</Ticker></div>
         <div className="mt-2 text-text-tertiary" style={{ font: `400 12px ${MONO}`, animation: 'fx-in .4s .2s both' }}>{summary.prog} · {date}</div>
 
         <div className={`grid ${tiles.length > 3 ? 'grid-cols-2' : 'grid-cols-3'} gap-2 mt-[22px]`}>
@@ -246,8 +247,8 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
             <div style={{ font: `600 10px ${MONO}`, letterSpacing: '.16em', color: 'var(--g-pr-ink)' }}>PERSONAL RECORDS</div>
             {summary.prs.map((p) => (
               <div key={p.name} className="flex justify-between mt-2 gap-3">
-                <span className="text-base font-extrabold">{p.name}</span>
-                <span style={{ font: `500 14px ${MONO}` }}>{fmtW(p.w)} kg × {p.r}</span>
+                <Ticker style={{ fontSize: 16, fontWeight: 800 }}>{p.name}</Ticker>
+                <span className="flex-shrink-0" style={{ font: `500 14px ${MONO}` }}>{fmtW(p.w)} kg × {p.r}</span>
               </div>
             ))}
           </div>
@@ -277,7 +278,7 @@ export function FinishFlow({ summary, result, failed, onDone, onProgress, quest 
         {summary.ex.map((x, i) => (
           <div key={x.name + i} className="flex items-center gap-3 py-3" style={{ borderTop: '1px solid var(--color-bg-3)', animation: `fx-in .35s ${0.75 + i * 0.05}s both` }}>
             <div className="flex-1 min-w-0">
-              <div className="text-[15px] font-bold truncate">{x.name}</div>
+              <Ticker style={{ fontSize: 15, fontWeight: 700 }}>{x.name}</Ticker>
               <div className="mt-0.5 text-text-tertiary" style={{ font: `400 11px ${MONO}` }}>{x.sets}</div>
             </div>
             <span className="text-text-secondary" style={{ font: `500 13px ${MONO}` }}>{x.best}</span>

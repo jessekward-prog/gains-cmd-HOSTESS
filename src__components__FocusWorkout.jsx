@@ -616,14 +616,23 @@ function IntervalBlock({ set, onStamp, onDone, onStepWeight, onKeypad }) {
   useTick(active);
   const { phase, phaseRemaining, totalRemaining } = computePhase(set.intervalCountInStartMs, set.intervalTimerStartMs, work, rest, total);
   const prev = useRef(phase);
+  const fired = useRef(false);
   useEffect(() => {
-    if (phase === prev.current) return;
     const was = prev.current;
     prev.current = phase;
+    if (phase !== 'done') fired.current = false;
+    // A block whose time ran out while the app was backgrounded or remounted
+    // mounts already 'done' — no transition, so finish it here (once: complete() toggles).
+    if (phase === 'done' && !set.completed && !fired.current) {
+      fired.current = true;
+      if (was !== 'done') { playBeep('rest'); vibrate([200, 100, 200]); }
+      onDone();
+      return;
+    }
+    if (phase === was) return;
     if (phase === 'work' && was !== 'idle' && was !== 'countin') { playBeep('work'); vibrate([200]); }
     if (phase === 'work' && was === 'countin') playBeep('countdown');
     if (phase === 'rest') { playBeep('rest'); vibrate([100]); }
-    if (phase === 'done' && !set.completed) { playBeep('rest'); vibrate([200, 100, 200]); onDone(); }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (phase !== 'work' && phase !== 'rest') return;
@@ -635,7 +644,7 @@ function IntervalBlock({ set, onStamp, onDone, onStepWeight, onKeypad }) {
   const round = Math.min(rounds, Math.floor(elapsed / cycle) + 1);
   const running = phase === 'work' || phase === 'rest';
   const bg = phase === 'work' ? 'var(--color-success)' : phase === 'rest' ? 'var(--g-drop)' : phase === 'countin' ? 'var(--color-bg-3)' : 'var(--color-bg-2)';
-  const word = set.completed ? 'Done' : phase === 'work' ? 'WORK' : phase === 'rest' ? 'REST' : phase === 'countin' ? Math.ceil(phaseRemaining) : 'Ready';
+  const word = set.completed || phase === 'done' ? 'Done' : phase === 'work' ? 'WORK' : phase === 'rest' ? 'REST' : phase === 'countin' ? Math.ceil(phaseRemaining) : 'Ready';
   const top = set.completed ? 'BLOCK COMPLETE' : running ? `ROUND ${round} OF ${rounds}` : phase === 'countin' ? 'GET READY' : `${rounds} ROUNDS · ${work}s ON / ${rest}s OFF`;
   // h-full + a flexible middle: in a short card the clock and the Start button
   // keep their place and only the type scales, so nothing has to scroll.
@@ -674,6 +683,14 @@ function IntervalBlock({ set, onStamp, onDone, onStepWeight, onKeypad }) {
         style={{ marginTop: 'clamp(6px, 5cqh, 14px)', height: 'clamp(40px, 24cqh, 52px)' }}>
         {set.completed ? 'Undo' : active ? 'Stop' : 'Start intervals'}
       </button>
+      {/* Escape hatch: tick the block off without sitting through (or re-running) the timer. */}
+      {!set.completed && (
+        <button onClick={() => { fired.current = true; onDone(); }} aria-label="Mark block done"
+          className="w-full flex-shrink-0 underline decoration-dotted underline-offset-4"
+          style={{ font: `600 11px ${MONO}`, letterSpacing: '.12em', opacity: 0.75, marginTop: 'clamp(4px, 3cqh, 10px)', minHeight: 32 }}>
+          ✓ MARK DONE
+        </button>
+      )}
     </div>
   );
 }
