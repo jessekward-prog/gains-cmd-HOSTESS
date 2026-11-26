@@ -1,6 +1,7 @@
 // Bake scheduler. A renderer's bake() is a generator that yields every ~1ms of
 // work, so a 150-300ms bake never blocks a frame. Bakes run during walk; a battle
 // whose bake isn't ready simply uses the old ground for its whole duration.
+import { revealing } from '../../lib/reveal';
 
 const jobs = new Map();
 
@@ -18,6 +19,7 @@ export function requestGround(theme, renderer, boss) {
   jobs.set(key, job);
 
   const pump = (deadline) => {
+    if (revealing()) { idle(pump); return; }
     const start = performance.now();
     do {
       const r = job.it.next();

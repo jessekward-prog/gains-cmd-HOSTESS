@@ -107,20 +107,23 @@ function checkQuestCache(prof, vault, programs, questSkin) {
   return cards.every(([c, img]) => !!getCachedFrame(c, img));
 }
 
-// Preload gate: when sprites, custom art, boss frames, and dithered card bitmaps
-// are already cached in memory, QuestTitleView mounts immediately with zero
-// loading screen. On a cold visit it shows a lightweight boot screen while
-// pre-rendering off the animation window so the reveal runs smoothly.
+// Preload gate: mounts QuestTitleView BEHIND a lightweight loading overlay when
+// cold so sprites, custom art, boss frames, dither cards, DOM layout, and GPU
+// canvas uploads all finish before the overlay lifts. Only then does `play`
+// flip true, firing AsciiReveal's full decode wave cleanly from t=0.
+// When everything is already cached in memory, the overlay is skipped completely.
 export default function QuestTitle({ onNavigate }) {
   const { programs } = useWorkout();
   const { prof, vault } = useQuest();
   const { questSkin } = useTheme();
 
-  const [ready, setReady] = useState(() => checkQuestCache(prof, vault, programs, questSkin));
+  const [initiallyCached] = useState(() => checkQuestCache(prof, vault, programs, questSkin));
+  const [assetsReady, setAssetsReady] = useState(initiallyCached);
+  const [play, setPlay] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 1 });
 
   useEffect(() => {
-    if (ready) return undefined;
+    if (assetsReady) return undefined;
     let live = true;
     const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
     const boss = questBossInfo(prof);
@@ -152,37 +155,59 @@ export default function QuestTitle({ onNavigate }) {
       })();
 
       await Promise.race([run, safety]);
-      if (live) setReady(true);
+      if (live) setAssetsReady(true);
     })();
 
     return () => { live = false; };
-  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assetsReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!ready) {
-    const pct = Math.max(8, Math.min(100, Math.round((progress.done / Math.max(1, progress.total)) * 100)));
-    return (
-      <div className="g-root flex flex-col items-center justify-center min-h-full px-8 select-none">
-        <div className="w-full max-w-[240px] flex flex-col gap-3">
-          <div className="flex items-center justify-between text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.18em' }}>
-            <span>LOADING QUEST</span>
-            <span className="text-text-tertiary">{String(progress.done).padStart(2, '0')}/{String(progress.total).padStart(2, '0')}</span>
-          </div>
-          <div className="w-full overflow-hidden rounded-full bg-bg-2" style={{ height: 4 }}>
-            <div className="h-full bg-accent" style={{ width: `${pct}%`, transition: 'width 140ms ease-out' }} />
+  // Hold the decode wave until assets are ready, #boot-splash is gone, AND
+  // QuestTitleView has painted two settled frames behind the overlay so the
+  // full ASCII wave plays visibly in front of the user.
+  useEffect(() => {
+    if (!assetsReady) return undefined;
+    let live = true, tId = 0, r1 = 0, r2 = 0;
+    const waitSplash = () => {
+      if (!live) return;
+      if (document.getElementById('boot-splash')) {
+        tId = setTimeout(waitSplash, 40);
+        return;
+      }
+      r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => { if (live) setPlay(true); });
+      });
+    };
+    waitSplash();
+    return () => { live = false; clearTimeout(tId); cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [assetsReady]);
+
+  const pct = Math.max(8, Math.min(100, Math.round((progress.done / Math.max(1, progress.total)) * 100)));
+
+  return (
+    <div className={play ? 'relative min-h-full' : 'relative h-full overflow-hidden'}>
+      {assetsReady && <QuestTitleView onNavigate={onNavigate} play={play} />}
+      {!initiallyCached && !play && (
+        <div className="absolute inset-0 z-30 bg-bg-0 g-root flex flex-col items-center justify-center px-8 select-none">
+          <div className="w-full max-w-[240px] flex flex-col gap-3">
+            <div className="flex items-center justify-between text-accent" style={{ font: `600 11px ${MONO}`, letterSpacing: '.18em' }}>
+              <span>LOADING QUEST</span>
+              <span className="text-text-tertiary">{String(progress.done).padStart(2, '0')}/{String(progress.total).padStart(2, '0')}</span>
+            </div>
+            <div className="w-full overflow-hidden rounded-full bg-bg-2" style={{ height: 4 }}>
+              <div className="h-full bg-accent" style={{ width: `${pct}%`, transition: 'width 140ms ease-out' }} />
+            </div>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  return <QuestTitleView onNavigate={onNavigate} />;
+      )}
+    </div>
+  );
 }
 
 // Quest Mode's title screen (home → Quest): choose today's quest from your
 // program (defaulting to the one that's up next) and begin. Favourites you've
 // starred are pinned at the top with their quest-only alias. Favourites can be
 // grouped: a group is a progression, and the next member is queued for you.
-function QuestTitleView({ onNavigate }) {
+function QuestTitleView({ onNavigate, play }) {
   const { programs, workoutHistory, startWorkout, activeWorkout, cancelWorkout, settings, reloadPrograms, reloadSettings } = useWorkout();
   const agg = aggressionOf(settings);
   const { showToast } = useToast();
@@ -195,14 +220,7 @@ function QuestTitleView({ onNavigate }) {
   const [sceneOpen, setSceneOpen] = useState(false);
   const today = new Date();
   const place = placeOf(prof.place, Math.round(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 864e5));
-  // Mounting the stage (sprite recolour + ground bake) blocks paint for the
-  // best part of a second, and a reveal started during that gap plays out
-  // invisibly. Hold the wave until the browser has painted a frame.
-  const [settling, setSettling] = useState(true);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => requestAnimationFrame(() => setSettling(false)));
-    return () => cancelAnimationFrame(id);
-  }, []);
+  const settling = !play;
 
   // The wave draws every glyph on one canvas above the whole screen, so the
   // workouts that sit behind the sticky Begin quest bar decoded on top of its
