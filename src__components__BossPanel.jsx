@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BodyMap from './BodyMap';
 import useWeeklyBoss from '../hooks/useWeeklyBoss';
 import useQuest from '../hooks/useQuest';
@@ -26,6 +26,7 @@ const rgbOf = (css) => {
 export const readAccentRgb = () => (typeof document === 'undefined'
   ? '255,34,34'
   : String(rgbOf(getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#ff2222')));
+const readAccent = readAccentRgb;
 // The sprite in five flat shades of the accent, the way the skins colour the rest of the stage.
 const SHADES = [0.12, 0.3, 0.55, 0.85, 1.1]; // above 1 is lightened
 const luma = (p, k) => (0.3 * p[k] + 0.59 * p[k + 1] + 0.11 * p[k + 2]) / 255;
@@ -90,34 +91,50 @@ export default function BossPanel({ skin }) {
   const { boss, nextAt, beaten } = useWeeklyBoss();
   const { prof } = useQuest();
   const haptics = useHaptics();
-  const frame = useFrame();
+  // Not paused under the decode wave: the boss is skipped by it, so it would
+  // stand frozen in plain sight and then lurch into motion when the wave ends.
+  const frame = useFrame(100, false);
   const [tapAt, setTapAt] = useState(-1e4); // the frame it was last tapped on
-  const [accent, setAccent] = useState(readAccentRgb);
+  const [accent, setAccent] = useState(readAccent);
   const key = bossSprite(boss?.week || '2026-01-05', prof.theme);
   const act = beaten ? (BOSS_SPRITES[key].n.death ? 'death' : null) : 'atk';
   const [art, setArt] = useState(() => cachedBossArt(key, act, accent));
+  const [shown, setShown] = useState(() => !!cachedBossArt(key, act, accent).idle); // faded up from black when cold
   const slow = Math.floor(frame / 10);
-  useEffect(() => { // the accent can change under it: Quest's own theme lands after the first paint
-    const a = readAccentRgb();
+  // The accent can change under it: Quest's own theme lands after the first
+  // paint. Checked every tick for the first few seconds, then once a second.
+  useEffect(() => {
+    const a = readAccent();
     if (a !== accent) setAccent(a);
-  }, [slow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [frame < 30 ? frame : slow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownKey = useRef(key);
   useEffect(() => {
     if (!accent || !boss) return undefined;
     let live = true;
     const cached = cachedBossArt(key, act, accent);
     const anims = ['idle', act].filter(Boolean);
     if (anims.every((a) => cached[a])) {
+      shownKey.current = key;
       setArt(cached);
       return undefined;
     }
     const rgb = accent.split(',').map(Number);
-    setArt(cached);
+    // A new boss starts clean; a new accent keeps the old frames up until the
+    // recoloured ones are ready, so it never blinks out.
+    if (shownKey.current !== key) { shownKey.current = key; setArt(cached); }
     anims.forEach((a) => {
       if (cached[a]) return;
       frames(key, a, rgb).then((f) => { if (live) setArt((s) => ({ ...s, [a]: f })); }, () => {});
     });
     return () => { live = false; };
   }, [key, act, accent, !boss]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Fade up once its frames are in and the accent has held still for a moment,
+  // so it arrives in its final colours and already moving.
+  useEffect(() => {
+    if (shown || !art.idle) return undefined;
+    const t = setTimeout(() => setShown(true), 250);
+    return () => clearTimeout(t);
+  }, [shown, art.idle, accent]);
   if (!boss) return null;
   const spr = BOSS_SPRITES[key], [fx, fy, z] = FACE[key];
   const left = beaten ? 0 : Math.max(0, BOSS_GROUPS - boss.fights.length);
@@ -146,11 +163,13 @@ export default function BossPanel({ skin }) {
             <span key={i} className="absolute inset-0" style={{ backgroundImage: l.img, backgroundSize: 'auto 160%', backgroundPosition: '62% 100%', imageRendering: 'pixelated' }} />
           ))}
         </span>
+        <span className="absolute inset-0 block" style={{ opacity: shown ? 1 : 0, transition: still ? 'none' : 'opacity .8s ease-out' }}>
         <span className="absolute inset-0" style={{ background: `radial-gradient(circle at calc(100% - 74px) 46%, ${full}, transparent 96px)`, opacity: wait ? 0.1 : 0.16 + 0.1 * pulse + lunge * 0.25 }} />
         {img && <span className="absolute block" style={{
           left: `calc(100% - 74px - ${fx * z}px)`, top: 46 - fy * z, width: spr.w * z, height: spr.h * z, backgroundImage: `url(${img.src})`, backgroundSize: '100% 100%', imageRendering: 'pixelated',
           transformOrigin: `${fx * z}px ${fy * z}px`, transform: `translate(${-lunge * 22}px, ${lunge * 10}px) scale(${1 + lunge * 0.14})`, filter: `brightness(${wait ? 0.5 : 0.68 + lunge * 0.32})`, // full strength only as it attacks
         }} />}
+        </span>
         <span className="absolute inset-0" style={{ background: 'linear-gradient(90deg, var(--color-bg-1) 56%, transparent 82%)' }} />
       </span>
       <span className="relative flex-shrink-0 block" style={{ width: 62, '--boss': full }}>

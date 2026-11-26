@@ -29,6 +29,9 @@ import { autoCapable, autoOn, setAutoWeight } from '../lib/autofail';
 import * as api from '../lib/api';
 
 const MONO = 'var(--font-mono)';
+// The loading bar: at least this long (shorter once the home screen has warmed
+// the art and sprites, or this session has already been here), and never
+// longer than the cap.
 const parse = (p) => (typeof p.workouts === 'string' ? JSON.parse(p.workouts) : p.workouts) || [];
 const FAN_IDEAL = 284, FAN_MIN = 200, FAN_MAX = 360, FAN_GROWN = 540, TITLE_MIN_K = 0.64;
 const newGroupId = () => Math.random().toString(36).slice(2, 8);
@@ -455,17 +458,17 @@ function QuestTitleView({ onNavigate }) {
     );
   };
 
-  return (
-    // The screen decodes in through a character grid instead of snapping on.
-    // `media` is opt-in only: the stage and the hero card animate themselves, and
-    // the glyph grid would freeze a frame of them. The wrapper is held blank for
-    // the settling frame, or panels that fill in late (the boss, the stage's
-    // line) flash on screen before the wave hides them.
-    //
-    // The stage's *art* is skipped (`data-ascii` inside QuestStage): the
-    // painted scene, the sprites and the hero card land at once, because
-    // carrying them through the wave cost a third of the frame rate on a phone.
-    // Its text decodes with everything else, so the whole screen boots.
+  return (<>
+    {/* The screen decodes in through a character grid instead of snapping on.
+        `media` is opt-in only: the stage and the hero card animate themselves, and
+        the glyph grid would freeze a frame of them. The wrapper is held blank
+        while it loads, or panels that fill in late (the boss, the stage's line)
+        flash on screen before the wave hides them.
+
+        The stage's *art* is skipped (`data-ascii` inside QuestStage): the
+        painted scene, the sprites and the hero card land at once, because
+        carrying them through the wave cost a third of the frame rate on a phone.
+        Its text decodes with everything else, so the whole screen boots. */}
     <AsciiReveal className="g-root flex flex-col min-h-full" preset="terminal" origin="top-left" duration="cinematic"
       media='[data-ascii="media"]' loading={settling} shimmer={false}
       style={settling ? { visibility: 'hidden' } : undefined}>
@@ -770,5 +773,5 @@ function QuestTitleView({ onNavigate }) {
 
       {prompts}
     </AsciiReveal>
-  );
+  </>);
 }

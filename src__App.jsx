@@ -25,7 +25,7 @@ import { native } from './lib/native';
 import { homeMessage, readRemind } from './lib/upnext';
 import { stageArt } from './components/QuestStage';
 import { warmQuestSprites } from './hooks/useQuestSprites';
-import { warmQuestArt } from './hooks/useQuestArt';
+import { warmQuestCards } from './hooks/useQuestArt';
 import useQuest, { readTint } from './hooks/useQuest';
 import ProgramsPage from './pages/ProgramsPage';
 import WorkoutPage from './pages/WorkoutPage';
@@ -60,7 +60,7 @@ function AppShell() {
   // so the scene was still black a third of the way through it and landed with a
   // pop. Recolour at idle from whatever screen you're on instead: the cache is
   // keyed on the same skin and jobs, so the stage is painted before the wave starts.
-  const { prof, ready } = useQuest();
+  const { prof, vault, ready } = useQuest();
 
   // The app's widget and reminder. Not the whole workout: it changes with every set.
   const activeName = activeWorkout?.workoutName, startTime = activeWorkout?.startTime;
@@ -76,9 +76,16 @@ function AppShell() {
   useEffect(() => {
     if (inQuest || !ready) return undefined;
     const { K, jobs } = stageArt({ theme: prof.theme, hero: prof.hero, pet: prof.pet, tint: readTint() }, questSkin);
-    warmQuestArt();
     return warmQuestSprites(K, jobs);
   }, [inQuest, ready, questSkin, prof.theme, prof.hero, prof.pet]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The cards too: the art fetch and each card's prep (decode, crop, luma) for
+  // the hero card and the favourites. Keyed on what they'd show, as a string,
+  // because `prof` and `vault` are new objects every render.
+  const cardSig = JSON.stringify([vault?.favs, vault?.owned, prof.favs]);
+  useEffect(() => {
+    if (inQuest || !ready) return undefined;
+    return warmQuestCards(prof, vault);
+  }, [inQuest, ready, cardSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The live background brightens as the workout fills up.
   useEffect(() => {

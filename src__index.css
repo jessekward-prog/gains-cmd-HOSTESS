@@ -1138,6 +1138,10 @@ html.mode-light { --g-pr-ink: #8a5a00; --g-near: #a16207; }
 html.text-size-small .g-root { zoom: .94; }
 html.text-size-large .g-root { zoom: 1.06; }
 
+/* A tucked favourite's sideways name (QuestFan): text from an attribute, so
+   the decode wave fades it in rather than drawing its letters upright. */
+.fan-edge-name::before { content: attr(data-text); }
+
 .g-label { font: 500 10px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--color-text-tertiary); }
 .g-meta { font: 400 12px var(--font-mono); color: var(--color-text-secondary); }
 .g-h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }

@@ -20,9 +20,11 @@ import {
 const MONO = "'DM Mono', var(--font-mono), monospace";
 const DISPLAY = "'Manrope', var(--font-display), sans-serif";
 
-export function useFrame(ms = 100) {
+// A frame counter. `pause`: stand still while the decode wave runs (it hides
+// what's under it, so animating that is wasted work on a phone).
+export function useFrame(ms = 100, pause = true) {
   const [f, setF] = useState(0);
-  useEffect(() => { const id = setInterval(() => { if (!revealing()) setF((n) => n + 1); }, ms); return () => clearInterval(id); }, [ms]);
+  useEffect(() => { const id = setInterval(() => { if (!pause || !revealing()) setF((n) => n + 1); }, ms); return () => clearInterval(id); }, [ms, pause]);
   return f;
 }
 
@@ -47,7 +49,7 @@ export function MiniHeroCard({ onOpen }) {
     <button onClick={onOpen} aria-label="Open hero card" className="absolute block z-[6]"
       style={{ right: fx ? 20 : 14, top: fx ? 20 : 14, width: MINI_CARD_W, aspectRatio: '5 / 7', padding: fx ? 0 : pad, borderRadius: fx ? 6 : 12 + pad, background: fx ? 'none' : bc[0], boxShadow: `0 0 24px ${bc[2]}` }}>
       <div className="relative h-full overflow-hidden text-left" style={{ borderRadius: fx ? 0 : 12, background: '#0b0b0b', ...(fx && { ...faceInset(fx.T), height: 'auto' }) }}>
-        {card ? <DitherCard card={card} img={art[feat.id]?.img} /> : (
+        {card ? <div data-ascii="skip" className="absolute inset-0"><DitherCard card={card} img={art[feat.id]?.img} /></div> : (
           <div className="absolute inset-0 flex items-center justify-center text-center" style={{ background: 'repeating-conic-gradient(#141414 0 25%, #0b0b0b 0 50%) 0 0 / 6px 6px', padding: '16px 14px 60px', font: `400 10px ${MONO}`, color: '#999' }}>Pick a card in your vault</div>
         )}
         <div className="absolute left-0 right-0 bottom-0" style={{ padding: '8px 10px 9px', background: 'rgba(5,5,5,.9)' }}>
@@ -58,7 +60,7 @@ export function MiniHeroCard({ onOpen }) {
           <div style={{ marginTop: 6, height: 2, background: '#2a2a2a' }}><div className="h-full" style={{ width: `${prof.xp / 10}%`, background: card ? RAR[card.rarity].col : '#f0f0f0' }} /></div>
         </div>
       </div>
-      {fx && <PixelBorder k={bk} f={Math.floor(frame * fx.fps / 10)} />}
+      {fx && <span data-ascii="skip"><PixelBorder k={bk} f={Math.floor(frame * fx.fps / 10)} /></span>}
     </button>
   );
 }

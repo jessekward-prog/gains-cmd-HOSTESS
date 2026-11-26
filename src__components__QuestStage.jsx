@@ -501,9 +501,9 @@ export default function QuestStage({ phase, start = 0, aura = null, monster, hit
           <div className="inline-block max-w-full" style={{ marginTop: 10, font: `500 10px ${MONO}`, letterSpacing: '.14em', textWrap: 'balance', ...K.chip, color: questSkin ? K.lvCol : title.color }}>{title.line}</div>
         </div>
       )}
-      {/* The card draws its own dithered art on a clock of its own — the glyph
-          grid would just freeze a frame of it. */}
-      {phase === 'title' && <span data-ascii="skip">{card}</span>}
+      {/* The card skips its own art (it draws on a clock of its own — the glyph
+          grid would just freeze a frame of it); its name and level decode. */}
+      {phase === 'title' && card}
 
       {(phase === 'walk' || phase === 'title' || phase === 'encounter' || phase === 'boss' || phase === 'banish') && (
         <>

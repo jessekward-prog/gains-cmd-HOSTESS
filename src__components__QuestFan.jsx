@@ -163,7 +163,10 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
   });
 
   return (
-    <div className="relative" style={{ zIndex: 3 }}>
+    // Under the decode wave's glyph canvas (z 2), or its text decodes out of
+    // sight behind the cards and pops on at the end; over the stage (z 2) only
+    // while the exercise list grows up across it.
+    <div className="relative" style={{ zIndex: list ? 3 : 1 }}>
       <div className="relative flex items-center" style={{ height: FAN_ROW_H }}>
         {groups.length > 0 ? (
           <div ref={bar} className="absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -235,7 +238,11 @@ export default function QuestFan({ items, index, height, grow, menu, onPick, onP
             </div>
             {i === index && <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: 14, boxShadow: 'inset 0 0 0 2px #f6ece0' }} />}
             <span data-fan="name" className="absolute pointer-events-none whitespace-nowrap overflow-hidden"
-              style={{ top: 16, maxHeight: '90%', textOverflow: 'ellipsis', writingMode: 'vertical-rl', transform: 'translateX(-50%)', fontSize: 17, fontWeight: 800, letterSpacing: '-0.03em', color: '#f6ece0', textShadow: '0 0 3px #000, 0 0 8px #000, 0 0 12px #000' }}>{it.name}</span>
+              style={{ top: 16, maxHeight: '90%', textOverflow: 'ellipsis', writingMode: 'vertical-rl', transform: 'translateX(-50%)', fontSize: 17, fontWeight: 800, letterSpacing: '-0.03em', color: '#f6ece0', textShadow: '0 0 3px #000, 0 0 8px #000, 0 0 12px #000' }}>
+              {/* Drawn from CSS so the decode wave fades it in instead: its glyph grid
+                  draws upright, so sideways letters would flip round at the end. */}
+              <span data-ascii="fade" data-text={it.name} className="fan-edge-name" />
+            </span>
             </div>
           </div>
         ))}
